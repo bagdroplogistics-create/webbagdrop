@@ -2,6 +2,7 @@
 import { useState } from "react";
 import CommandCentre from "./CommandCentre";
 import Inbox from "./Inbox";
+import LRAndTrips from "./LRAndTrips";
 import QuotesAndPayments from "./QuotesAndPayments";
 
 type ModuleKey = "cmd" | "ship" | "quote" | "lr" | "crm" | "price" | "fin";
@@ -10,7 +11,7 @@ const MODULES: { key: ModuleKey; name: string; live: boolean }[] = [
   { key: "cmd", name: "Command centre", live: true },
   { key: "ship", name: "Shipments", live: true },
   { key: "quote", name: "Quotes & payments", live: true },
-  { key: "lr", name: "LR & trips", live: false },
+  { key: "lr", name: "LR & trips", live: true },
   { key: "crm", name: "CRM", live: false },
   { key: "price", name: "Pricing", live: false },
   { key: "fin", name: "Finance", live: false },
@@ -51,7 +52,8 @@ export default function AdminPage() {
         {tab === "cmd" && <CommandCentre />}
         {tab === "ship" && <Inbox />}
         {tab === "quote" && <QuotesAndPayments />}
-        {(tab === "lr" || tab === "crm" || tab === "price" || tab === "fin") && (
+        {tab === "lr" && <LRAndTrips />}
+        {(tab === "crm" || tab === "price" || tab === "fin") && (
           <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center text-sm text-muted">
             {current.name} hasn&apos;t been ported into this app yet — still on the static Admin OS, same backend.
           </div>

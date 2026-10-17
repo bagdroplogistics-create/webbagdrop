@@ -120,4 +120,39 @@ export interface Booking {
   pay: Payment | null;
   admin: Record<string, unknown>;
   events: BookingEvent[];
+  lr?: { no: string; at: string; trip: string } | null;
+  eway?: { at: string; status: string } | null;
+  pod?: { no: string; at: string; receiver: string } | null;
+  docs?: DocRecord[];
+}
+
+/** Document types that go through the same race-safe numbering as LR
+ *  (Postgres next_doc_no(type, fy) — see supabase/schema.sql). */
+export type DocType = "LR" | "INV" | "PI" | "RCT" | "CSH" | "CV" | "CN" | "TR" | "MF";
+
+export interface DocRecord {
+  type: DocType;
+  no: string;
+  at: string;
+  amount: number;
+}
+
+export type TripStatus = "planned" | "running" | "completed";
+
+export interface TripExpense { at: string; head: string; amount: number; note: string }
+export interface TripAdvance { at: string; amount: number; note: string }
+
+/** A single vehicle run — bookings club onto it via booking.admin.trip. */
+export interface Trip {
+  id: string;
+  created: string;
+  status: TripStatus;
+  route: string;
+  date: string;
+  vehicle: string;
+  vehicleType: string;
+  driver: string;
+  driverMobile: string;
+  expenses: TripExpense[];
+  advances: TripAdvance[];
 }
