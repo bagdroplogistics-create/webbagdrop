@@ -97,6 +97,45 @@ export function forecast(all: Booking[], horizon = 14): Forecast {
   };
 }
 
+/** Assumed cost per piece per lane (from tripsheets, editable later) — same
+ *  table the static build ships with. */
+const COST: Record<string, number> = {
+  "MUM-GUJ": 1610, "GUJ-MUM": 1610, "NOR-GUJ": 3900, "GUJ-NOR": 3900,
+  "MUM-GOA": 2700, "GOA-MUM": 2700, "NOR-GOA": 4700, "GOA-NOR": 4700,
+  "MUM-NOR": 3300, "NOR-MUM": 3300, "GUJ-GOA": 3800, "GOA-GUJ": 3800,
+  "SOU-MUM": 2900, "MUM-SOU": 2900, "GUJ-SOU": 3400, "SOU-GUJ": 3400,
+};
+function costFor(zo: string, zd: string, rate: number): number {
+  return COST[`${zo}-${zd}`] ?? Math.round(rate * 0.72);
+}
+
+export interface Lane { lane: string; pcs: number; rev: number; cost: number; revPc: number; costPc: number; cm: number }
+
+/** Lane-level revenue/cost/contribution-margin, for the Finance module's
+ *  economics table. `fallbackRate` — the matrix rate to assume per piece
+ *  when a booking's own quote breakdown doesn't carry one (used only for
+ *  the cost estimate, never billed). */
+export function lanes(all: Booking[], fallbackRate = 3000): Lane[] {
+  const map: Record<string, Lane> = {};
+  all.forEach((d) => {
+    if (!d.zo || !d.zd || d.zo === d.zd) return;
+    const key = [d.zo, d.zd].sort().join("↔");
+    const m = (map[key] = map[key] || { lane: key, pcs: 0, rev: 0, cost: 0, revPc: 0, costPc: 0, cm: 0 });
+    const pcs = (d.bags || 0) + (d.oversize || 0);
+    m.pcs += pcs;
+    m.rev += d.quote ? d.quote.total : 0;
+    m.cost += costFor(d.zo, d.zd, fallbackRate) * pcs;
+  });
+  return Object.values(map)
+    .map((m) => ({
+      ...m,
+      revPc: m.pcs ? Math.round(m.rev / m.pcs) : 0,
+      costPc: m.pcs ? Math.round(m.cost / m.pcs) : 0,
+      cm: m.rev ? Math.round((100 * (m.rev - m.cost)) / m.rev) : 0,
+    }))
+    .sort((a, b) => b.rev - a.rev);
+}
+
 export interface Notice { sev: "warn" | "info"; text: string }
 
 /** "Copilot noticed" — simple real heuristics over the live bookings, no AI call. */

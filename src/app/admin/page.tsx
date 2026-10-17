@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import CommandCentre from "./CommandCentre";
+import Finance from "./Finance";
 import Inbox from "./Inbox";
 import LRAndTrips from "./LRAndTrips";
 import QuotesAndPayments from "./QuotesAndPayments";
@@ -14,7 +15,7 @@ const MODULES: { key: ModuleKey; name: string; live: boolean }[] = [
   { key: "lr", name: "LR & trips", live: true },
   { key: "crm", name: "CRM", live: false },
   { key: "price", name: "Pricing", live: false },
-  { key: "fin", name: "Finance", live: false },
+  { key: "fin", name: "Finance", live: true },
 ];
 
 export default function AdminPage() {
@@ -53,7 +54,8 @@ export default function AdminPage() {
         {tab === "ship" && <Inbox />}
         {tab === "quote" && <QuotesAndPayments />}
         {tab === "lr" && <LRAndTrips />}
-        {(tab === "crm" || tab === "price" || tab === "fin") && (
+        {tab === "fin" && <Finance />}
+        {(tab === "crm" || tab === "price") && (
           <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center text-sm text-muted">
             {current.name} hasn&apos;t been ported into this app yet — still on the static Admin OS, same backend.
           </div>
