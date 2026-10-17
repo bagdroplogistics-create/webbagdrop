@@ -1,19 +1,25 @@
+"use client";
+import { useState } from "react";
+import CommandCentre from "./CommandCentre";
 import Inbox from "./Inbox";
+import QuotesAndPayments from "./QuotesAndPayments";
 
-/** Admin OS shell — modules migrate from the static build into this layout
- *  one at a time. The static admin keeps working on the same backend until
- *  every module has moved. */
-const MODULES = [
-  { name: "Shipments", live: true },
-  { name: "Quotes & payments", live: false },
-  { name: "LR & trips", live: false },
-  { name: "CRM", live: false },
-  { name: "Pricing", live: false },
-  { name: "Finance", live: false },
-  { name: "Reports / MIS", live: false },
+type ModuleKey = "cmd" | "ship" | "quote" | "lr" | "crm" | "price" | "fin";
+
+const MODULES: { key: ModuleKey; name: string; live: boolean }[] = [
+  { key: "cmd", name: "Command centre", live: true },
+  { key: "ship", name: "Shipments", live: true },
+  { key: "quote", name: "Quotes & payments", live: true },
+  { key: "lr", name: "LR & trips", live: false },
+  { key: "crm", name: "CRM", live: false },
+  { key: "price", name: "Pricing", live: false },
+  { key: "fin", name: "Finance", live: false },
 ];
 
 export default function AdminPage() {
+  const [tab, setTab] = useState<ModuleKey>("cmd");
+  const current = MODULES.find((m) => m.key === tab)!;
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-line bg-white/85 backdrop-blur">
@@ -21,23 +27,35 @@ export default function AdminPage() {
           <span className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-sm font-extrabold text-white">B</span>
             <span className="font-display text-base font-extrabold tracking-tight">BAGDROP <span className="text-brand">Admin OS</span></span>
-            <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-muted">NEXT · MIGRATION IN PROGRESS</span>
           </span>
-          <span className="text-xs text-muted">Full console: the static Admin OS, same backend</span>
+          <span className="text-xs text-muted">{current.name}</span>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         <nav className="mb-5 flex flex-wrap gap-1.5">
           {MODULES.map((m) => (
-            <span key={m.name}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${m.live ? "bg-brand text-white" : "bg-paper text-faint"}`}
-              title={m.live ? "Migrated" : "Still on the static Admin OS"}>
+            <button
+              key={m.key}
+              onClick={() => setTab(m.key)}
+              title={m.live ? undefined : "Still on the static Admin OS — not yet in this app"}
+              className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                tab === m.key ? "bg-brand text-white" : m.live ? "bg-paper text-ink hover:bg-stone-200" : "bg-paper text-faint"
+              }`}
+            >
               {m.name}{!m.live && " ·"}
-            </span>
+            </button>
           ))}
         </nav>
-        <Inbox />
+
+        {tab === "cmd" && <CommandCentre />}
+        {tab === "ship" && <Inbox />}
+        {tab === "quote" && <QuotesAndPayments />}
+        {(tab === "lr" || tab === "crm" || tab === "price" || tab === "fin") && (
+          <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center text-sm text-muted">
+            {current.name} hasn&apos;t been ported into this app yet — still on the static Admin OS, same backend.
+          </div>
+        )}
       </main>
     </div>
   );

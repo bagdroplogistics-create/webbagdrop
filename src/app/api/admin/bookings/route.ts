@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { isAdminRequest } from "@/lib/adminAuth";
+import { serviceClient } from "@/lib/supabaseAdmin";
 import type { Booking } from "@/lib/types";
 
 /** Admin reads/writes ALL bookings with the SERVICE ROLE key — this is the
@@ -8,12 +8,6 @@ import type { Booking } from "@/lib/types";
  *  and every request here is gated by the admin session cookie (see
  *  src/lib/adminAuth.ts). This is what makes it safe to have removed the
  *  old "anon can select every booking" policy from the database. */
-function serviceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
 
 export async function GET() {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
