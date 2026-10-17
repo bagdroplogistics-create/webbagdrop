@@ -137,6 +137,38 @@ export interface DocRecord {
   amount: number;
 }
 
+/** A wedding/event inquiry — the `inquiries` table. There's no customer-
+ *  facing form for these in this app yet (only in the static build's
+ *  wedding pages), so this list is naturally empty until one exists;
+ *  the CRM module still works against whatever rows land here. */
+export interface Inquiry {
+  id: string;
+  created: string;
+  status: "new" | "contacted" | "converted" | "lost";
+  contact: { name: string; role: string; mobile: string; email?: string };
+  venue?: string;
+  venueCity?: string;
+  dates?: { from: string; to: string };
+  families?: number;
+  bags?: number;
+  pickupCities?: string[];
+}
+
+/** One CRM activity-log entry (a note, a nudge, a win-back draft). */
+export interface CrmActivity {
+  id: string;
+  created: string;
+  text: string;
+  kind: "lead" | "customer" | "note";
+  dept?: string;
+  contact?: string;
+  msg?: string;
+  dueAt?: string | null;
+  doneAt?: string | null;
+  refId?: string;
+  followKey?: string;
+}
+
 export type TripStatus = "planned" | "running" | "completed";
 
 export interface TripExpense { at: string; head: string; amount: number; note: string }

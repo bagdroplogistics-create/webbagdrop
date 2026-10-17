@@ -63,7 +63,16 @@ create table if not exists outbox (
   created timestamptz not null default now()
 );
 
-alter publication supabase_realtime add table bookings, events, inquiries, settings, trips, outbox;
+-- CRM activity log (follow-up notes, nudges, win-backs). Staff-only —
+-- there is no anon access to this table at all, direct or otherwise.
+create table if not exists crm (
+  id text primary key,
+  doc jsonb not null,
+  status text,
+  created timestamptz not null default now()
+);
+
+alter publication supabase_realtime add table bookings, events, inquiries, settings, trips, outbox, crm;
 
 -- ======================= ROW LEVEL SECURITY =======================
 alter table bookings  enable row level security;
@@ -72,6 +81,7 @@ alter table inquiries enable row level security;
 alter table settings  enable row level security;
 alter table trips     enable row level security;
 alter table outbox    enable row level security;
+alter table crm       enable row level security;
 
 -- staff = any authenticated user whose JWT carries role 'bagdrop_staff'
 -- (set via Supabase Auth app_metadata — see README for how to grant it to
@@ -100,6 +110,7 @@ create policy staff_all_settings on settings for all to authenticated using (is_
 
 create policy staff_all_trips  on trips  for all to authenticated using (is_staff()) with check (is_staff());
 create policy staff_all_outbox on outbox for all to authenticated using (is_staff()) with check (is_staff());
+create policy staff_all_crm    on crm    for all to authenticated using (is_staff()) with check (is_staff());
 
 -- ======================= CUSTOMER BOOKING ACCESS =======================
 -- Random 10-char id from an unambiguous 31-character alphabet (no 0/O/1/I/L):
