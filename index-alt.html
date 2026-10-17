@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bagdrop · Travel light</title>
+<meta name="description" content="Your bags, door to door. Tagged, sealed and tracked from your home to the airport, hotel, station or terminal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="booking-alt.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">BAG<span>DROP</span></a>
+  <div class="help">
+    <span id="dbstate" class="pill warn">connecting…</span> ·
+    <a href="#inquiry" id="inqlink">Weddings and events</a> ·
+    <a href="#track" id="tracklink">Track a booking</a> ·
+    <a href="admin.html">Admin</a> · <a href="index.html">Classic view</a> ·
+    WhatsApp <b id="wa-num"></b>
+  </div>
+</div>
+
+<!-- WEDDING AND EVENT INQUIRY -->
+<div class="wrap" id="inqwrap" hidden>
+  <div>
+    <section class="card" id="inq-form">
+      <h1>Weddings and events</h1>
+      <p class="lede">We move every guest's bags from their door to their room at the venue, and home again after. Tell us where and from which cities, and our events desk comes back within the working day with a plan for the hosts. Guests never pay and never see a rate: once the wedding is open they book on a page made for it.</p>
+      <div class="row">
+        <label class="f">Your name<input id="iq-name" placeholder="Name"></label>
+        <label class="f">You are the
+          <select id="iq-role">
+            <option value="host">Host family</option>
+            <option value="planner">Wedding or event planner</option>
+            <option value="hotel">Hotel or venue</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="f">Mobile<input id="iq-mob" placeholder="+91 …" inputmode="tel"></label>
+        <label class="f">Email<input id="iq-em" placeholder="name@mail.com" type="email"></label>
+      </div>
+      <div class="row">
+        <label class="f">Venue city<select id="iq-city"></select></label>
+        <label class="f">Venue or hotel<input id="iq-venue" placeholder="Taj Aravali, Udaipur"></label>
+      </div>
+      <div class="row">
+        <label class="f">Guests arrive<input id="iq-in" type="date"></label>
+        <label class="f">Guests leave<input id="iq-out" type="date"></label>
+      </div>
+      <label class="f">Cities the guests travel from <span class="hint" style="display:inline;margin:0">· choose all that apply</span></label>
+      <div id="iq-cities" style="display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 12px"></div>
+      <div class="row">
+        <label class="f">Families, roughly<input id="iq-fam" inputmode="numeric" placeholder="40"></label>
+        <label class="f">Bags, roughly<input id="iq-bags" inputmode="numeric" placeholder="100"></label>
+      </div>
+      <label class="f">Anything we should know<input id="iq-note" placeholder="Sangeet outfits to hang on arrival · two hotels · planner will send the guest list"></label>
+      <div class="btns"><a class="btn" href="#book" style="text-decoration:none;text-align:center">Back</a><button class="btn primary" id="iq-send">Send the inquiry</button></div>
+      <div class="hint" id="iq-msg" style="margin-top:8px"></div>
+    </section>
+    <section class="card done" id="inq-done" hidden>
+      <div class="tick">✓</div>
+      <h1>Received. Our events desk has it.</h1>
+      <p class="lede">Reference <b class="mono" id="iq-ref"></b>. We come back on WhatsApp and email within the working day with the plan for the hosts. Guests get their own page once the wedding is open.</p>
+      <div class="btns"><a class="btn primary" href="#book" style="text-decoration:none;text-align:center">Back to Bagdrop</a></div>
+    </section>
+  </div>
+  <aside class="side">
+    <div class="card sum">
+      <h3>How it works for a wedding</h3>
+      <ul class="info">
+        <li><span class="m">1</span><span>The hosts or the planner open the wedding with us. The planner can send the guest list as a sheet.</span></li>
+        <li><span class="m">2</span><span>Every family gets a link to a page made for the wedding. About three minutes to book, no code, no payment.</span></li>
+        <li><span class="m">3</span><span>Bags are tagged and sealed at the door, delivered to the room, and brought home after.</span></li>
+        <li><span class="m">4</span><span>The hosts receive one statement. Guests never see a rate.</span></li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+<!-- BOOKING FLOW -->
+<header class="alt-hero">
+  <div class="eyebrow">Bag · Box · Delivered</div>
+  <h1>Travel light.<br>We carry the rest.</h1>
+  <p>Every bag sealed with you at your door, tracked to the airport, the hotel or home — and released only to you.</p>
+</header>
+<div class="wrap" id="bookwrap">
+<div>
+  <div class="prog" id="prog"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+  <!-- TRACK -->
+  <section class="card" id="trackbox" hidden style="margin-bottom:14px">
+    <h1 style="font-size:20px">Track a booking</h1>
+    <div class="otp"><input id="trackref" placeholder="BD-2026-1234" style="letter-spacing:0;width:200px"><button class="btn primary" id="trackgo" style="flex:0 0 auto">Track</button></div>
+    <div class="hint" id="trackmsg" style="margin-top:8px"></div>
+  </section>
+
+  <!-- 1 WHAT -->
+  <section class="step on card" data-s="1">
+    <h1>What are we carrying for you?</h1>
+    <p class="lede">Pick one. Everything else adapts to it.</p>
+    <div class="opts" id="uc">
+      <button class="opt" aria-pressed="true" data-v="d2a" data-mode="air"><b>Home → Airport</b><small>Bags reach the airport before you do</small></button>
+      <button class="opt" aria-pressed="false" data-v="a2d" data-mode="air"><b>Airport → Home</b><small>Land and leave, we bring them home</small></button>
+      <button class="opt" aria-pressed="false" data-v="h2a" data-mode="air"><b>Hotel → Airport</b><small>Check out light</small></button>
+      <button class="opt" aria-pressed="false" data-v="h2h" data-mode="road"><b>Hotel → Hotel</b><small>Next city, same bags</small></button>
+      <button class="opt" aria-pressed="false" data-v="d2d" data-mode="road"><b>Door → Door</b><small>City to city, by road</small></button>
+      <button class="opt" aria-pressed="false" data-v="rail" data-mode="rail"><b>Railway station</b><small>Vande Bharat, Rajdhani</small></button>
+      <button class="opt" aria-pressed="false" data-v="cruise" data-mode="sea"><b>Cruise terminal</b><small>Mumbai, Goa, Kochi sailings</small></button>
+      <button class="opt" aria-pressed="false" data-v="wed" data-mode="road"><b>Wedding or event</b><small>Send an inquiry for the venue and pickup cities</small></button>
+    </div>
+    <div class="btns"><span></span><button class="btn primary" data-go="2">Continue</button></div>
+  </section>
+
+  <!-- 2 WHERE -->
+  <section class="step card" data-s="2">
+    <h1 id="h2">Where from, where to?</h1>
+    <p class="lede">We check the city pair and show you the route we will run.</p>
+    <div id="pickwrap"><div class="row"><label class="f">Pickup city<select id="cityo"></select><input id="cityo-name" placeholder="Type your pickup city" hidden style="margin-top:6px"></label><label class="f">Pickup address<input id="pick" placeholder="Flat, building, area or pincode" autocomplete="street-address"></label></div></div>
+    <div id="pickair" hidden><label class="f">Arriving at<select id="apo"></select></label></div>
+    <div id="dropwrap"><div class="row"><label class="f">Delivery city<select id="cityd"></select><input id="cityd-name" placeholder="Type your delivery city" hidden style="margin-top:6px"></label><label class="f">Delivery address<input id="drop" placeholder="Hotel, home, station or terminal" autocomplete="street-address"></label></div></div>
+    <div id="dropair" hidden><label class="f">Flying from<select id="apd"></select></label></div>
+    <div style="margin-bottom:12px"><span class="hint">Cities we serve today</span><div id="citychips" style="margin-top:4px"></div></div>
+    <div class="ai" id="otherhint" hidden><b>Route not on our rate chart yet</b> · the cities above are the routes we price instantly. Book anyway — no payment is taken now, and our team gets in touch with the rate and the pickup plan for your route.</div>
+    <div class="ai" id="routeai"><b>Route</b> · <span id="routetxt"></span></div>
+    <div class="btns"><button class="btn" data-go="1">Back</button><button class="btn primary" data-go="3">Continue</button></div>
+  </section>
+
+  <!-- 3 WHEN -->
+  <section class="step card" data-s="3">
+    <h1>When are you travelling?</h1>
+    <p class="lede" id="whenlede">Your flight sets the cut off. We work backwards from it.</p>
+    <div class="row">
+      <label class="f" id="reflab">Flight number<input id="ref" placeholder="6E 5219" autocapitalize="characters"></label>
+      <label class="f">Travel date<input id="tdate" type="date"></label>
+    </div>
+    <div class="ai" id="refai"><b>Flight check</b> · enter the number and we confirm the schedule and set your pickup window.</div>
+    <div class="hint" id="slothint">Pickup window</div>
+    <div class="slots" id="slots"></div>
+    <div class="btns"><button class="btn" data-go="2">Back</button><button class="btn primary" data-go="4">Continue</button></div>
+  </section>
+
+  <!-- 4 BAGS -->
+  <section class="step card" data-s="4">
+    <h1>How many pieces?</h1>
+    <p class="lede">One rate per bag up to 32 kg. Oversize is priced separately. Minimum two pieces.</p>
+    <div class="stepper"><div class="c"><div><b>Bags</b><small>Suitcase, duffel, backpack · up to 32 kg each</small></div></div><div class="c"><button data-b="std" data-d="-1" aria-label="Fewer bags">−</button><span class="n" id="n-std">2</span><button data-b="std" data-d="1" aria-label="More bags">+</button></div></div>
+    <div class="stepper"><div class="c"><div><b>Oversize</b><small>Golf, surfboard, cycle, boxes, anything over 32 kg</small></div></div><div class="c"><button data-b="odd" data-d="-1" aria-label="Fewer oversize">−</button><span class="n" id="n-odd">0</span><button data-b="odd" data-d="1" aria-label="More oversize">+</button></div></div>
+    <div class="warnbox"><b>Please do not pack</b> · cash, jewellery, passports, medicines you need in transit, electronics with loose lithium batteries, liquids over 100 ml for airport cases, anything on the airline's prohibited list. Our captain checks and seals each bag with you at pickup.</div>
+    <div class="btns"><button class="btn" data-go="3">Back</button><button class="btn primary" data-go="5">Continue</button></div>
+  </section>
+
+  <!-- 5 WHO -->
+  <section class="step card" data-s="5">
+    <h1>Who is travelling?</h1>
+    <p class="lede">Name exactly as on the ID you will verify with. The bags are released only to this name or the OTP they share.</p>
+    <div class="row"><label class="f">Traveller's full name<input id="nm" placeholder="As on Aadhaar or passport" autocomplete="name"></label><label class="f">Mobile<input id="mob" placeholder="+91 98XXX XXXXX" inputmode="tel" autocomplete="tel"></label></div>
+    <div class="row"><label class="f">Email<input id="em" placeholder="name@mail.com" inputmode="email" autocomplete="email"></label><label class="f">Traveller is<select id="res"><option value="in">Indian resident · Aadhaar</option><option value="intl">International · passport</option></select></label></div>
+    <label class="f"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="payer" style="width:auto"> Someone else is paying (family abroad, company, planner)</span></label>
+    <div id="payerwrap" hidden class="row"><label class="f">Payer name<input id="pnm" placeholder="Full name"></label><label class="f">Payer mobile or email<input id="pct" placeholder="+1 … or name@mail.com"></label></div>
+    <label class="f">Anything we should know (optional)<input id="note" placeholder="Gate code, call before arriving, fragile item inside"></label>
+    <div class="btns"><button class="btn" data-go="4">Back</button><button class="btn primary" data-go="6" id="toprice">See my price</button></div>
+  </section>
+
+  <!-- 6 PRICE + OTP -->
+  <section class="step card" data-s="6">
+    <h1>Your price</h1>
+    <p class="lede">One code to your mobile unlocks it and holds it for 24 hours.</p>
+    <div class="otp"><button class="btn" id="sendotp">Send code</button><input id="otp" placeholder="••••••" maxlength="6" inputmode="numeric" aria-label="OTP"><button class="btn primary" id="verify" disabled style="flex:0 0 auto">Unlock</button></div>
+    <div class="hint" id="otpmsg" style="margin-top:8px"></div>
+    <div class="okbox" id="pricenote" hidden><b>Locked</b> · this price is yours until <span id="lockuntil"></span>. Quote <span class="mono" id="qid"></span>. Change anything and it recalculates.</div>
+    <div class="btns"><button class="btn" data-go="5">Back</button><button class="btn primary" data-go="7" id="toid" disabled>Verify and book</button></div>
+  </section>
+
+  <!-- 7 IDENTITY -->
+  <section class="step card" data-s="7">
+    <h1>Verify the traveller</h1>
+    <p class="lede">Once, before payment. We keep only a verified name, a reference number and the last four digits. Never the full ID.</p>
+    <div class="idc" id="idin">
+      <button class="opt" id="idlocker"><i>1</i><div><b>DigiLocker</b><small>UIDAI sends an OTP to the mobile linked to Aadhaar. Takes about a minute.</small></div></button>
+      <button class="opt" id="idapp"><i>2</i><div><b>Aadhaar app QR</b><small>Scan with the new Aadhaar app and share only your name.</small></div></button>
+    </div>
+    <div class="idc" id="idintl" hidden>
+      <button class="opt" id="idpass"><i>1</i><div><b>Passport</b><small>Photo of the data page, then a selfie. Face match in seconds.</small></div></button>
+    </div>
+    <div class="otp" id="aadrow" hidden style="margin-top:12px"><input id="aadcode" placeholder="UIDAI OTP" maxlength="6" inputmode="numeric" aria-label="UIDAI OTP"><button class="btn primary" id="aadverify" disabled style="flex:0 0 auto">Confirm</button></div>
+    <div id="idres" style="margin-top:12px"></div>
+    <div class="btns"><button class="btn" data-go="6">Back</button><button class="btn primary" data-go="8" id="topay" disabled>Pay and confirm</button></div>
+  </section>
+
+  <!-- 8 PAY + DONE -->
+  <section class="step card" data-s="8">
+    <div id="payview">
+      <h1>Pay</h1>
+      <p class="lede">UPI, card or net banking for India. International cards, Apple Pay and Google Pay for payers abroad.</p>
+      <div class="opts"><button class="opt" aria-pressed="true" data-pay="full"><b>Pay in full</b><small id="payfull"></small></button><button class="opt" aria-pressed="false" data-pay="hold"><b>Hold with 20%</b><small id="payhold"></small></button></div>
+      <div class="ai" style="margin-top:12px"><b>What you agree to</b> · bags sealed with you at pickup · released only to the verified name or the OTP you share · free reschedule up to 6 hours before pickup · liability per the indemnity we send for e-sign · GST invoice on delivery.</div>
+      <div class="btns"><button class="btn" data-go="7">Back</button><button class="btn primary" id="paybtn">Pay securely</button></div>
+    </div>
+    <div id="doneview" hidden class="done">
+      <div class="tick">✓</div>
+      <h1>Booked. Your bags are on the plan.</h1>
+      <p class="lede">Reference <b class="mono" id="bref"></b> · sent on WhatsApp and email with your LR.</p>
+      <div id="livestatus" class="ai" style="text-align:left"><b>Status</b> · sent to Bagdrop operations. You will hear within the hour.</div>
+      <div class="track" id="trackrow"><div class="on">Booked<small>now</small></div><div>Captain assigned<small>T−12 h</small></div><div>On the way<small>30 min before</small></div><div>Picked up<small>photos, seals</small></div><div id="trk5">At airport<small>receipt</small></div><div>Delivered<small>OTP</small></div></div>
+      <ul class="info" id="nextinfo"></ul>
+      <div class="btns"><button class="btn" id="rebook">Book the return leg · 10% off</button><button class="btn primary" id="share">Share on WhatsApp</button></div>
+    </div>
+  </section>
+</div>
+
+<!-- SIDE SUMMARY -->
+<aside class="side">
+  <div class="card sum">
+    <h3>Your booking</h3>
+    <div class="l"><span>Service</span><span id="s-uc">Home → Airport</span></div>
+    <div class="l"><span>Route</span><span id="s-route">—</span></div>
+    <div class="l"><span>Travel</span><span id="s-when">—</span></div>
+    <div class="l"><span>Pickup</span><span id="s-slot">—</span></div>
+    <div class="l"><span>Pieces</span><span id="s-pcs">2 bags</span></div>
+    <div class="l"><span>Traveller</span><span id="s-who">—</span></div>
+    <div class="price">
+      <div style="font-family:var(--mono);font-size:11px;opacity:.75;margin-bottom:4px" id="phead">Price after one OTP</div>
+      <div id="pbody" class="locked">
+        <div class="big" id="p-total">₹0</div>
+        <div style="font-size:12px;opacity:.75;margin:4px 0 10px" id="p-per"></div>
+        <div class="pl"><span class="k" id="p-basek">Rate × pieces</span><span class="mono" id="p-base"></span></div>
+        <div class="pl"><span class="k">Oversize</span><span class="mono" id="p-odd"></span></div>
+        <div class="pl"><span class="k">Slab</span><span class="mono" id="p-slab"></span></div>
+        <div class="pl"><span class="k">Peak</span><span class="mono" id="p-peak"></span></div>
+        <div class="pl"><span class="k">GST 5%</span><span class="mono" id="p-gst"></span></div>
+      </div>
+      <div class="wm">BAGDROP</div>
+    </div>
+  </div>
+</aside>
+</div>
+
+<div class="foot">Bagdrop · Bag. Box. Delivered. · www.bagdrop.co</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/db.js"></script>
+<script src="shared/pricing.js"></script>
+<script src="booking.js"></script>
+</body>
+</html>

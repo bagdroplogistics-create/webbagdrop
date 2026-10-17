@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bagdrop · Admin OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">BAG<span>DROP</span> <span class="pill info" style="margin-left:6px;vertical-align:middle">ADMIN</span></a>
+  <div class="help"><span id="dbstate" class="pill warn">connecting…</span> · <a href="index.html">Customer site</a></div>
+</div>
+
+<div id="login-gate" hidden>
+  <div class="lg-card">
+    <div class="lg-logo"></div>
+    <h2>BAGDROP <span>Admin OS</span></h2>
+    <p class="src" style="margin:0 0 16px">Sign in to the operations console. Sessions last 12 hours; every attempt is logged.</p>
+    <label class="f">Email<input id="lg-email" type="email" placeholder="admin@bagdrop.co" autocomplete="username"></label>
+    <label class="f">Password<input id="lg-pass" type="password" placeholder="••••••••" autocomplete="current-password"></label>
+    <button class="btn primary" id="lg-go" style="width:100%">Sign in</button>
+    <div class="src" id="lg-msg" style="margin-top:10px;min-height:16px"></div>
+    <div class="src" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">Roles: admin@ (management) · ops@ · finance@ · sales@ — each sees its own modules. First-run password is the admin password; change users in settings/users.</div>
+  </div>
+</div>
+
+<div class="app">
+<aside class="rail">
+  <div class="brand"><div>BAGDROP<small>Admin Panel</small></div></div>
+  <nav class="railnav">
+    <div class="navgrp">Operate</div>
+    <button aria-current="page" data-m="cmd">Command centre <span class="n">live</span></button>
+    <button data-m="ship">Shipments <span class="n" id="nav-ship">0</span></button>
+    <button data-m="quote">Quotes and payments <span class="n" id="nav-quote">0</span></button>
+    <button data-m="lr">LR and trips <span class="n" id="nav-lr">0</span></button>
+    <button data-m="exc">Exceptions <span class="n">4</span></button>
+    <button data-m="evt">Events and bulk <span class="n" id="nav-evt">0</span></button>
+    <button data-m="drv">Drivers <span class="n">GPS</span></button>
+    <button data-m="flt">Flights <span class="n">live</span></button>
+    <button data-m="cap">Capacity and roster</button>
+    <div class="navgrp">Commerce</div>
+    <button data-m="crm">CRM and follow-ups <span class="n" id="nav-crm">0</span></button>
+    <button data-m="price">Pricing engine</button>
+    <button data-m="id">Identity and compliance <span class="n" id="nav-id">0</span></button>
+    <button data-m="fin">Finance</button>
+    <button data-m="part">Partners and API</button>
+    <div class="navgrp">Intelligence</div>
+    <button data-m="intel">Forecast and copilot <span class="n">AI</span></button>
+    <button data-m="rep">Reports</button>
+    <button data-m="rules">Rules and notifications</button>
+    <div class="navgrp">Platform</div>
+    <button data-m="integ">Integrations</button>
+    <button data-m="sec">Security and audit</button>
+    <button data-m="data">Data and privacy</button>
+  </nav>
+  <div class="who"><b>Bagdrop Ops</b>Management · MFA on<br><span class="src" id="who-sess"></span></div>
+  <button class="railcollapse" id="railcollapse" aria-label="Collapse sidebar" title="Collapse sidebar">⟨⟨</button>
+</aside>
+
+<main>
+<div class="modtop">
+  <div><h1 id="mtitle">Command centre</h1><div class="sub" id="msub">Everything moving right now. Live from the booking platform.</div></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="search searchbtn" id="gsearch" aria-label="Open command palette"><span>Search anything…</span><kbd>⌘K</kbd></button><span class="live">live feed</span></div>
+</div>
+
+<!-- ============ COMMAND CENTRE ============ -->
+<section class="mod on" id="m-cmd">
+  <div class="copilot" style="margin-bottom:12px">
+    <h3 style="margin:0 0 8px;font-family:var(--display)">Today's brief <span class="src" style="color:inherit;opacity:.7">written by the intelligence engine from the live database</span></h3>
+    <div class="a" id="cc-brief" style="min-height:40px">Reading the day…</div>
+  </div>
+  <div class="card stripe ok" style="margin-bottom:12px">
+    <h3>Live from the booking platform <span class="live">live</span><span class="r">bookings and events written by customers and families</span></h3>
+    <div class="grid g4">
+      <div class="kpi"><span class="l">Bookings today</span><span class="v" id="cc-n">0</span></div>
+      <div class="kpi"><span class="l">Needs decision</span><span class="v" id="cc-p">0</span></div>
+      <div class="kpi"><span class="l">Paid today</span><span class="v" id="cc-v">₹0</span></div>
+      <div class="kpi"><span class="l">Events open</span><span class="v" id="cc-e">0</span></div>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">In custody</span><span class="v" id="cc-cust">0</span><span class="d">picked up, not delivered</span></div>
+    <div class="card kpi"><span class="l">Pickups next 24 h</span><span class="v" id="cc-pick">0</span><span class="d" id="cc-pickd"></span></div>
+    <div class="card kpi"><span class="l">Delivered, total</span><span class="v" id="cc-del">0</span><span class="d">all time</span></div>
+    <div class="card kpi"><span class="l">Leads waiting</span><span class="v" id="cc-inq">0</span><span class="d">uncontacted · in CRM</span></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.4fr 1fr">
+    <div class="card">
+      <h3>Pieces per day · actual and forecast <span class="r">80% band · retrains on every booking</span></h3>
+      <div id="cc-chart"></div>
+      <div class="src" id="cc-chartnote" style="margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h3>Event feed <span class="r">last 20 · from the booking event log</span></h3>
+      <div class="feed" id="feed" style="max-height:300px"><div><span class="src">No events yet.</span></div></div>
+    </div>
+  </div>
+  <div class="gap"></div>
+  <div class="grid g3">
+    <div class="card stripe warn"><h3>Needs a decision</h3><ul class="chk" id="cc-decide"><li><span class="src">Nothing waiting.</span></li></ul></div>
+    <div class="card stripe info"><h3>Copilot noticed</h3><ul class="chk" id="cc-noticed"><li><span class="src">Quiet.</span></li></ul></div>
+    <div class="card stripe ok"><h3>Today's numbers</h3><ul class="chk" id="cc-numbers"></ul></div>
+  </div>
+</section>
+
+<!-- ============ SHIPMENTS ============ -->
+<section class="mod" id="m-ship">
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi"><span class="l">Bookings today</span><span class="v" id="st-n">0</span></div>
+    <div class="card kpi"><span class="l">Needs decision</span><span class="v" id="st-p">0</span></div>
+    <div class="card kpi"><span class="l">Paid value today</span><span class="v" id="st-v">₹0</span></div>
+    <div class="card kpi"><span class="l">Identity passed</span><span class="v" id="st-i">0</span></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Bookings inbox <span class="pill ok">live</span><span class="r">click a row — the booking opens in the work drawer · the customer's screen updates as you decide</span></h3>
+    <div class="filterrow" id="admfilter">
+      <button class="btn sm on" data-f="all">All</button>
+      <button class="btn sm" data-f="submitted">Needs decision</button>
+      <button class="btn sm" data-f="revised">Revised</button>
+      <button class="btn sm" data-f="accepted">Accepted</button>
+      <button class="btn sm" data-f="moving">Moving</button>
+      <button class="btn sm" data-f="quoted">Quoted, unpaid</button>
+      <button class="btn sm" data-f="closed">Closed</button>
+    </div>
+    <div class="tbl" style="max-height:52vh;overflow:auto">
+      <table><thead><tr><th>Ref</th><th>Traveller</th><th>Route · date</th><th>Pcs</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody id="admrows"><tr><td colspan="6" class="src" style="padding:10px">Waiting for the back end…</td></tr></tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Inquiries received <span class="pill ok">live</span><span class="r">convert the lead without leaving this screen</span></h3>
+    <div class="tbl" style="max-height:32vh;overflow:auto">
+      <table><thead><tr><th>Received</th><th>Lead</th><th>Venue · size</th><th></th></tr></thead>
+      <tbody id="ship-inq"><tr><td colspan="4" class="src">No inquiries yet.</td></tr></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUOTES AND PAYMENTS ============ -->
+<section class="mod" id="m-quote">
+  <div class="grid" style="grid-template-columns:1.2fr 1fr">
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Make a quote <span class="r">for inquiries that reach the team by phone, WhatsApp, walk-in or a partner</span></h3>
+        <div class="row" style="grid-template-columns:110px 1fr">
+          <label class="f">Title<select id="qt-title"><option>Mr.</option><option>Ms.</option><option>Mrs.</option><option>Dr.</option><option>M/s</option></select></label>
+          <label class="f">Customer name (as on the ID they verify with)<input id="qt-name" placeholder="Full name"></label>
+        </div>
+        <div class="row">
+          <label class="f">Mobile<input id="qt-mob" placeholder="+91 …" inputmode="tel"></label>
+          <label class="f">Email (optional)<input id="qt-em" placeholder="name@mail.com"></label>
+        </div>
+        <div class="row">
+          <label class="f">Traveller is<select id="qt-res"><option value="in">Indian resident · Aadhaar</option><option value="intl">International · passport</option></select></label>
+          <label class="f">Came in via<select id="qt-src"><option>Phone call</option><option>WhatsApp</option><option>Walk-in</option><option>Partner</option><option>Email</option><option>Repeat customer</option></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Customer type<select id="qt-ctype"><option value="individual">Individual</option><option value="business">Business · GST invoice</option></select></label>
+          <label class="f">Payment terms<select id="qt-terms"><option>Due on Receipt</option><option>50% advance, balance at pickup</option><option>Net 7</option><option>Net 30 (partner)</option></select></label>
+        </div>
+        <div class="row" id="qt-bizrow" hidden>
+          <label class="f">Business name<input id="qt-bizname" placeholder="Company on the invoice"></label>
+          <label class="f">GSTIN<input id="qt-gstin" placeholder="22AAAAA0000A1Z5" maxlength="15" style="text-transform:uppercase"></label>
+        </div>
+        <label class="f"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="qt-payer" style="width:auto"> Someone else is paying (family abroad, company, planner)</span></label>
+        <div class="row" id="qt-payerrow" hidden>
+          <label class="f">Payer name<input id="qt-pnm" placeholder="Full name"></label>
+          <label class="f">Payer mobile or email<input id="qt-pct" placeholder="+1 … or name@mail.com"></label>
+        </div>
+        <div id="qt-lookup" hidden class="ai" style="font-size:12.5px"></div>
+        <div class="row">
+          <label class="f">Service<select id="qt-uc"></select></label>
+          <label class="f" id="qt-datelab">Travel / flight date<input id="qt-date" type="date"></label>
+        </div>
+        <div class="row" id="qt-flightrow">
+          <label class="f">Airline + flight number<input id="qt-flight" placeholder="6E 5219 · IndiGo" autocapitalize="characters"></label>
+          <label class="f">PNR (optional)<input id="qt-pnr" placeholder="X9KL2M" maxlength="8" style="text-transform:uppercase"></label>
+        </div>
+        <div class="row" id="qt-timerow">
+          <label class="f" id="qt-ftimelab">Departure time<input id="qt-ftime" type="time"></label>
+          <label class="f">&nbsp;<span class="src" id="qt-cutoff" style="padding-top:12px">—</span></label>
+        </div>
+        <div class="row">
+          <label class="f">Pickup date<input id="qt-pickdate" type="date"></label>
+          <label class="f">Pickup window<select id="qt-slot"><option value="">Decide later</option><option>06:00–08:00</option><option>08:00–10:00</option><option>10:00–12:00</option><option>12:00–14:00</option><option>16:00–18:00</option><option>18:00–20:00</option></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Delivery date<input id="qt-ddate" type="date"></label>
+          <label class="f">&nbsp;<span class="src" id="qt-delnote" style="padding-top:12px">—</span></label>
+        </div>
+        <div class="row">
+          <label class="f">Pickup city<select id="qt-from"></select></label>
+          <label class="f">Delivery city<select id="qt-to"></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Pickup address<input id="qt-pickaddr" placeholder="Flat, building, area, pincode"></label>
+          <label class="f">Delivery address<input id="qt-dropaddr" placeholder="Hotel, home, terminal, counter"></label>
+        </div>
+        <div class="row">
+          <label class="f">Bags (up to 32 kg)<input id="qt-bags" inputmode="numeric" value="2"></label>
+          <label class="f">Oversize pieces<input id="qt-odd" inputmode="numeric" value="0"></label>
+        </div>
+        <div class="okbox" style="font-size:12.5px"><b>Master rate</b> · <span class="num" id="qt-masterrate">—</span> · <button class="btn sm" id="qt-override" style="vertical-align:middle">Override base</button> <span class="src">overrides and discounts need the ops passcode · internal only</span></div>
+        <div id="qt-overwrap" hidden class="card" style="background:var(--surface-2);margin-bottom:12px;padding:10px">
+          <div class="row">
+            <label class="f">Override base amount (₹, before add-ons and GST)<input id="qt-newrate" inputmode="numeric"></label>
+            <label class="f">Override reason (logged)<input id="qt-overwhy" placeholder="Matched competitor · partner contract rate"></label>
+          </div>
+        </div>
+        <div class="row">
+          <label class="f">Discount % (needs reason + passcode)<input id="qt-disc" inputmode="numeric" value="0"></label>
+          <label class="f">Discount reason<input id="qt-why" placeholder="Partner volume · repeat customer · service recovery"></label>
+        </div>
+        <div class="row" id="qt-passrow" hidden>
+          <label class="f">Ops passcode<input id="qt-pass" type="password" placeholder="••••" autocomplete="off"></label>
+          <span class="src" style="align-self:center">Required because the rate chart is being overridden or discounted. Logged with your name in the audit trail.</span>
+        </div>
+        <div class="row">
+          <label class="f">Price lock<select id="qt-valid"><option value="24">24 hours</option><option value="48">48 hours</option><option value="168">7 days</option></select></label>
+          <label class="f">Note on the quote (optional)<input id="qt-note" placeholder="Pickup after 6 pm · fragile item inside"></label>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn sm primary" id="qt-save">Save quote and get the payment link</button>
+          <span class="src" id="qt-msg"></span>
+        </div>
+      </div>
+      <div class="card" id="qt-sharecard" hidden>
+        <h3>Share with the customer</h3>
+        <div class="okbox" id="qt-saved"></div>
+        <div class="num" id="qt-link" style="font-size:12px;word-break:break-all;background:var(--surface-2);padding:8px;border-radius:8px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn sm primary" id="qt-copylink">Copy payment link</button>
+          <button class="btn sm" id="qt-copymsg">Copy WhatsApp message</button>
+          <button class="btn sm" id="qt-openlink">Open as the customer</button>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="text-align:center"><div id="qt-qr" style="background:#fff;padding:8px;border-radius:8px;display:inline-block"></div><div class="src" style="margin-top:4px">UPI QR · amount + reference preset</div></div>
+          <div style="flex:1;min-width:220px;background:var(--surface-2);border-radius:8px;padding:10px;font-size:12.5px;white-space:pre-wrap" id="qt-watext"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Travel plan <span class="r">timings computed from the airline schedule</span></h3>
+        <div class="timeline" id="qt-plan" style="grid-template-columns:1fr"><div class="st">Set the flight date and time — the plan builds itself.</div></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>The quote <span class="r">same engine the website runs</span></h3>
+        <ul class="chk" id="qt-breakdown"><li><span class="src">Fill the form — the price builds live.</span></li></ul>
+      </div>
+      <div class="card">
+        <h3>Payment collection details <span class="r">included in every shared quote</span></h3>
+        <ul class="chk">
+          <li><span class="m">Pay link</span><span>The quote link opens the price and a pay button. Razorpay (India) / Stripe (international) once keys are wired; demo capture until then.</span></li>
+          <li><span class="m">UPI</span><span class="num" id="qt-upi">—</span></li>
+          <li><span class="m">Bank</span><span style="font-size:11.5px" id="qt-bank">—</span></li>
+          <li><span class="m">GSTIN</span><span class="num" id="qt-gst">—</span></li>
+          <li><span class="m">Manual</span><span>Cash or bank transfer received? Mark the quote paid below — it books instantly and the customer gets the confirmation.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="gap"></div>
+  <div class="card">
+    <h3>Open quotes <span class="pill ok">live</span><span class="r">every unlocked, unpaid quote — website and team quotes together</span></h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Quote</th><th>Customer</th><th>Route · date</th><th>Pcs</th><th>Total</th><th>Lock expires</th><th>Source</th><th></th></tr></thead>
+      <tbody id="qt-rows"><tr><td colspan="8" class="src">No open quotes.</td></tr></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ============ LR AND TRIPS ============ -->
+<section class="mod" id="m-lr">
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi"><span class="l">Open trips</span><span class="v" id="lr-kpi-trips">0</span></div>
+    <div class="card kpi"><span class="l">LRs issued</span><span class="v" id="lr-kpi-lrs">0</span></div>
+    <div class="card kpi"><span class="l">Trip revenue</span><span class="v" id="lr-kpi-rev">₹0</span></div>
+    <div class="card kpi"><span class="l">Trip expenses</span><span class="v" id="lr-kpi-exp">₹0</span><span class="d" id="lr-kpi-margin"></span></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1.1fr">
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Create a trip <span class="r">one vehicle, one run — bookings club onto it</span></h3>
+        <div class="row">
+          <label class="f">Route<input id="tr-route" placeholder="Vadodara → Mumbai"></label>
+          <label class="f">Trip date<input id="tr-date" type="date"></label>
+        </div>
+        <div class="row">
+          <label class="f">Vehicle number<input id="tr-veh" placeholder="GJ06 AB 4412" style="text-transform:uppercase"></label>
+          <label class="f">Vehicle type<select id="tr-vtype"><option>Tata Ace</option><option>Bolero pickup</option><option>Eicher 14ft</option><option>Eicher 17ft</option><option>Tempo traveller</option><option>Container</option></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Driver / captain<input id="tr-drv" placeholder="Name"></label>
+          <label class="f">Driver mobile<input id="tr-drvmob" inputmode="tel" placeholder="+91 …"></label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn sm primary" id="tr-create">Create trip</button>
+          <span class="src" id="tr-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Trips <span class="pill ok">live</span><span class="r">revenue − expenses = margin, per run</span></h3>
+        <div class="tbl"><table>
+          <thead><tr><th>Trip</th><th>Route · date</th><th>Vehicle · driver</th><th>LRs</th><th>Rev</th><th>Exp</th><th>Margin</th><th>Status</th></tr></thead>
+          <tbody id="tr-rows"><tr><td colspan="8" class="src">No trips yet.</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+    <div>
+      <div class="card" id="tr-detail"><p class="lede" style="margin:0">Select a trip — or create one. Everything about the run lives here: its consignments and LRs, the manifest, and every rupee it spends.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXCEPTIONS ============ -->
+<section class="mod" id="m-exc">
+  <div class="grid g2">
+    <div class="card">
+      <h3>Exception queue <span class="r">owner · SLA · escalation</span></h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Type</th><th>Shipment</th><th>Owner</th><th>SLA</th><th></th></tr></thead>
+        <tbody id="excrows"></tbody>
+      </table></div>
+      <p class="src" style="margin:8px 0 0">The queue fills from live rules in production: seal photos, scale events, flight feeds, identity scores. The actions here write to the booking's event log.</p>
+    </div>
+    <div class="card">
+      <h3>Exception types and automatic responses</h3>
+      <ul class="chk">
+        <li><span class="m">Seal mismatch</span><span>Hold piece, photo both seals, notify customer, open claim draft. Owner hub.</span></li>
+        <li><span class="m">Missed pickup</span><span>Re-slot within 2 h, customer chooses, waive slot premium. Owner ops.</span></li>
+        <li><span class="m">Cut off at risk</span><span>Compute alternatives (next flight, direct captain), present to ops with cost.</span></li>
+        <li><span class="m">Over 32 kg</span><span>Captain weighs, engine re-rates, customer approves before bag leaves.</span></li>
+        <li><span class="m">Identity review</span><span>Score 0.70 to 0.85 asks customer; below blocks and opens review.</span></li>
+        <li><span class="m">Address change</span><span>Re-price if region changes, else free once.</span></li>
+        <li><span class="m">Damage claim</span><span>Pickup photos vs delivery photos side by side, indemnity cap applied.</span></li>
+        <li><span class="m">No show at terminal</span><span>Bag held at counter 4 h, then returned to hub, store and forward rate.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EVENTS AND BULK ============ -->
+<section class="mod" id="m-evt">
+  <div class="filterrow" id="evtabs">
+    <button class="btn sm on" data-t="list">Weddings and events</button>
+    <button class="btn sm" data-t="new">Open a wedding</button>
+  </div>
+  <div class="evp" id="ev-list">
+    <div class="grid" style="grid-template-columns:1.4fr 1fr">
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <h3>Open weddings and events <span class="live">live</span><span class="r">one record per wedding · guests book on the landing page</span></h3>
+          <div class="tbl"><table><thead><tr><th>Wedding</th><th>Venue · dates</th><th>Sectors</th><th>Families</th><th>Bags</th><th>Status</th><th></th></tr></thead>
+          <tbody id="wx-rows"><tr><td colspan="7" class="src">No weddings open yet.</td></tr></tbody></table></div>
+        </div>
+        <div class="card">
+          <h3>Wedding inquiries from the website <span class="live">live</span><span class="r">convert to open the wedding</span></h3>
+          <div class="tbl"><table><thead><tr><th>Received</th><th>Contact</th><th>Venue · dates</th><th>Pickup cities</th><th>Size</th><th></th></tr></thead>
+          <tbody id="ld-rows"><tr><td colspan="6" class="src">No inquiries yet.</td></tr></tbody></table></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>How a wedding runs on this platform</h3>
+        <ul class="chk">
+          <li><span class="m">Inquiry</span><span>The website takes venue, dates and pickup cities only. No rate is shown to anyone outside this panel.</span></li>
+          <li><span class="m">Open</span><span>Ops open the wedding here: hosts, venue, sectors with the agreed rate per bag, billing basis, landing page content. Saving it creates the guest link.</span></li>
+          <li><span class="m">Families</span><span>Guests book on the landing page — no code to type, no rate shown, no payment taken when the host pays.</span></li>
+          <li><span class="m">Operate</span><span>Bags group by sector and pickup day. Every tag is on the manifest before anything moves.</span></li>
+          <li><span class="m">Bill</span><span>The host statement builds from actual bags at the sector rates on the record. Internal only.</span></li>
+        </ul>
+        <div class="gap"></div>
+        <div class="card stripe bad" style="padding:10px"><b style="font-family:var(--display)">Zero-error rules</b><div style="font-size:12.5px">No bag moves without a tag on the manifest. No return closes with a tag unscanned. Counts are scanned, never typed.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="evp" id="ev-new" hidden>
+    <div class="grid" style="grid-template-columns:1.5fr 1fr">
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>The wedding <span class="r" id="ev-mode">new record</span></h3>
+        <div class="row">
+          <label class="f">Wedding or event name<input id="ev-name" placeholder="Yashna & Yash wedding"></label>
+          <label class="f">Type<select id="ev-type"><option value="WED">Wedding</option><option value="MIC">Corporate / MICE</option><option value="PIL">Pilgrimage / yatra</option><option value="SPT">Sports / tournament</option><option value="STU">Student intake</option><option value="FAM">Family reunion</option></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Venue city<select id="ev-city"></select></label>
+          <label class="f">Venue<input id="ev-venue" placeholder="Taj Aravali Resort, Udaipur"></label>
+        </div>
+        <div class="row">
+          <label class="f">Guests arrive on<input id="ev-in" type="date"></label>
+          <label class="f">Guests leave on<input id="ev-out" type="date"></label>
+        </div>
+        <div class="row">
+          <label class="f">Direction<select id="ev-dir"><option value="both">Home → venue and back (round trip)</option><option value="out">Home → venue only</option><option value="ret">Venue → home only</option></select></label>
+          <label class="f">Billing<select id="ev-bill"><option value="host">Host pays for all families (statement to host)</option><option value="split">Host pays outbound, families pay return</option><option value="family">Each family pays its own</option></select></label>
+        </div>
+        <div class="row">
+          <label class="f">Expected families<input id="ev-expf" inputmode="numeric" placeholder="40"></label>
+          <label class="f">Expected bags<input id="ev-expb" inputmode="numeric" placeholder="110"></label>
+        </div>
+        <div class="okbox" style="font-size:12.5px"><b>Code</b> · <span class="mono" id="ev-code">—</span> · printed on every tag, carried in the guest link. <span class="src">No ambiguous characters.</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Sectors and rates <span class="r">internal · never shown to guests · one row per pickup city</span></h3>
+        <p class="src" style="margin:0 0 8px">A guest can only choose a pickup city that has a sector here. Rates are per bag per leg, as agreed with the host.</p>
+        <div id="ev-sectors"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+          <select id="ev-addsec-city" style="font:inherit;font-size:12.5px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px"></select>
+          <button class="btn sm" id="ev-addsec">Add sector</button>
+          <span class="src">Rate suggestion fills in from the region matrix; edit to the agreed figure.</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label class="f">Oversize, per bag per leg (₹)<input id="ev-rodd" inputmode="numeric" value="900"></label>
+          <label class="f">Minimum bags billed per family<input id="ev-rmin" inputmode="numeric" value="2"></label>
+        </div>
+        <div class="row">
+          <label class="f">Event slab discount (%)<input id="ev-rslab" inputmode="numeric" value="18"></label>
+          <label class="f">Deposit at opening (%)<input id="ev-rdep" inputmode="numeric" value="50"></label>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Hosts and contacts</h3>
+        <div class="row"><label class="f">Host name<input id="ev-host" placeholder="Family or company name"></label><label class="f">Host mobile<input id="ev-hostmob" placeholder="+91 …" inputmode="tel"></label></div>
+        <div class="row"><label class="f">Planner / coordinator<input id="ev-planner" placeholder="Name or company"></label><label class="f">On-site contact at venue<input id="ev-onsite" placeholder="Concierge / event desk · mobile"></label></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Landing page for the guests <span class="r">what the invitation link opens</span></h3>
+        <div class="row"><label class="f">Names on the page<input id="ev-lnames" placeholder="Yashna & Yash"></label><label class="f">Hashtag<input id="ev-lhash" placeholder="#Y2K"></label></div>
+        <div class="row"><label class="f">Dates as they should read<input id="ev-ldates" placeholder="17 & 18 December 2026"></label><label class="f">Side 1 · Side 2<input id="ev-lsides" placeholder="Bride side · Groom side"></label></div>
+        <label class="f">A line about the celebration<input id="ev-lcel" placeholder="Two days in the Aravallis, one forever."></label>
+        <label class="f">A line about the venue<input id="ev-ldest" placeholder="Terraced gardens above the City of Lakes, 30 minutes from the airport."></label>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn sm primary" id="ev-save">Save wedding and create the guest link</button>
+          <button class="btn sm" id="ev-reset">Clear form</button>
+          <span class="src" id="ev-msg"></span>
+        </div>
+        <div id="ev-done" hidden class="okbox" style="margin-top:10px;font-size:12.5px"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Record summary</h3>
+        <ul class="chk">
+          <li><span class="m">Code</span><span class="mono" id="es-code">—</span></li>
+          <li><span class="m">Venue</span><span id="es-venue">—</span></li>
+          <li><span class="m">Dates</span><span id="es-dates">—</span></li>
+          <li><span class="m">Sectors</span><span id="es-sec">0</span></li>
+          <li><span class="m">Billing</span><span id="es-bill">host pays</span></li>
+          <li><span class="m">Estimate</span><span id="es-est" class="num">—</span></li>
+        </ul>
+        <p class="src" style="margin:8px 0 0">Estimate uses expected bags at the sector rates, slab and GST. Internal only.</p>
+      </div>
+      <div class="card" id="es-share" hidden>
+        <h3>Guest link</h3>
+        <div class="num" id="es-link" style="font-size:12px;word-break:break-all;background:var(--surface-2);padding:8px;border-radius:8px"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn sm" id="es-copy">Copy link</button>
+          <button class="btn sm" id="es-open">Open the landing page</button>
+        </div>
+        <p class="src" style="margin:8px 0 0">This link goes on the invitation. Guests never type a code and never see a rate.</p>
+      </div>
+    </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DRIVERS ============ -->
+<section class="mod" id="m-drv">
+  <div class="filterrow" id="drvfilter">
+    <button class="btn sm on" data-f="all">All drivers</button>
+    <button class="btn sm" data-f="pickup">Pickup drivers</button>
+    <button class="btn sm" data-f="delivery">Delivery drivers</button>
+    <button class="btn sm" data-f="linehaul">Line haul</button>
+    <span class="src" style="margin-left:auto;align-self:center">Role is per job, not per person. One captain can hold both roles in a day.</span>
+  </div>
+  <div class="grid" style="grid-template-columns:1.3fr 1fr">
+    <div class="card">
+      <h3>Live positions <span class="r">GPS every 30 s from the captain app · BGTS telematics for line haul</span></h3>
+      <div class="map">
+        <svg viewBox="0 0 600 240" role="img" aria-label="Driver positions on the network">
+          <g font-family="IBM Plex Mono" font-size="10">
+            <path d="M80,120 L300,150 L520,90" stroke="var(--line)" stroke-width="2" fill="none"/>
+            <circle cx="80" cy="120" r="9" fill="var(--navy)"/><text x="60" y="105">AMD hub</text>
+            <circle cx="300" cy="150" r="9" fill="var(--navy)"/><text x="282" y="178">BRD hub</text>
+            <circle cx="520" cy="90" r="9" fill="var(--navy)"/><text x="500" y="75">MUM hub</text>
+            <g class="veh" data-role="pickup"><circle cx="330" cy="115" r="7" fill="var(--accent)"/><text x="340" y="111" fill="var(--accent)">Ravi K · pickup · stop 2 of 3 · 1.2 km</text></g>
+            <g class="veh" data-role="pickup" style="animation-delay:-3s"><circle cx="110" cy="160" r="7" fill="var(--accent)"/><text x="120" y="176" fill="var(--accent)">Amit S · pickup · loading at hub</text></g>
+            <g class="veh" data-role="delivery" style="animation-delay:-6s"><circle cx="560" cy="130" r="7" fill="var(--info)"/><text x="470" y="150" fill="var(--info)">Sameer D · delivery · 6 min out</text></g>
+            <g class="veh" data-role="delivery" style="animation-delay:-2s"><circle cx="480" cy="190" r="7" fill="var(--info)"/><text x="400" y="212" fill="var(--info)">Farhan M · delivery · 4 stops left</text></g>
+            <g class="veh" data-role="linehaul" style="animation-delay:-5s"><circle cx="410" cy="120" r="6" fill="var(--warn)"/><text x="410" y="140" fill="var(--warn)">LH-14 · Jitendra · 14 pcs</text></g>
+          </g>
+        </svg>
+      </div>
+      <div class="gap"></div>
+      <div class="tbl"><table>
+        <thead><tr><th>Driver</th><th>Role now</th><th>Vehicle</th><th>Job</th><th>GPS</th><th>Next</th><th></th></tr></thead>
+        <tbody id="drvrows">
+          <tr data-role="pickup"><td>Ravi K</td><td><span class="pill warn">pickup</span></td><td class="num">GJ06 AB 4412</td><td class="num" id="drv-ravi">—</td><td class="num" style="color:var(--ok)">28 s ago</td><td>Stop 2 · Alkapuri · 08:40</td><td><button class="btn sm" data-toast="Live map link sent to the customer. Ops sees the same route.">Share live</button></td></tr>
+          <tr data-role="pickup"><td>Amit S</td><td><span class="pill warn">pickup</span></td><td class="num">GJ06 CD 1190</td><td class="num" id="drv-amit">—</td><td class="num" style="color:var(--ok)">12 s ago</td><td>Depart hub 09:10</td><td><button class="btn sm" data-toast="Pickup notification resent with address, slot, pieces and customer OTP.">Notify</button></td></tr>
+          <tr data-role="delivery"><td>Sameer D</td><td><span class="pill info">delivery</span></td><td class="num">MH02 EF 7731</td><td class="num" id="drv-sameer">—</td><td class="num" style="color:var(--ok)">30 s ago</td><td>Customer in 6 min</td><td><button class="btn sm" data-toast="Delivery OTP generated and sent to receiver. The driver sees only the prompt, never the code.">Delivery OTP</button></td></tr>
+          <tr data-role="delivery"><td>Farhan M</td><td><span class="pill info">delivery</span></td><td class="num">MH02 GH 2210</td><td class="num">4 shipments · 7 pcs</td><td class="num" style="color:var(--warn)">4 min ago</td><td>Andheri → Bandra</td><td><button class="btn sm" data-toast="GPS gap over 3 min flagged. Captain pinged. No response in 5 min alerts the Ops lead.">GPS gap</button></td></tr>
+          <tr data-role="linehaul"><td>Jitendra P</td><td><span class="pill mute">line haul</span></td><td class="num">GJ06 T 9981</td><td class="num">LH-14 · 14 pcs</td><td class="num" style="color:var(--ok)">telematics</td><td>MUM hub 17:40</td><td><button class="btn sm" data-toast="Hub MUM notified of inbound ETA and manifest. Delivery drivers pre-assigned.">Pre-assign</button></td></tr>
+          <tr data-role="pickup"><td>Kiran P</td><td><span class="pill mute">off</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>Available from 14:00</td><td><button class="btn sm" data-toast="Kiran P offered the 16:00 delivery run. Accept or decline in the app within 10 min.">Offer job</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Driver app · what the captain sees</h3>
+        <div style="background:var(--navy);color:var(--navy-ink);border-radius:14px;padding:12px;font-size:12.5px" id="drv-push">
+          <div class="src" style="color:inherit;opacity:.7">PUSH · just now</div>
+          <div style="font-family:var(--display);font-weight:700;margin:2px 0 6px" id="drv-push-title">No live job — make and accept a booking to see the push.</div>
+          <div id="drv-push-body"></div>
+          <div style="display:flex;gap:6px;margin-top:10px"><button class="btn sm primary" data-toast="Captain accepted. Customer told: captain, plate and arrival window.">Accept</button><button class="btn sm" data-toast="Declined. Job re-offered to the next free captain. Ops lead sees the decline in the feed.">Decline</button><button class="btn sm" data-toast="Navigation opened with the pickup pin.">Navigate</button></div>
+          <div class="src" style="color:inherit;opacity:.7;margin-top:10px">Then: arrive → scan seals → weigh → 4 photos per piece → customer e-sign → depart. Each step writes a custody event and a message to the right team.</div>
+        </div>
+      </div>
+      <div class="gap"></div>
+      <div class="card">
+        <h3>Notifications a driver receives</h3>
+        <ul class="chk">
+          <li><span class="m">T−12 h</span><span>Tomorrow's run: jobs, pieces, slots, hub cut offs</span></li>
+          <li><span class="m">T−30 min</span><span>Pickup reminder with address, pieces, customer name, OTP prompt</span></li>
+          <li><span class="m">Live</span><span>Address change, slot change, customer running late, cancelled</span></li>
+          <li><span class="m">Hub</span><span>Hub cut off in 45 min · line haul loading bay</span></li>
+          <li><span class="m">Delivery</span><span>Receiver OTP prompt, receiver phone masked call</span></li>
+          <li><span class="m">Exception</span><span>Over 32 kg re-rate approved, seal mismatch instructions</span></li>
+          <li><span class="m">Offer</span><span>New job offer when free, accept within 10 min</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="gap"></div>
+  <div class="card">
+    <h3>Driver events routed to departments <span class="r">every scan on the driver app becomes a message to the team that owns the next step</span></h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Driver event</th><th>Operations</th><th>Hub</th><th>Customer success</th><th>Finance</th><th>Sales / partners</th><th>Management</th></tr></thead>
+      <tbody>
+        <tr><td>Job accepted or declined</td><td>Feed · decline opens re-offer</td><td>—</td><td>Customer told captain and plate</td><td>—</td><td>—</td><td>Decline rate weekly</td></tr>
+        <tr><td>Arrived at pickup</td><td>Feed</td><td>—</td><td>Customer told</td><td>—</td><td>Partner webhook</td><td>—</td></tr>
+        <tr><td>Pieces scanned, weighed, photographed</td><td>Feed · photo count check</td><td>Inbound manifest grows</td><td>Photos and seal IDs to customer</td><td>Over 32 kg → oversize line</td><td>Partner webhook</td><td>—</td></tr>
+        <tr><td>Hub handover</td><td>Feed</td><td>Intake, seal check, sort</td><td>—</td><td>Tripsheet expense line</td><td>—</td><td>—</td></tr>
+        <tr><td>Out for delivery</td><td>Feed</td><td>—</td><td>Receiver told, OTP sent</td><td>—</td><td>Partner webhook</td><td>—</td></tr>
+        <tr><td>Delivered with OTP</td><td>Closed</td><td>—</td><td>Thank you, rating, return leg</td><td>Invoice issued, Zoho</td><td>Partner webhook · hotel folio</td><td>On time counter</td></tr>
+        <tr><td>Failed delivery / no show</td><td>Exception · re-slot</td><td>Return to hub</td><td>Customer called</td><td>Re-delivery fee if policy</td><td>Partner told</td><td>—</td></tr>
+        <tr><td>GPS gap over 3 min · deviation over 2 km</td><td>Alert · call captain</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Escalation at 10 min</td></tr>
+        <tr><td>Damage or seal issue</td><td>Exception</td><td>Hold piece</td><td>Customer told with photos</td><td>Claim draft, indemnity cap</td><td>—</td><td>Weekly claims</td></tr>
+      </tbody>
+    </table></div>
+    <p class="src" style="margin:8px 0 0">Each department has a channel: ops console push, hub banner, WhatsApp or Slack per team, email digest for Finance and Management. Routing is a rule in the Rules module, so a channel changes without code.</p>
+  </div>
+</section>
+
+<!-- ============ FLIGHTS ============ -->
+<section class="mod" id="m-flt">
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">Flights linked</span><span class="v" id="flt-linked">0</span><span class="d">from live bookings with a flight no.</span></div>
+    <div class="card kpi"><span class="l">Delayed</span><span class="v">0</span><span class="d">schedules re-planned automatically</span></div>
+    <div class="card kpi"><span class="l">Cut offs moved</span><span class="v">0</span><span class="d">customers and drivers told</span></div>
+    <div class="card kpi"><span class="l">Data freshness</span><span class="v num">30 s</span><span class="d">ADS-B refresh when live</span></div>
+  </div>
+  <div class="card">
+    <h3>Live aircraft <span class="live" id="lvsrc">idle</span> <span class="r">ADS-B · adsb.lol → airplanes.live → OpenSky · refresh 30 s</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <label class="src">Airport</label>
+      <select id="lvap" class="minisel">
+        <option value="BOM">BOM · Mumbai</option><option value="AMD">AMD · Ahmedabad</option><option value="BDQ">BDQ · Vadodara</option><option value="DEL">DEL · Delhi</option><option value="BLR">BLR · Bengaluru</option><option value="HYD">HYD · Hyderabad</option><option value="MAA">MAA · Chennai</option><option value="GOI">GOI · Goa Dabolim</option><option value="GOX">GOX · Goa Mopa</option><option value="COK">COK · Kochi</option><option value="CCU">CCU · Kolkata</option><option value="DXB">DXB · Dubai</option>
+      </select>
+      <label class="src">Radius</label>
+      <select id="lvr" class="minisel"><option value="40">40 km</option><option value="80" selected>80 km</option><option value="150">150 km</option></select>
+      <button class="btn sm" id="lvgo">Refresh now</button>
+      <span style="flex:1"></span>
+      <input id="lvfn" placeholder="Track a flight · 6E 5219 or AI 865" class="minisel" style="min-width:220px" aria-label="Flight number">
+      <button class="btn sm primary" id="lvtrack">Track</button>
+    </div>
+    <div id="lvtrackout" class="src" style="margin-bottom:8px"></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Callsign</th><th>Airline</th><th>Aircraft</th><th>Alt</th><th>Speed</th><th>V/S</th><th>Distance</th><th>Phase</th><th>Links</th></tr></thead>
+      <tbody id="lvrows"><tr><td colspan="9" class="src">Press “Refresh now” to fetch live positions.</td></tr></tbody>
+    </table></div>
+    <p class="src" style="margin:8px 0 0">Positions are crowd-sourced ADS-B, refreshed every 30 seconds. Phase is inferred from altitude and vertical speed. Schedules, gates and delays need a schedule feed (AviationStack / AeroDataBox), which is the production step; in production the Bagdrop server polls the feeds so browser CORS never matters.</p>
+  </div>
+  <div class="gap"></div>
+  <div class="card">
+    <h3>Shipment flight board <span class="pill warn">simulation</span> <span class="r">how the live feed drives re-planning in production</span> <button class="btn sm" id="simdelay" style="margin-left:8px">Simulate: 6E 5219 delayed 2 h</button></h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Flight</th><th>Shipment</th><th>Leg</th><th>Scheduled</th><th>Estimated</th><th>Status</th><th>Bagdrop plan</th><th>Impact</th></tr></thead>
+      <tbody id="fltrows">
+        <tr id="f1"><td class="num">6E 5219 · BDQ→BOM</td><td class="num">BD-0288 · 3 pcs</td><td>Drop at BOM T2</td><td class="num">STD 14:20</td><td class="num" id="f1etd">ETD 14:20</td><td id="f1st"><span class="pill ok">on time</span></td><td id="f1plan">Pickup 08:00 · hub cut off 11:30 · counter by 10:20</td><td id="f1imp">—</td></tr>
+        <tr><td class="num">AI 865 · BOM→DEL</td><td class="num">BD-0271 · 2 pcs</td><td>Drop at BOM T2</td><td class="num">STD 21:10</td><td class="num">ETD 21:10</td><td><span class="pill ok">on time</span></td><td>Counter by 17:10 · on LH-14 ETA 17:40 <span class="pill warn">tight</span></td><td>Captain run from MUM hub pre-approved</td></tr>
+        <tr><td class="num">UK 955 · DEL→BOM</td><td class="num">BD-0305 · 2 pcs</td><td>Collect at BOM T2 arrivals</td><td class="num">STA 16:05</td><td class="num">ETA 16:40</td><td><span class="pill warn">+35 min</span></td><td>Driver at carousel 17:25 (was 16:50)</td><td>Delivery ETA moved 18:45 → 19:20 · customer told</td></tr>
+        <tr><td class="num">EK 501 · DXB→BOM</td><td class="num">BD-0309 · 4 pcs</td><td>Collect at BOM T2 arrivals</td><td class="num">STA 20:50</td><td class="num">ETA 20:35</td><td><span class="pill ok">early</span></td><td>Driver at carousel 21:20</td><td>NRI payer in Dubai told on WhatsApp</td></tr>
+        <tr><td class="num">6E 2033 · BLR→GOI</td><td class="num">BD-0293 · 2 pcs</td><td>Drop at BLR T1</td><td class="num">STD 11:40</td><td class="num">CNL</td><td><span class="pill bad">cancelled</span></td><td>Held at BLR hub</td><td>Exception open · waiting for new PNR</td></tr>
+      </tbody>
+    </table></div>
+    <div class="feed" id="fltfeed" style="margin-top:10px;max-height:150px"></div>
+  </div>
+  <div class="gap"></div>
+  <div class="grid g3">
+    <div class="card stripe info"><h3>How a flight change re-plans a shipment</h3><ul class="chk">
+      <li><span class="m">Departure</span><span>Counter time = ETD − 4 h international, − 3 h domestic. Hub cut off = counter − line haul time − 30 min buffer. Pickup slot = hub cut off − captain run time. All three recompute on every ETD change.</span></li>
+      <li><span class="m">Arrival</span><span>Driver at carousel = ETA + 35 min domestic, + 60 min international. Delivery ETA = that + drive time from live traffic.</span></li>
+      <li><span class="m">Under 60 min</span><span>Re-plan silently, tell the driver and customer new times.</span></li>
+      <li><span class="m">Over 60 min</span><span>Re-plan and ask ops to confirm if a slot or line haul changes. Customer told once confirmed.</span></li>
+      <li><span class="m">Cancelled</span><span>Hold bags at hub or counter, open exception, ask customer for the new PNR, re-price nothing.</span></li>
+    </ul></div>
+    <div class="card stripe ok"><h3>Who gets told, and when</h3><ul class="chk">
+      <li><span class="m">Customer</span><span>New pickup window or delivery ETA on WhatsApp, with the flight status line so they see why.</span></li>
+      <li><span class="m">Pickup driver</span><span>Slot moved in the app, run sheet re-ordered.</span></li>
+      <li><span class="m">Delivery driver</span><span>Carousel time moved, stop sequence re-planned.</span></li>
+      <li><span class="m">Hub</span><span>Cut off moved on the bay board.</span></li>
+      <li><span class="m">Ops</span><span>Feed line, and a decision card if the change breaks a line haul.</span></li>
+      <li><span class="m">Partner</span><span>Webhook with the new times for OTA, hotel or airline.</span></li>
+    </ul></div>
+    <div class="card stripe warn"><h3>Data sources and limits</h3><ul class="chk">
+      <li><span class="m">Now</span><span>AviationStack for schedules, gates, delays; ADS-B for airborne position. Covers Indian carriers and international arrivals.</span></li>
+      <li><span class="m">Cost</span><span>₹8,000–15,000 a month at current volume; polling only inside the flight window keeps it there.</span></li>
+      <li><span class="m">Later</span><span>Airport AODB feed (Adani, GMR) gives belt numbers and first-bag times; airline DCS confirms the bag is on the flight.</span></li>
+      <li><span class="m">Honest limit</span><span>Public feeds lag airline systems 2–5 min and can miss gate changes. The buffers exist for that reason.</span></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============ CAPACITY ============ -->
+<section class="mod" id="m-cap">
+  <div class="grid g2">
+    <div class="card">
+      <h3>Capacity next 7 days <span class="r">from live bookings + forecast · slots close on the website at 100%</span></h3>
+      <div class="grid" style="gap:8px" id="capbars"></div>
+      <p class="src" style="margin:8px 0 0">Capacity = captains × stops per slot + line haul piece limits. The forecast overlays expected demand; the planner proposes extra captains two days ahead.</p>
+    </div>
+    <div class="card">
+      <h3>Roster</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Captain</th><th>Base</th><th>Today</th><th>Score</th><th>Status</th></tr></thead>
+        <tbody id="caproster">
+          <tr><td>Ravi K</td><td>BRD</td><td id="cap-ravi">—</td><td class="num">4.9</td><td><span class="pill ok">on route</span></td></tr>
+          <tr><td>Amit S</td><td>BRD</td><td id="cap-amit">—</td><td class="num">4.7</td><td><span class="pill info">loading</span></td></tr>
+          <tr><td>Sameer D</td><td>MUM</td><td>terminal run</td><td class="num">4.8</td><td><span class="pill ok">at BOM T2</span></td></tr>
+          <tr><td>Kiran P</td><td>AMD</td><td>off</td><td class="num">4.6</td><td><span class="pill mute">off</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="gap"></div>
+      <div class="src">Score from on-time, photo completeness, customer rating, seal discipline. Below 4.3 triggers a retraining task.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CRM ============ -->
+<section class="mod" id="m-crm">
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">New leads</span><span class="v" id="crm-new">0</span><span class="d">uncontacted inquiries</span></div>
+    <div class="card kpi"><span class="l">Pipeline value</span><span class="v" id="crm-pipe">₹0</span><span class="d">estimated from lead size</span></div>
+    <div class="card kpi"><span class="l">Customers</span><span class="v" id="crm-cust">0</span><span class="d" id="crm-custd"></span></div>
+    <div class="card kpi"><span class="l">Conversion</span><span class="v" id="crm-conv">—</span><span class="d">bookings that paid or joined an event</span></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.2fr 1fr">
+    <div>
+      <div class="copilot" style="margin-bottom:12px">
+        <h3 style="margin:0 0 8px;font-family:var(--display)">Follow-ups the engine wants done now <span class="src" style="color:inherit;opacity:.7">ranked · one click drafts the message</span></h3>
+        <div id="crm-suggest"><div class="a">Quiet — nothing overdue.</div></div>
+      </div>
+      <div class="card">
+        <h3>Leads <span class="pill ok">live</span><span class="r">every inquiry from the website</span></h3>
+        <div class="tbl" style="max-height:38vh;overflow:auto">
+          <table><thead><tr><th>Received</th><th>Lead</th><th>What</th><th>Status</th><th></th></tr></thead>
+          <tbody id="crm-leads"><tr><td colspan="5" class="src">No leads yet.</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Customer master <span class="pill ok">live</span><span class="r">match by name, phone or email · full history behind every row</span></h3>
+        <input class="search" id="crm-search" placeholder="Search name, phone, email…" style="width:100%;min-width:0;margin-bottom:8px">
+        <div class="tbl" style="max-height:44vh;overflow:auto">
+          <table><thead><tr><th>Customer</th><th>Bookings</th><th>Value</th><th>Tier</th><th></th></tr></thead>
+          <tbody id="crm-customers"><tr><td colspan="5" class="src">No customers yet.</td></tr></tbody></table>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Log an activity <span class="r">email · call · WhatsApp · note — with the next follow-up scheduled</span></h3>
+        <div class="row">
+          <label class="f">Contact<select id="ca-who"></select></label>
+          <label class="f">Type<select id="ca-type"><option>Email</option><option>Call</option><option>WhatsApp</option><option>Meeting</option><option>Note</option></select></label>
+        </div>
+        <label class="f">What happened / message<input id="ca-text" placeholder="Shared the Diwali rates · asked for the return-leg decision"></label>
+        <div class="row">
+          <label class="f">Next follow-up (optional)<input id="ca-due" type="date"></label>
+          <label class="f">Department<select id="ca-dept"><option>Sales</option><option>Ops</option><option>Finance</option><option>Events desk</option><option>Management</option></select></label>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="btn sm primary" id="ca-log">Log activity</button>
+          <button class="btn sm" id="ca-email">Compose email</button>
+          <button class="btn sm" id="ca-wa">Open WhatsApp</button>
+          <span class="src" id="ca-msg"></span>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Follow-ups due <span class="pill ok">live</span></h3>
+        <div class="feed" id="crm-due" style="max-height:24vh"><div><span class="src">Nothing due.</span></div></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Cancelled and rejected <span class="r">win-back queue with the reason on record</span></h3>
+        <div class="tbl" style="max-height:24vh;overflow:auto"><table><thead><tr><th>Booking</th><th>Customer</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="crm-lost"><tr><td colspan="4" class="src">None — good.</td></tr></tbody></table></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Outbox <span class="pill ok">live</span><span class="r">queued sends — the Edge Function drains this automatically once gateway keys are set</span></h3>
+        <div class="feed" id="ob-list" style="max-height:22vh"><div><span class="src">Nothing queued. Documents and reminders queue here when shared.</span></div></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <span class="src">Gateways:</span>
+          <span class="pill" id="ob-wa-pill">WhatsApp — not wired</span>
+          <span class="pill" id="ob-em-pill">Email — not wired</span>
+          <button class="btn sm" id="ob-keys">Set gateway keys</button>
+        </div>
+        <div class="row" id="ob-keysrow" hidden style="margin-top:10px">
+          <label class="f">Meta WhatsApp Cloud token<input id="ob-watoken" type="password" placeholder="EAAG…"></label>
+          <label class="f">Email API key (Resend)<input id="ob-emkey" type="password" placeholder="re_…"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Activity log <span class="r">every touch, by whom, with the message — exportable for every department</span></h3>
+        <div class="feed" id="crm-log" style="max-height:30vh"><div><span class="src">No activity yet.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section class="mod" id="m-price">
+  <div class="card" style="margin-bottom:12px">
+    <h3>Route rate chart · THE MASTER <span class="pill ok">live</span><span class="r">from the official Bagdrop rate chart · ₹ per booking · GST extra · edits save to the back end</span></h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Route</th><th>Direction</th><th>1 bag</th><th>2 bags (total)</th><th>Each addl. bag</th><th>Bulk min</th><th>Bulk rate / bag</th><th>Note</th><th></th></tr></thead>
+      <tbody id="route-rows"></tbody>
+    </table></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">
+      <label class="f" style="margin:0;min-width:140px">From<select id="rt-from" class="minisel" style="width:100%"></select></label>
+      <label class="f" style="margin:0;min-width:140px">To<select id="rt-to" class="minisel" style="width:100%"></select></label>
+      <label class="f" style="margin:0">Direction<select id="rt-dir" class="minisel"><option value="both">Both ways</option><option value="one">One way</option></select></label>
+      <label class="f" style="margin:0;width:90px">1 bag ₹<input id="rt-r1" class="minisel" inputmode="numeric"></label>
+      <label class="f" style="margin:0;width:90px">2 bags ₹<input id="rt-r2" class="minisel" inputmode="numeric"></label>
+      <label class="f" style="margin:0;width:90px">Addl ₹<input id="rt-addl" class="minisel" inputmode="numeric"></label>
+      <label class="f" style="margin:0;width:80px">Bulk min<input id="rt-bmin" class="minisel" inputmode="numeric" placeholder="—"></label>
+      <label class="f" style="margin:0;width:90px">Bulk ₹/bag<input id="rt-brate" class="minisel" inputmode="numeric" placeholder="—"></label>
+      <button class="btn sm primary" id="rt-add">Add route</button>
+      <span class="src" id="rt-msg"></span>
+    </div>
+    <p class="src" style="margin:8px 0 0">Rules from the chart: 1 bag · 2 bags total · each bag beyond the second at the addl. rate · at the bulk minimum, <b>every</b> bag in the booking is charged the bulk rate. Add further rate charts the same way — one row per route.</p>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
+    <div class="card">
+      <h3>Add a city to the master</h3>
+      <label class="f">City name<input id="ct-name" placeholder="Indore"></label>
+      <label class="f">Region (for the fallback matrix)<select id="ct-zone" class="minisel" style="width:100%"></select></label>
+      <label class="f">Nearest airport code (optional)<input id="ct-ap" placeholder="IDR" maxlength="3" style="text-transform:uppercase"></label>
+      <button class="btn sm primary" id="ct-add">Add city</button>
+      <span class="src" id="ct-msg" style="display:block;margin-top:6px"></span>
+      <div class="src" style="margin-top:8px">New cities appear instantly in the website's city lists, the quote form and the simulator. A city quotes from the fallback matrix until it gets its own route row above.</div>
+    </div>
+    <div class="card">
+      <h3>Add-on rates <span class="r">on top of either rate layer · saved to the back end</span></h3>
+      <label class="f">Oversize, per piece (₹) · over 32 kg / non-standard<input id="ad-oversize" class="minisel" inputmode="numeric" style="width:100%"></label>
+      <p class="src" style="margin:4px 0 0">No handling charges — the quote carries only the rate-chart figures (route rate or fallback matrix), oversize where declared, and GST 5%.</p>
+      <span class="src" id="ad-msg"></span>
+    </div>
+    <div class="card">
+      <h3>Terms wired into the engine</h3>
+      <ul class="chk">
+        <li><span class="m">GST</span><span class="num">5% extra on every figure (GTA transport rate)</span></li>
+        <li><span class="m">Bulk</span><span>At the bulk minimum, every bag is billed at the bulk rate</span></li>
+        <li><span class="m">Alias</span><span>Nadiad and Anand carry Ahmedabad rates (their own rows)</span></li>
+        <li><span class="m">One-way</span><span>Mumbai → Goa rates are onward only; the return falls back to the matrix (rates on request)</span></li>
+        <li><span class="m">Cancellation</span><span>Within 96 h of pickup · full booking amount</span></li>
+        <li><span class="m">Insured</span><span>Up to ₹50,000 per shipment</span></li>
+        <li><span class="m">Quote lock</span><span class="num">24 h · signed · 3 per contact per day</span></li>
+      </ul>
+      <div id="price-suggest" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <h3>Quote simulator <span class="r">every permutation of every city in the master · same function the website runs</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <select id="qs-from" class="minisel"></select><span class="src">→</span><select id="qs-to" class="minisel"></select>
+      <select id="qs-mode" class="minisel"><option value="road">Door to door</option><option value="air">Airport</option><option value="rail">Rail</option><option value="sea">Cruise</option></select>
+      <label class="src">Bags</label><input id="qs-bags" class="minisel" style="width:64px" value="2" inputmode="numeric" aria-label="Bags">
+      <label class="src">Oversize</label><input id="qs-odd" class="minisel" style="width:64px" value="0" inputmode="numeric" aria-label="Oversize">
+      <input id="qs-date" class="minisel" type="date" aria-label="Date">
+      <button class="btn sm primary" id="qs-go">Quote</button>
+      <button class="btn sm" id="qs-matrix">Full route × bags table</button>
+    </div>
+    <div id="qs-out" class="src">Pick any two cities — route-chart pairs price from the master, everything else from the fallback matrix.</div>
+    <div id="qs-reckoner" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Fallback regional matrix <span class="r">per bag · used only where no route rate exists · edits save</span></h3>
+    <div class="matrix" id="matrix"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <span class="pill ok">known from quotes</span><span class="pill bad">below floor</span><span class="pill warn">edited</span>
+      <span style="margin-left:auto"></span>
+      <button class="btn sm" id="rate-reset">Reset to defaults</button>
+      <span class="src" id="rate-msg"></span>
+    </div>
+    <div class="warnbox" style="font-size:12.5px;margin-top:10px;margin-bottom:0"><b>Production rule</b> · this logic also lives in a Supabase Edge Function; the browser's figure is display only and the function's figure is what is charged.</div>
+  </div>
+</section>
+
+<!-- ============ IDENTITY ============ -->
+<section class="mod" id="m-id">
+  <div class="grid g3" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">Checks, total</span><span class="v" id="id-n">0</span><span class="d" id="id-nd"></span></div>
+    <div class="card kpi"><span class="l">Pass rate</span><span class="v" id="id-rate">—</span><span class="d">score ≥ 0.85 straight through</span></div>
+    <div class="card kpi"><span class="l">In review band</span><span class="v" id="id-rev">0</span><span class="d">0.70–0.85 · customer confirmed</span></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Identity ledger <span class="pill ok">live</span></h3>
+      <div class="tbl"><table><thead><tr><th>Booking</th><th>Traveller</th><th>Method</th><th>Score</th><th>Status</th></tr></thead>
+      <tbody id="idrows"><tr><td colspan="5" class="src">No verifications yet.</td></tr></tbody></table></div>
+      <div class="gap"></div>
+      <div class="src">Reviewers see names and score only. The provider holds the document. No Aadhaar number is stored anywhere in Bagdrop.</div>
+    </div>
+    <div class="card">
+      <h3>Providers and registrations</h3>
+      <ul class="chk">
+        <li><span class="m">DigiLocker</span><span>Requester registration · ₹8 per check <span class="pill info">to wire</span></span></li>
+        <li><span class="m">Setu</span><span>Aadhaar app QR and face auth · captain at door, hotel desk <span class="pill info">integration</span></span></li>
+        <li><span class="m">HyperVerge</span><span>Passport MRZ, NFC, liveness, face match · ₹38 per check <span class="pill info">to wire</span></span></li>
+        <li><span class="m">UIDAI OVSE</span><span>Offline Verification Seeking Entity registration <span class="pill warn">apply</span></span></li>
+        <li><span class="m">Failover</span><span>DigiLocker down → Aadhaar app QR; both down → passport path with a note to ops.</span></li>
+      </ul>
+      <div class="gap"></div>
+      <ul class="chk">
+        <li><span class="m">≥ 0.85</span><span>Pass. Payment unlocks.</span></li>
+        <li><span class="m">0.70–0.85</span><span>Customer confirms the variant ("Md." vs "Mohammed"). Logged for review.</span></li>
+        <li><span class="m">&lt; 0.70</span><span>Blocked. Review opens in this panel.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINANCE ============ -->
+<section class="mod" id="m-fin">
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">Captured today</span><span class="v" id="fin-today">₹0</span></div>
+    <div class="card kpi"><span class="l">Captured, all time</span><span class="v" id="fin-all">₹0</span></div>
+    <div class="card kpi"><span class="l">GST collected</span><span class="v" id="fin-gst">₹0</span><span class="d">auto from quote breakdowns</span></div>
+    <div class="card kpi"><span class="l">Balance due</span><span class="v" id="fin-bal">₹0</span><span class="d">20% holds awaiting the rest</span></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <h3>Balance payments <span class="pill ok">live</span><span class="r">holds and part-payments · remind on WhatsApp, collect at pickup</span></h3>
+    <div class="tbl"><table><thead><tr><th>Booking</th><th>Customer</th><th>Total</th><th>Paid</th><th>Balance</th><th></th></tr></thead>
+    <tbody id="fin-balrows"><tr><td colspan="6" class="src">No balances outstanding.</td></tr></tbody></table></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Lane economics <span class="pill ok">live</span><span class="r">cost per piece from the tripsheet model</span></h3>
+      <div class="tbl"><table><thead><tr><th>Lane</th><th>Pcs</th><th>Rev/pc</th><th>Cost/pc</th><th>CM</th></tr></thead>
+      <tbody id="fin-lanes"><tr><td colspan="5" class="src">No inter-region volume yet.</td></tr></tbody></table></div>
+    </div>
+    <div class="card"><h3>Reconciliation and exports</h3><ul class="chk">
+      <li><span class="m">Razorpay</span><span>Webhooks matched against captures · orphan alert</span></li>
+      <li><span class="m">Stripe</span><span>USD settlements · FX booked at capture</span></li>
+      <li><span class="m">Zoho Books</span><span>Invoices and payments synced nightly</span></li>
+      <li><span class="m">GST e-invoice</span><span>IRN on every delivered shipment</span></li>
+      <li><span class="m">Investor pack</span><span>Generated from the warehouse on the 1st · no spreadsheet</span></li>
+    </ul></div>
+  </div>
+  <div class="gap"></div>
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card">
+      <h3>Documents <span class="r">proforma · tax invoice · receipts · credit voucher — letterhead PDF, numbered</span></h3>
+      <label class="f">Booking<select id="fd-booking"></select></label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm" id="fd-pi">Proforma invoice</button>
+        <button class="btn sm primary" id="fd-inv">Tax invoice</button>
+        <button class="btn sm" id="fd-rct">Payment receipt</button>
+        <button class="btn sm" id="fd-csh">Cash receipt</button>
+        <button class="btn sm" id="fd-cv">Credit voucher</button>
+        <button class="btn sm" id="fd-cn">GST credit note</button>
+        <button class="btn sm" id="fd-einv">E-invoice JSON</button>
+        <button class="btn sm" id="fd-pod">POD</button>
+      </div>
+      <div class="row" id="fd-cashrow" hidden style="margin-top:10px">
+        <label class="f">Amount received (₹)<input id="fd-cashamt" inputmode="numeric"></label>
+        <label class="f">Reason / note<input id="fd-note" placeholder="Cash at pickup · refund reason"></label>
+      </div>
+      <div class="src" id="fd-msg" style="margin-top:8px"></div>
+      <div class="feed" id="fd-log" style="margin-top:10px;max-height:160px"><div><span class="src">Documents generated for the selected booking appear here.</span></div></div>
+    </div>
+    <div class="card">
+      <h3>Bank reconciliation <span class="r">paste the statement · auto-match against bookings</span></h3>
+      <p class="src" style="margin:0 0 8px">Paste rows from the bank statement (CSV or tab-separated: date, description, amount, reference). Matching runs on amount + booking reference or mobile found in the narration.</p>
+      <textarea id="br-paste" style="width:100%;min-height:90px;font:12px/1.5 var(--mono);color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px" placeholder="16/10/2026, UPI/Mihir Amin/BD-2026-9669, 5735, UTR123456"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn sm primary" id="br-run">Match against bookings</button>
+        <span class="src" id="br-msg"></span>
+      </div>
+      <div id="br-out" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Payments ledger <span class="pill ok">live</span></h3>
+    <div class="tbl"><table><thead><tr><th>When</th><th>Booking</th><th>Gateway</th><th>Mode</th><th>Amount</th><th>Recon</th><th>Booking status</th></tr></thead>
+    <tbody id="finrows"><tr><td colspan="7" class="src">No payments yet.</td></tr></tbody></table></div>
+  </div>
+</section>
+
+<!-- ============ PARTNERS ============ -->
+<section class="mod" id="m-part">
+  <div class="grid g2">
+    <div class="card">
+      <h3>Partners</h3>
+      <div class="tbl"><table><thead><tr><th>Partner</th><th>Type</th><th>Channel</th><th>MTD</th><th>Status</th></tr></thead><tbody>
+        <tr><td>Riya Travel</td><td>OTA</td><td>Portal</td><td class="num">—</td><td><span class="pill mute">target</span></td></tr>
+        <tr><td>Skybird</td><td>Travel</td><td>API</td><td class="num">—</td><td><span class="pill mute">target</span></td></tr>
+        <tr><td>ICONIQA</td><td>Hotel</td><td>Concierge app</td><td class="num">—</td><td><span class="pill info">PMS folio</span></td></tr>
+        <tr><td>Cordelia</td><td>Cruise</td><td>Manifest SFTP</td><td class="num">—</td><td><span class="pill warn">pilot</span></td></tr>
+        <tr><td>Akasa / IndiGo</td><td>Airline</td><td>Ancillary widget</td><td class="num">—</td><td><span class="pill mute">proposal</span></td></tr>
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>API console</h3>
+      <ul class="chk">
+        <li><span class="m">Endpoints</span><span><code>POST /v1/quotes</code> · <code>POST /v1/identity</code> · <code>POST /v1/payments</code> · <code>GET /v1/shipments/{id}</code> · webhooks on every state</span></li>
+        <li><span class="m">Keys</span><span>Per partner, scoped, rotated 90 d, rate limited 60/min</span></li>
+        <li><span class="m">Sandbox</span><span>Fake identity provider, test cards, replayable webhooks</span></li>
+        <li><span class="m">Docs</span><span>OpenAPI 3.1 published at api.bagdrop.co/docs</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTELLIGENCE ============ -->
+<section class="mod" id="m-intel">
+  <div class="grid" style="grid-template-columns:1.3fr 1fr">
+    <div class="card">
+      <h3>Forecast · pieces per day <span class="r" id="intel-fnote">retrains on every booking</span></h3>
+      <div id="intel-chart"></div>
+      <div class="grid g3" style="margin-top:8px">
+        <div><div class="src">Inputs</div><div style="font-size:12.5px">Own history by lane and weekday · peak calendar (Fri–Sun, Dec 15 – Jan 5) · open events and their pickup days · lead pipeline</div></div>
+        <div><div class="src">Outputs</div><div style="font-size:12.5px" id="intel-out">—</div></div>
+        <div><div class="src">Guardrail</div><div style="font-size:12.5px">Suggests, never applies. Every suggestion has an expected impact and an approver.</div></div>
+      </div>
+    </div>
+    <div class="copilot">
+      <h3 style="margin:0 0 8px;font-family:var(--display)">Ops copilot <span class="src" style="color:inherit;opacity:.7">answers from the live database</span></h3>
+      <div class="q"><input id="cq" placeholder="Ask anything about the network…" aria-label="Copilot question"><button class="btn sm primary" id="cgo" style="flex:none">Ask</button></div>
+      <div class="a" id="ca">Try one of the questions below, or type your own.</div>
+      <div class="chips" id="chips">
+        <button>Which lane is losing money and why</button>
+        <button>Who is at risk of missing a cut off</button>
+        <button>How many captains do we need next week</button>
+        <button>Top follow-ups in the CRM</button>
+        <button>Forecast for tomorrow</button>
+        <button>Any anomalies or fraud</button>
+      </div>
+    </div>
+  </div>
+  <div class="gap"></div>
+  <div class="grid g3">
+    <div class="card"><h3>Anomaly detection <span class="pill ok">live</span></h3><ul class="chk" id="intel-anom"><li><span class="src">Nothing unusual on the current data.</span></li></ul></div>
+    <div class="card"><h3>Pricing suggestions <span class="pill ok">live</span></h3><ul class="chk" id="intel-price"><li><span class="src">All lanes above the 20% margin floor.</span></li></ul></div>
+    <div class="card"><h3>Customer intelligence <span class="pill ok">live</span></h3><ul class="chk" id="intel-cust"><li><span class="src">No customers yet.</span></li></ul></div>
+  </div>
+</section>
+
+<!-- ============ REPORTS ============ -->
+<section class="mod" id="m-rep">
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="card kpi"><span class="l">Revenue, all time</span><span class="v count-inr" id="rep-rev">₹0</span></div>
+    <div class="card kpi"><span class="l">Bookings</span><span class="v count" id="rep-n">0</span></div>
+    <div class="card kpi"><span class="l">Pieces moved</span><span class="v count" id="rep-pcs">0</span></div>
+    <div class="card kpi"><span class="l">Avg per booking</span><span class="v count-inr" id="rep-avg">₹0</span></div>
+  </div>
+  <div class="grid g2" style="margin-bottom:12px">
+    <div class="card">
+      <h3>Revenue by day <span class="r">last 14 days · captured payments</span></h3>
+      <div id="rep-revchart"></div>
+    </div>
+    <div class="card">
+      <h3>Conversion funnel <span class="r">quote → verified → paid → delivered</span></h3>
+      <div id="rep-funnel" class="grid" style="gap:8px"></div>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-bottom:12px">
+    <div class="card"><h3>Bookings by status</h3><div id="rep-status" class="grid" style="gap:8px"></div></div>
+    <div class="card"><h3>Pieces by lane</h3><div id="rep-lane" class="grid" style="gap:8px"></div></div>
+    <div class="card"><h3>Bookings by channel</h3><div id="rep-channel" class="grid" style="gap:8px"></div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>MIS · monthly <span class="pill ok">live</span><span class="r">bookings · pieces · revenue · trip expenses · margin</span></h3>
+    <div class="tbl"><table><thead><tr><th>Month</th><th>Bookings</th><th>Pieces</th><th>Revenue</th><th>Trip expenses</th><th>Margin</th></tr></thead>
+    <tbody id="mis-rows"><tr><td colspan="6" class="src">No data yet.</td></tr></tbody></table></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn sm primary" id="mis-pdf">MIS PDF (letterhead)</button>
+      <button class="btn sm" data-fpdf="mis">MIS .pdf file</button>
+      <button class="btn sm" data-csv="mis">MIS Excel</button>
+      <button class="btn sm" id="mis-wa">WhatsApp summary</button>
+      <button class="btn sm" id="mis-mail">Email summary</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Exports <span class="r">Excel (CSV) and letterhead PDF · straight from the live database</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn sm" data-csv="bookings">Bookings Excel</button>
+      <button class="btn sm" data-pdf="bookings">Bookings PDF</button>
+      <button class="btn sm" data-fpdf="bookings">Bookings .pdf</button>
+      <button class="btn sm" data-csv="payments">Payments Excel</button>
+      <button class="btn sm" data-pdf="payments">Payments PDF</button>
+      <button class="btn sm" data-fpdf="payments">Payments .pdf</button>
+      <button class="btn sm" data-csv="trips">Trips P&amp;L Excel</button>
+      <button class="btn sm" data-pdf="trips">Trips P&amp;L PDF</button>
+      <button class="btn sm" data-fpdf="trips">Trips .pdf</button>
+      <button class="btn sm" data-csv="quotes">Open quotes Excel</button>
+      <button class="btn sm" data-csv="customers">Customer master Excel</button>
+      <button class="btn sm" data-csv="leads">Leads Excel</button>
+      <button class="btn sm" data-csv="crm">CRM activity Excel</button>
+    </div>
+    <p class="src" style="margin:8px 0 0">Excel files open in Excel/Sheets; PDF opens on the letterhead with Print/Save-as-PDF, WhatsApp and email share built in.</p>
+  </div>
+</section>
+
+<!-- ============ RULES ============ -->
+<section class="mod" id="m-rules">
+  <div class="grid g2">
+    <div class="card">
+      <h3>Notification rules <span class="r">event → audience → channel → template → quiet hours · toggles persist</span></h3>
+      <div id="rules"></div>
+      <div style="margin-top:10px"><button class="btn sm" data-toast="Rule editor: event, audience, channel, template, language, quiet hours, retry.">New rule</button></div>
+    </div>
+    <div class="card">
+      <h3>Delivery health</h3>
+      <ul class="chk">
+        <li><span class="m">WhatsApp</span><span>Meta Cloud API · templates per language <span class="pill info">to wire</span></span></li>
+        <li><span class="m">SMS</span><span>MSG91 · DLT registration required <span class="pill info">to wire</span></span></li>
+        <li><span class="m">Email</span><span>Resend <span class="pill info">to wire</span></span></li>
+        <li><span class="m">Push</span><span>Captain app and ops console</span></li>
+        <li><span class="m">Quiet hours</span><span>22:00 to 07:00 except pickup day</span></li>
+        <li><span class="m">Receipts</span><span>Every send logged on the shipment with read status</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTEGRATIONS ============ -->
+<section class="mod" id="m-integ">
+  <div class="grid g3">
+    <div class="card"><h3>Travel data</h3><ul class="chk">
+      <li><span class="m">Flights</span><span>ADS-B live board in this panel; AviationStack schedule feed for re-planning <span class="pill info">key needed</span></span></li>
+      <li><span class="m">Airport AODB</span><span>Belt numbers, first-bag times · Adani, GMR data agreement <span class="pill mute">partnership</span></span></li>
+      <li><span class="m">Rail</span><span>IRCTC running status <span class="pill info">build</span></span></li>
+      <li><span class="m">Cruise</span><span>Port schedule, Cordelia manifest SFTP <span class="pill warn">pilot</span></span></li>
+      <li><span class="m">Airline DCS</span><span>SITA or airline direct, PNR verification at handover <span class="pill mute">phase 3</span></span></li>
+    </ul></div>
+    <div class="card"><h3>Commerce</h3><ul class="chk">
+      <li><span class="m">Razorpay</span><span>UPI, cards, net banking · webhooks <span class="pill info">key needed</span></span></li>
+      <li><span class="m">Stripe</span><span>International cards, Apple/Google Pay <span class="pill info">key needed</span></span></li>
+      <li><span class="m">WhatsApp</span><span>Meta Cloud API business number <span class="pill info">key needed</span></span></li>
+      <li><span class="m">Zoho Books</span><span>Invoices, payments <span class="pill info">build</span></span></li>
+      <li><span class="m">Google Ads</span><span>GCLID capture, offline conversions <span class="pill info">build</span></span></li>
+      <li><span class="m">Claude API</span><span>Copilot free-form answers via Edge Function (claude-sonnet-5-5) <span class="pill info">endpoint in config</span></span></li>
+    </ul></div>
+    <div class="card"><h3>Hardware and fleet</h3><ul class="chk">
+      <li><span class="m">GPS</span><span>BGTS telematics feed every 30 s <span class="pill info">feed needed</span></span></li>
+      <li><span class="m">RFID</span><span>Seal registry, UHF readers at hubs <span class="pill info">build</span></span></li>
+      <li><span class="m">BAGTAG</span><span>Electronic bag tag API if the partnership lands <span class="pill mute">talks</span></span></li>
+      <li><span class="m">Supabase</span><span>Database, realtime, auth, storage, Edge Functions · Mumbai region <span class="pill ok">this build</span></span></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section class="mod" id="m-sec">
+  <div class="grid g2">
+    <div class="card">
+      <h3>Roles</h3>
+      <div class="roles">
+        <div><b>Management</b>Everything · approves rate cards and suggestions</div>
+        <div><b>Ops lead</b>Shipments, exceptions, roster, rules</div>
+        <div><b>Hub</b>Intake, seals, manifests, storage</div>
+        <div><b>Captain</b>Own runs only, via PWA</div>
+        <div><b>Sales</b>Quotes, identity review, partners, CRM</div>
+        <div><b>Finance</b>Payments, invoices, exports</div>
+        <div><b>Partner</b>Own shipments through portal or API</div>
+        <div><b>Auditor</b>Read only, audit log</div>
+      </div>
+      <div class="gap"></div>
+      <ul class="chk">
+        <li><span class="m">Auth</span><span>Supabase Auth with MFA · sessions expire 12 h · no key in any URL</span></li>
+        <li><span class="m">RLS</span><span>Row Level Security enforces the roles at the database, not the screen</span></li>
+        <li><span class="m">Secrets</span><span>Provider keys in the Supabase vault, rotated 90 d</span></li>
+        <li><span class="m">Network</span><span>Admin behind IP allowlist or device cert for Management and Finance</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Audit log <span class="pill ok">live</span><span class="r">append only · every admin write from the event logs</span></h3>
+      <div class="feed" id="auditfeed" style="max-height:52vh"><div><span class="src">No admin actions yet.</span></div></div>
+      <div class="gap"></div>
+      <div class="src">Who, what, before, after, reason, IP, device. Exportable for BCAS, auditors and investors.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATA ============ -->
+<section class="mod" id="m-data">
+  <div class="grid g3">
+    <div class="card stripe ok"><h3>DPDPA consent ledger</h3><div style="font-size:12.5px">Every identity check and every marketing opt-in stored with purpose, time, channel and the text shown. Withdrawal honoured within 24 h. Consent-manager export for the Data Protection Board on request.</div></div>
+    <div class="card stripe info"><h3>Retention and purge</h3><div style="font-size:12.5px">Identity records purged 180 days after close. Photos 365 days. Financial records 8 years per Companies Act. Purge jobs run nightly and write to the audit log.</div></div>
+    <div class="card stripe warn"><h3>Residency and backups</h3><div style="font-size:12.5px">All data in Supabase Mumbai (AWS ap-south-1). Encrypted at rest and in transit. Point-in-time recovery 7 days, nightly snapshot 35 days. Any cross-border transfer (Stripe) listed here with its basis.</div></div>
+    <div class="card"><h3>Breach runbook</h3><div style="font-size:12.5px">Detect → contain → assess → notify the Data Protection Board and affected customers within 72 h → post-incident review. Tabletop twice a year.</div></div>
+    <div class="card"><h3>Data products</h3><div style="font-size:12.5px">Warehouse tables for lane economics, demand by airport, partner performance. The same tables feed the investor pack and, later, airport and airline data partnerships with Bagdrop owning the asset.</div></div>
+    <div class="card"><h3>Subject requests</h3><div style="font-size:12.5px">Access, correction, erasure requests handled from this screen with a 30-day clock and a full export of what Bagdrop holds on the person.</div></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<!-- work drawer: any booking opens here, from any module -->
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="drawer" id="drawer" aria-label="Booking detail" aria-hidden="true">
+  <div class="drawer-head">
+    <b>Booking</b>
+    <button class="btn sm" id="drawer-close" aria-label="Close">✕ &nbsp;Close</button>
+  </div>
+  <div class="drawer-body"><div id="admdetail"><p class="lede" style="margin:0">Select a booking.</p></div></div>
+</aside>
+
+<!-- command palette -->
+<div class="pal-backdrop" id="pal-backdrop" hidden></div>
+<div class="pal" id="pal" hidden role="dialog" aria-label="Command palette">
+  <input id="pal-q" placeholder="Search bookings, customers, quotes, modules…" autocomplete="off">
+  <div class="pal-list" id="pal-list"></div>
+  <div class="pal-foot"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="shared/config.js"></script>
+<script src="shared/db.js"></script>
+<script src="shared/pricing.js"></script>
+<script src="shared/ai.js"></script>
+<script src="shared/docs.js"></script>
+<script src="login.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
