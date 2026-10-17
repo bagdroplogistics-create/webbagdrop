@@ -136,6 +136,23 @@ export function lanes(all: Booking[], fallbackRate = 3000): Lane[] {
     .sort((a, b) => b.rev - a.rev);
 }
 
+export interface PricingSuggestion { lane: string; cm: number; text: string; impact: string }
+
+/** Lanes running under 20% contribution margin — suggests a per-piece rate
+ *  increase. Ported from AI.pricingSuggestions. */
+export function pricingSuggestions(all: Booking[]): PricingSuggestion[] {
+  return lanes(all)
+    .filter((l) => l.pcs >= 1 && l.cm < 20)
+    .map((l) => {
+      const lift = Math.ceil((l.costPc / 0.75 - l.revPc) / 250) * 250;
+      return {
+        lane: l.lane, cm: l.cm,
+        text: `${l.lane} is running at ${l.cm}% contribution margin over ${l.pcs} pieces. Suggest raising the rate by ${inr(Math.max(lift, 250))} per piece to reach ~25% CM.`,
+        impact: `+${inr(Math.max(lift, 250) * l.pcs)} on this volume`,
+      };
+    });
+}
+
 export interface Notice { sev: "warn" | "info"; text: string }
 
 /** "Copilot noticed" — simple real heuristics over the live bookings, no AI call. */

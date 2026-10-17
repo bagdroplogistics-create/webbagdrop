@@ -2,6 +2,7 @@
  *  is the only one /api/pay will capture against. */
 import { NextResponse } from "next/server";
 import { quote } from "@/lib/pricing";
+import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
 import type { Mode, SignedQuote } from "@/lib/types";
 
@@ -18,7 +19,8 @@ export async function POST(req: Request) {
   const oversize = Math.min(20, Math.max(0, Number(body.oversize) || 0));
   if (!fromName || !toName) return NextResponse.json({ error: "MISSING_CITIES" }, { status: 400 });
 
-  const q = quote({ fromName, toName, bags, oversize, mode: (body.mode ?? "road") as Mode, date: body.date });
+  const masters = await loadMasters();
+  const q = quote({ fromName, toName, bags, oversize, mode: (body.mode ?? "road") as Mode, date: body.date }, masters);
   if ("error" in q) return NextResponse.json({ error: q.error }, { status: 200 });
 
   const qid = `QT-${Math.floor(Math.random() * 9000) + 1000}`;

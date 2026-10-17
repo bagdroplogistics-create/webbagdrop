@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient, newToken } from "@/lib/supabaseAdmin";
 import { quote, cityByName } from "@/lib/pricing";
+import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
 import type { Booking, Mode, UseCase } from "@/lib/types";
 
@@ -33,7 +34,8 @@ export async function POST(req: Request) {
   const bags = Math.max(0, Math.floor(b.bags || 0));
   const oversize = Math.max(0, Math.floor(b.oversize || 0));
   const mode: Mode = b.mode ?? "road";
-  const q = quote({ fromName: b.fromName, toName: b.toName, bags, oversize, mode, date: b.date });
+  const masters = await loadMasters();
+  const q = quote({ fromName: b.fromName, toName: b.toName, bags, oversize, mode, date: b.date }, masters);
   const ror = "error" in q;
 
   const id = newToken("BD");
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
     signedQuote = { qid, total: q.total, breakdown: q, validUntil, signature };
   }
 
-  const fromCity = cityByName(b.fromName), toCity = cityByName(b.toName);
+  const fromCity = cityByName(b.fromName, masters.cities), toCity = cityByName(b.toName, masters.cities);
   const doc: Booking = {
     id, created: nowIso, status: "quoted",
     uc: b.uc ?? "", ucName: b.ucName ?? b.uc ?? "", mode,

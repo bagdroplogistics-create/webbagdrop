@@ -2,7 +2,16 @@
  *  (app/api/quote) and in the client preview. Two layers:
  *  1. ROUTE RATE CHART (the master): 1-bag / 2-bag / each-addl / bulk rules.
  *  2. Fallback regional matrix for pairs without a chart row.
- *  No handling charges — chart figures + oversize + GST 5% only. */
+ *  No handling charges — chart figures + oversize + GST 5% only.
+ *
+ *  DEFAULT_* below are the seed data (identical to the static build's rate
+ *  card). The Pricing engine admin module can persist edits to these in the
+ *  `settings` table (routes/cities/rates/addons rows) — see
+ *  src/lib/pricingSettings.ts, which loads the effective (default ∪
+ *  override) set server-side for /api/quote and /api/admin/quotes to use.
+ *  Every function here takes an optional `masters` argument so one code
+ *  path serves both the static-default client preview and the
+ *  override-aware server routes. */
 import type { City, Mode, QuoteInput, QuoteResult, RouteRate, Zone } from "./types";
 
 export const GST_RATE = 0.05; // 5% GTA transport rate — never 18%
@@ -57,15 +66,26 @@ export const MATRIX: Record<Zone, number[]> = {
   EAS: [6500, 6500, 6000, 6500, 7000, 2750],
 };
 
-export function cityByName(n: string): City | undefined {
-  return CITIES.find((c) => c.name === n);
+/** The full set of tunables one quote computes against. DEFAULT_MASTERS is
+ *  the built-in seed; src/lib/pricingSettings.ts merges in whatever the
+ *  Pricing engine has persisted to `settings` for server-side routes. */
+export interface Masters {
+  routes: RouteRate[];
+  cities: City[];
+  matrix: Record<Zone, number[]>;
+  oversizeRate: number;
+}
+export const DEFAULT_MASTERS: Masters = { routes: ROUTES, cities: CITIES, matrix: MATRIX, oversizeRate: OVERSIZE_RATE };
+
+export function cityByName(n: string, cities: City[] = CITIES): City | undefined {
+  return cities.find((c) => c.name === n);
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").trim();
 
-export function routeFor(from: string, to: string): RouteRate | undefined {
+export function routeFor(from: string, to: string, routes: RouteRate[] = ROUTES): RouteRate | undefined {
   const f = norm(from), t = norm(to);
-  return ROUTES.find((r) => {
+  return routes.find((r) => {
     const a = norm(r.from), b = norm(r.to);
     return (a === f && b === t) || (r.dir === "both" && a === t && b === f);
   });
@@ -99,12 +119,12 @@ export function isPeak(date?: string): boolean {
 
 export type QuoteOutcome = QuoteResult | { error: string };
 
-export function quote(q: QuoteInput): QuoteOutcome {
+export function quote(q: QuoteInput, masters: Masters = DEFAULT_MASTERS): QuoteOutcome {
   const bags = Math.max(0, Math.floor(q.bags));
   const odd = Math.max(0, Math.floor(q.oversize));
-  const oversizeAmt = OVERSIZE_RATE * odd;
+  const oversizeAmt = masters.oversizeRate * odd;
 
-  const r = routeFor(q.fromName, q.toName);
+  const r = routeFor(q.fromName, q.toName, masters.routes);
   if (r) {
     const rb = routeBase(r, Math.max(bags, 1));
     const taxable = rb.amount + oversizeAmt;
@@ -120,9 +140,9 @@ export function quote(q: QuoteInput): QuoteOutcome {
     };
   }
 
-  const from = cityByName(q.fromName), to = cityByName(q.toName);
+  const from = cityByName(q.fromName, masters.cities), to = cityByName(q.toName, masters.cities);
   if (!from || !to) return { error: "RATE_ON_REQUEST" };
-  const rate = MATRIX[from.zone][ZONES.indexOf(to.zone)];
+  const rate = masters.matrix[from.zone][ZONES.indexOf(to.zone)];
   if (!rate || rate < RATE_FLOOR) return { error: "BELOW_FLOOR" };
 
   const billed = Math.max(bags + odd, MIN_PIECES);

@@ -5,18 +5,19 @@ import CRM from "./CRM";
 import Finance from "./Finance";
 import Inbox from "./Inbox";
 import LRAndTrips from "./LRAndTrips";
+import Pricing from "./Pricing";
 import QuotesAndPayments from "./QuotesAndPayments";
 
 type ModuleKey = "cmd" | "ship" | "quote" | "lr" | "crm" | "price" | "fin";
 
-const MODULES: { key: ModuleKey; name: string; live: boolean }[] = [
-  { key: "cmd", name: "Command centre", live: true },
-  { key: "ship", name: "Shipments", live: true },
-  { key: "quote", name: "Quotes & payments", live: true },
-  { key: "lr", name: "LR & trips", live: true },
-  { key: "crm", name: "CRM", live: true },
-  { key: "price", name: "Pricing", live: false },
-  { key: "fin", name: "Finance", live: true },
+const MODULES: { key: ModuleKey; name: string }[] = [
+  { key: "cmd", name: "Command centre" },
+  { key: "ship", name: "Shipments" },
+  { key: "quote", name: "Quotes & payments" },
+  { key: "lr", name: "LR & trips" },
+  { key: "crm", name: "CRM" },
+  { key: "price", name: "Pricing" },
+  { key: "fin", name: "Finance" },
 ];
 
 export default function AdminPage() {
@@ -41,12 +42,11 @@ export default function AdminPage() {
             <button
               key={m.key}
               onClick={() => setTab(m.key)}
-              title={m.live ? undefined : "Still on the static Admin OS — not yet in this app"}
               className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                tab === m.key ? "bg-brand text-white" : m.live ? "bg-paper text-ink hover:bg-stone-200" : "bg-paper text-faint"
+                tab === m.key ? "bg-brand text-white" : "bg-paper text-ink hover:bg-stone-200"
               }`}
             >
-              {m.name}{!m.live && " ·"}
+              {m.name}
             </button>
           ))}
         </nav>
@@ -57,11 +57,7 @@ export default function AdminPage() {
         {tab === "lr" && <LRAndTrips />}
         {tab === "fin" && <Finance />}
         {tab === "crm" && <CRM />}
-        {tab === "price" && (
-          <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center text-sm text-muted">
-            {current.name} hasn&apos;t been ported into this app yet — still on the static Admin OS, same backend.
-          </div>
-        )}
+        {tab === "price" && <Pricing />}
       </main>
     </div>
   );
