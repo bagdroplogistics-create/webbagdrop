@@ -4,9 +4,11 @@ TypeScript + Next.js App Router + Tailwind v4 + Supabase (Postgres, Auth,
 Realtime). This is a separate project from `bagdrop-web` — nothing here
 touches that repo or its data.
 
-Customer flow (booking wizard, quote/pay links) and an admin inbox are
-implemented. **Everything below "Go live" is still demo/local-only — this
-has not been connected to a real database yet.**
+Live and connected to a real Supabase project (`bagdrop-logistics` org,
+Mumbai region). Customer flow (booking wizard, quote/pay links) and the
+full Admin OS "core money/ops" set are implemented and verified against
+that real database: **Command centre, Shipments, Quotes & payments,
+LR & trips, CRM, Pricing engine, Finance.**
 
 ## Run it now (local demo, no setup)
 ```bash
@@ -21,32 +23,31 @@ across tabs of the same browser, no account needed.
 key works since `ADMIN_SECRET_KEY` defaults to a placeholder — this is only
 meant for your own local testing, not for deploying like this.
 
-## Go live: connect a real Supabase project
-I can't create the account for you, so these three steps are yours:
+## Setting this up again elsewhere (e.g. a fresh clone)
+This repo's own `.env.local` already points at the live `bagdrop-new`
+Supabase project (gitignored, not committed). To point a fresh checkout
+at a *different* Supabase project instead:
 
 1. **Create the project** — [supabase.com](https://supabase.com) → New
-   project → region **Mumbai (ap-south-1)** (lowest latency for India
-   traffic; matches what the original design assumed).
-2. **Run the schema** — open the SQL Editor and paste in the entire
-   contents of [`supabase/schema.sql`](supabase/schema.sql), then run it.
-   (`schema.sql.original` is kept alongside it for reference — see
-   "What changed from the prototype" below for why it's not what you want.)
+   project → region **Mumbai (ap-south-1)**.
+2. **Run the schema**, in order, in the SQL Editor:
+   - [`supabase/schema.sql`](supabase/schema.sql) (the whole file)
+   - [`supabase/migration_002_crm.sql`](supabase/migration_002_crm.sql)
+     (the CRM module's activity-log table — not in schema.sql's original
+     run on the live project, so kept as a separate incremental file;
+     folded into schema.sql for anyone starting fresh)
 3. **Copy three values** from Project Settings → API into `.env.local`
-   (copy `.env.example` to `.env.local` first):
-   - `NEXT_PUBLIC_SUPABASE_URL` — the Project URL
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the "anon public" key
-   - `SUPABASE_SERVICE_ROLE_KEY` — the "service_role" key (Project Settings
-     → API → reveal). **Never share this one or put it in a NEXT_PUBLIC_
-     variable** — it bypasses every access rule in the database. It's only
-     read on the server, in `src/app/api/admin/*`.
+   (copy `.env.example` to `.env.local` first): `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (never put
+   that last one in a `NEXT_PUBLIC_` variable — it bypasses every access
+   rule in the database; it's only ever read server-side, in
+   `src/app/api/admin/*`). Also set your own `QUOTE_SIGNING_SECRET` and
+   `ADMIN_SECRET_KEY` (the `/admin/login` password).
+4. Restart `npm run dev` (or redeploy).
 
-   Also set your own values for:
-   - `QUOTE_SIGNING_SECRET` — any long random string
-   - `ADMIN_SECRET_KEY` — any long random string; this is the password
-     you'll type into `/admin/login`
-
-4. Restart `npm run dev` (or redeploy). The app detects the Supabase env
-   vars automatically and switches out of demo mode — no code change.
+With no `.env.local` at all, the app falls back to local-browser demo mode
+(localStorage + BroadcastChannel, no account needed) — useful for quick
+UI iteration without touching the real database.
 
 ## What changed from the original prototype schema
 The zip this project started from (`supabase/schema.sql.original`) had two
@@ -82,27 +83,58 @@ status page and the admin inbox both poll every few seconds instead
 (`src/lib/db.ts`, `src/lib/adminApi.ts`) — a few seconds' delay instead of
 instant push, in exchange for the above being actually true.
 
-## Still demo/not wired (unchanged from the original prototype)
-Same list as the static build this was ported from:
-- Payment capture (`/api/pay`) returns a fake "Razorpay (demo)" result —
-  no real Razorpay/Stripe integration.
-- SMS OTP, Aadhaar/passport verification, WhatsApp sending, live flight
-  data, GST e-invoice filing — all UI stand-ins, no provider keys wired.
-- Most of the full Admin OS (CRM, pricing engine, finance, LR/trip docs,
-  forecast/copilot, etc. — see the static `admin.html` for the complete
-  module list) hasn't been ported into this Next.js app yet; only the
-  bookings inbox has. Porting the rest is a separate, larger piece of work.
+## Admin OS modules — what's live vs. not
+All 7 "core money/ops" modules from the original plan are implemented:
+**Command centre** (real KPIs, event feed, anomaly heuristics, actual/
+forecast pieces-per-day chart — no external AI call), **Shipments**
+(the bookings inbox), **Quotes & payments** (staff-made quotes for phone/
+WhatsApp/walk-in leads, with a shareable `/q/{id}` pay link), **LR & trips**
+(create a trip, assign bookings, issue real LR numbers, track expenses/
+advances/margin), **CRM** (ranked follow-up suggestions, leads, a computed
+customer master list, an activity log), **Pricing engine** (editable route
+chart + fallback matrix + oversize rate, live in real customer quotes the
+moment you save), **Finance** (captured/GST/balance KPIs, balance
+collection, lane economics, document generation with real race-safe
+numbers).
+
+Not ported from the static build (same list either way — none of this was
+a real integration there either, so nothing functional is lost, only the
+UI for it): real payment capture (`/api/pay` still returns a fake
+"Razorpay (demo)" result), SMS OTP / Aadhaar / passport verification,
+WhatsApp sending, live flight data, GST e-invoice IRP filing, e-way bill
+filing, printable LR/manifest/invoice layouts, credit notes, bank-statement
+reconciliation, "Convert to wedding" (there's no Events & bulk module here
+to convert into). Each module's own file has a comment with its specific
+gaps.
 
 ## Structure
-- `src/lib/types.ts` — the typed domain model.
-- `src/lib/pricing.ts` — pure quote engine (client preview + server route).
+- `src/lib/types.ts` — the typed domain model (Booking, Trip, Inquiry,
+  CrmActivity, DocRecord, …).
+- `src/lib/pricing.ts` — pure quote engine, parameterized by `Masters`
+  (route chart / cities / fallback matrix / oversize rate) so both the
+  static client preview and the override-aware server routes share one
+  implementation.
+- `src/lib/pricingSettings.ts` — loads the effective masters (defaults
+  merged with whatever the Pricing engine module has persisted).
+- `src/lib/intelligence.ts` — Command centre + CRM + Pricing's shared
+  analytics (stats/forecast/anomalies/lanes/crmCustomers/crmSuggestions/
+  pricingSuggestions) — all computed client-side from live data, no
+  external AI call.
+- `src/lib/docs.ts` — GST split + financial-year helpers shared by LR/
+  Finance document numbering.
 - `src/lib/db.ts` — customer-facing data access (create/get/update/watch
-  one booking), via the security-definer Postgres functions above.
-- `src/lib/adminAuth.ts` / `src/app/api/admin/*` — admin login + the only
-  code path that uses the service role key.
-- `src/lib/adminApi.ts` — admin-side data access (all bookings), used by
-  `src/app/admin/Inbox.tsx`.
+  one booking), via the security-definer Postgres functions in schema.sql.
+- `src/lib/adminAuth.ts` / `src/lib/supabaseAdmin.ts` / `src/app/api/admin/*`
+  — admin login + the only code paths that use the service role key.
+- `src/lib/adminApi.ts`, `tripsApi.ts`, `crmApi.ts`, `pricingApi.ts` —
+  admin-side data access for each module (all bookings, trips, CRM/
+  inquiries, pricing masters).
+- `src/app/admin/*.tsx` — one component per Admin OS module.
 - `src/app/api/quote`, `src/app/api/pay` — server-authoritative, HMAC-signed
   quoting and payment capture.
 - `src/components/booking/Wizard.tsx` — the customer booking flow.
-- `supabase/schema.sql` — run this one in Supabase, not `.original`.
+- `src/proxy.ts` — Next.js 16 renamed `middleware.ts` to this; gates
+  `/admin` and `/api/admin/*` on the signed session cookie.
+- `supabase/schema.sql` — run this one in Supabase (not `.original`, the
+  unmodified prototype schema kept only for reference), plus
+  `migration_002_crm.sql` if upgrading an already-running database.
