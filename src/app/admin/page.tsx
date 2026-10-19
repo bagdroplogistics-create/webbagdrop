@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import AdminShell, { type ModuleKey } from "./AdminShell";
 import CommandCentre from "./CommandCentre";
 import CRM from "./CRM";
 import Finance from "./Finance";
@@ -7,58 +8,35 @@ import Inbox from "./Inbox";
 import LRAndTrips from "./LRAndTrips";
 import Pricing from "./Pricing";
 import QuotesAndPayments from "./QuotesAndPayments";
+import StubModule from "./StubModule";
 
-type ModuleKey = "cmd" | "ship" | "quote" | "lr" | "crm" | "price" | "fin";
-
-const MODULES: { key: ModuleKey; name: string }[] = [
-  { key: "cmd", name: "Command centre" },
-  { key: "ship", name: "Shipments" },
-  { key: "quote", name: "Quotes & payments" },
-  { key: "lr", name: "LR & trips" },
-  { key: "crm", name: "CRM" },
-  { key: "price", name: "Pricing" },
-  { key: "fin", name: "Finance" },
-];
+const STUB_NAMES: Partial<Record<ModuleKey, string>> = {
+  exc: "Exceptions",
+  evt: "Events & bulk",
+  drv: "Drivers",
+  flt: "Flights",
+  cap: "Capacity & roster",
+  id: "Identity & compliance",
+  part: "Partners & API",
+  rules: "Rules & notifications",
+  integ: "Integrations",
+  sec: "Security & audit",
+  data: "Data & privacy",
+};
 
 export default function AdminPage() {
   const [tab, setTab] = useState<ModuleKey>("cmd");
-  const current = MODULES.find((m) => m.key === tab)!;
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-40 border-b border-line bg-white/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <span className="flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-sm font-extrabold text-white">B</span>
-            <span className="font-display text-base font-extrabold tracking-tight">BAGDROP <span className="text-brand">Admin OS</span></span>
-          </span>
-          <span className="text-xs text-muted">{current.name}</span>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <nav className="mb-5 flex flex-wrap gap-1.5">
-          {MODULES.map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setTab(m.key)}
-              className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                tab === m.key ? "bg-brand text-white" : "bg-paper text-ink hover:bg-stone-200"
-              }`}
-            >
-              {m.name}
-            </button>
-          ))}
-        </nav>
-
-        {tab === "cmd" && <CommandCentre />}
-        {tab === "ship" && <Inbox />}
-        {tab === "quote" && <QuotesAndPayments />}
-        {tab === "lr" && <LRAndTrips />}
-        {tab === "fin" && <Finance />}
-        {tab === "crm" && <CRM />}
-        {tab === "price" && <Pricing />}
-      </main>
-    </div>
+    <AdminShell tab={tab} setTab={setTab}>
+      {tab === "cmd" && <CommandCentre />}
+      {tab === "ship" && <Inbox />}
+      {tab === "quote" && <QuotesAndPayments />}
+      {tab === "lr" && <LRAndTrips />}
+      {tab === "fin" && <Finance />}
+      {tab === "crm" && <CRM />}
+      {tab === "price" && <Pricing />}
+      {STUB_NAMES[tab] && <StubModule name={STUB_NAMES[tab]!} />}
+    </AdminShell>
   );
 }
