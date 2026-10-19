@@ -8,8 +8,9 @@ import { useEffect, useMemo, useState } from "react";
 import { inr } from "@/lib/pricing";
 import { watchAdminBookings } from "@/lib/adminApi";
 import { assignBookingToTrip, createTrip, patchTrip, unassignBooking, watchTrips } from "@/lib/tripsApi";
-import type { Booking, Trip, TripExpense } from "@/lib/types";
+import type { Booking, DocRecord, Trip, TripExpense } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import DocumentView from "./DocumentView";
 
 const VEHICLE_TYPES = ["Tata Ace", "Bolero pickup", "Eicher 14ft", "Eicher 17ft", "Tempo traveller", "Container"];
 const EXP_HEADS = ["Fuel", "Toll / FASTag", "Driver bhatta", "Loading / unloading", "Parking", "Airport charges", "Vehicle hire", "Misc"];
@@ -145,6 +146,13 @@ function TripDetail({
   const [exp, setExp] = useState<{ head: string; amount: string; note: string }>({ head: EXP_HEADS[0], amount: "", note: "" });
   const [adv, setAdv] = useState<{ amount: string; note: string }>({ amount: "", note: "" });
   const [err, setErr] = useState("");
+  const [viewing, setViewing] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
+
+  function openLr(b: Booking) {
+    if (!b.lr) return;
+    const doc = b.docs?.find((d) => d.type === "LR" && d.no === b.lr!.no) ?? { type: "LR" as const, no: b.lr.no, at: b.lr.at, amount: b.quote.total };
+    setViewing({ booking: b, doc });
+  }
 
   async function doAssign() {
     if (!assignId) return;
@@ -198,7 +206,7 @@ function TripDetail({
               <tr key={b.id} className="border-b border-dashed border-line last:border-0">
                 <td className="py-1.5 pr-2 font-mono">{b.id}</td>
                 <td className="pr-2">{b.from} → {b.to}</td>
-                <td className="pr-2">{b.lr ? `LR ${b.lr.no}` : "—"}</td>
+                <td className="pr-2">{b.lr ? <button className="text-brand hover:underline" onClick={() => openLr(b)}>LR {b.lr.no}</button> : "—"}</td>
                 <td className="pr-2 text-right">{inr(b.quote.total)}</td>
                 <td><button className="text-red-700 hover:underline" onClick={() => void doUnassign(b.id)}>unassign</button></td>
               </tr>
@@ -245,6 +253,7 @@ function TripDetail({
       <p className="rounded-xl bg-paper p-3 text-xs">
         <b>Driver settlement:</b> advances {inr(advTotal)} − expenses {inr(expTotal)} = {settlement >= 0 ? `driver returns ${inr(settlement)}` : `company owes driver ${inr(-settlement)}`}
       </p>
+      {viewing && <DocumentView booking={viewing.booking} doc={viewing.doc} onClose={() => setViewing(null)} />}
     </Card>
   );
 }

@@ -15,8 +15,9 @@ import { inr } from "@/lib/pricing";
 import { gstSplit } from "@/lib/docs";
 import { lanes } from "@/lib/intelligence";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
-import type { Booking, DocType } from "@/lib/types";
+import type { Booking, DocRecord, DocType } from "@/lib/types";
 import { Badge, Button, Card, Select } from "@/components/ui";
+import DocumentView from "./DocumentView";
 
 const dayKey = (iso: string) => (iso || "").slice(0, 10);
 
@@ -136,6 +137,7 @@ function DocumentPanel({ bookings, onIssued }: { bookings: Booking[]; onIssued: 
   const [sel, setSel] = useState("");
   const [busy, setBusy] = useState<DocType | null>(null);
   const [err, setErr] = useState("");
+  const [viewing, setViewing] = useState<DocRecord | null>(null);
   const booking = bookings.find((b) => b.id === sel) ?? null;
 
   async function issue(type: DocType) {
@@ -173,13 +175,16 @@ function DocumentPanel({ bookings, onIssued }: { bookings: Booking[]; onIssued: 
         <ul className="space-y-1 text-xs">
           {(booking.docs ?? []).length === 0 && <li className="text-muted">No documents yet on this booking.</li>}
           {(booking.docs ?? []).map((d, i) => (
-            <li key={i} className="flex justify-between border-b border-dashed border-line py-1 last:border-0">
-              <span>{DOC_LABEL[d.type]} <span className="font-mono">{d.no}</span></span>
-              <span>{inr(d.amount)}</span>
+            <li key={i}>
+              <button onClick={() => setViewing(d)} className="flex w-full justify-between border-b border-dashed border-line py-1 text-left last:border-0 hover:text-brand">
+                <span>{DOC_LABEL[d.type]} <span className="font-mono">{d.no}</span></span>
+                <span>{inr(d.amount)}</span>
+              </button>
             </li>
           ))}
         </ul>
       )}
+      {viewing && booking && <DocumentView booking={booking} doc={viewing} onClose={() => setViewing(null)} />}
     </Card>
   );
 }
