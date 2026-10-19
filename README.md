@@ -5,10 +5,10 @@ Realtime). This is a separate project from `bagdrop-web` — nothing here
 touches that repo or its data.
 
 Live and connected to a real Supabase project (`bagdrop-logistics` org,
-Mumbai region). Customer flow (booking wizard, quote/pay links) and the
-full Admin OS "core money/ops" set are implemented and verified against
-that real database: **Command centre, Shipments, Quotes & payments,
-LR & trips, CRM, Pricing engine, Finance.**
+Mumbai region), deployed at https://webbagdrop.vercel.app. Customer flow
+(booking wizard, quote/pay links) and **all 19 modules** from the original
+static Admin OS now exist in this app — see "Admin OS modules" below for
+which are fully real vs. honest reference content.
 
 ## Run it now (local demo, no setup)
 ```bash
@@ -83,29 +83,29 @@ status page and the admin inbox both poll every few seconds instead
 (`src/lib/db.ts`, `src/lib/adminApi.ts`) — a few seconds' delay instead of
 instant push, in exchange for the above being actually true.
 
-## Admin OS modules — what's live vs. not
-All 7 "core money/ops" modules from the original plan are implemented:
-**Command centre** (real KPIs, event feed, anomaly heuristics, actual/
-forecast pieces-per-day chart — no external AI call), **Shipments**
-(the bookings inbox), **Quotes & payments** (staff-made quotes for phone/
-WhatsApp/walk-in leads, with a shareable `/q/{id}` pay link), **LR & trips**
-(create a trip, assign bookings, issue real LR numbers, track expenses/
-advances/margin), **CRM** (ranked follow-up suggestions, leads, a computed
-customer master list, an activity log), **Pricing engine** (editable route
-chart + fallback matrix + oversize rate, live in real customer quotes the
-moment you save), **Finance** (captured/GST/balance KPIs, balance
-collection, lane economics, document generation with real race-safe
-numbers).
+## Admin OS modules — what's live vs. reference-only
+All 19 modules from the original static Admin OS now have a working page
+here (grouped sidebar: Operate / Commerce / Intelligence / Platform).
 
-Not ported from the static build (same list either way — none of this was
-a real integration there either, so nothing functional is lost, only the
-UI for it): real payment capture (`/api/pay` still returns a fake
-"Razorpay (demo)" result), SMS OTP / Aadhaar / passport verification,
-WhatsApp sending, live flight data, GST e-invoice IRP filing, e-way bill
-filing, printable LR/manifest/invoice layouts, credit notes, bank-statement
-reconciliation, "Convert to wedding" (there's no Events & bulk module here
-to convert into). Each module's own file has a comment with its specific
-gaps.
+**Fully real** (derive from or write to the live database): Command centre,
+Shipments, Quotes & payments, LR & trips, Exceptions, Events & bulk,
+Drivers, Flights, Capacity & roster, CRM, Pricing engine, Identity &
+compliance, Finance, Rules & notifications, Security & audit.
+
+**Honest reference/roadmap content** (same as the original — these were
+decorative status boards or policy pages there too, not real
+integrations): Partners & API, Integrations, Data & privacy.
+
+Not ported from the static build (nothing functional is lost — none of
+this was a real integration there either, only UI for it existed): real
+payment capture (`/api/pay` still returns a fake "Razorpay (demo)"
+result), SMS OTP / Aadhaar / passport verification, WhatsApp sending, GST
+e-invoice IRP filing, e-way bill filing, printable LR/manifest/invoice
+layouts, credit notes, bank-statement reconciliation, the guest-facing
+wedding landing page (admin-side event management is built; the
+customer-facing page isn't). Each module's own file has a comment with
+its specific gaps and exactly which lines of the original it was ported
+from.
 
 ## Structure
 - `src/lib/types.ts` — the typed domain model (Booking, Trip, Inquiry,
