@@ -124,6 +124,31 @@ export interface Booking {
   eway?: { at: string; status: string } | null;
   pod?: { no: string; at: string; receiver: string } | null;
   docs?: DocRecord[];
+  /** Set when this booking belongs to a wedding/group event (WeddingEvent.id). */
+  eventCode?: string | null;
+}
+
+/** A wedding/group-travel event — the `events` table. Guests book under one
+ *  event code; sectors are the pickup-city legs the event covers, each with
+ *  a suggested per-bag rate from the pricing engine. */
+export interface EventSector { city: string; rate: number; pickDay: string; retDay: string }
+
+export interface WeddingEvent {
+  id: string; // "WED-XXXXX" style code
+  created: string;
+  status: "open" | "closed";
+  name: string;
+  type: string; // WED/MIC/PIL/SPT/STU/FAM
+  venueCity: string;
+  venue: string;
+  dates: { in: string; out: string };
+  direction: string; // e.g. "both" | "inbound" | "outbound"
+  billing: string; // "host" | "split" | "family"
+  expected: { families: number; bags: number };
+  rates: { oversize: number; minBags: number; slabPct: number; depositPct: number };
+  sectors: EventSector[];
+  contacts: { host: string; hostMobile: string; planner?: string; onsite?: string };
+  landing: { names?: string; hashtag?: string; datesText?: string; sides?: string; celebration?: string; destination?: string };
 }
 
 /** Document types that go through the same race-safe numbering as LR

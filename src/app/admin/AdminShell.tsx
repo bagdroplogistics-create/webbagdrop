@@ -23,11 +23,11 @@ const GROUPS: NavGroup[] = [
       { key: "ship", name: "Shipments", badge: "live", badgeTone: "live" },
       { key: "quote", name: "Quotes & payments", badge: "live", badgeTone: "live" },
       { key: "lr", name: "LR & trips", badge: "live", badgeTone: "live" },
-      { key: "exc", name: "Exceptions" },
-      { key: "evt", name: "Events & bulk" },
-      { key: "drv", name: "Drivers", badge: "GPS" },
-      { key: "flt", name: "Flights" },
-      { key: "cap", name: "Capacity & roster" },
+      { key: "exc", name: "Exceptions", badge: "live", badgeTone: "live" },
+      { key: "evt", name: "Events & bulk", badge: "live", badgeTone: "live" },
+      { key: "drv", name: "Drivers", badge: "live", badgeTone: "live" },
+      { key: "flt", name: "Flights", badge: "live", badgeTone: "live" },
+      { key: "cap", name: "Capacity & roster", badge: "live", badgeTone: "live" },
     ],
   },
   {
@@ -35,24 +35,24 @@ const GROUPS: NavGroup[] = [
     items: [
       { key: "crm", name: "CRM & follow-ups", badge: "live", badgeTone: "live" },
       { key: "price", name: "Pricing engine", badge: "live", badgeTone: "live" },
-      { key: "id", name: "Identity & compliance" },
+      { key: "id", name: "Identity & compliance", badge: "live", badgeTone: "live" },
       { key: "fin", name: "Finance", badge: "live", badgeTone: "live" },
-      { key: "part", name: "Partners & API" },
+      { key: "part", name: "Partners & API", badge: "reference" },
     ],
   },
   {
     label: "Intelligence",
     items: [
       { key: "cmd", name: "Forecast & copilot", badge: "in Command centre", noHighlight: true },
-      { key: "rules", name: "Rules & notifications" },
+      { key: "rules", name: "Rules & notifications", badge: "live", badgeTone: "live" },
     ],
   },
   {
     label: "Platform",
     items: [
-      { key: "integ", name: "Integrations" },
-      { key: "sec", name: "Security & audit" },
-      { key: "data", name: "Data & privacy" },
+      { key: "integ", name: "Integrations", badge: "reference" },
+      { key: "sec", name: "Security & audit", badge: "live", badgeTone: "live" },
+      { key: "data", name: "Data & privacy", badge: "reference" },
     ],
   },
 ];

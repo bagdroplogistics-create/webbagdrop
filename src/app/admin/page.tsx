@@ -1,28 +1,24 @@
 "use client";
 import { useState } from "react";
 import AdminShell, { type ModuleKey } from "./AdminShell";
+import CapacityAndRoster from "./CapacityAndRoster";
 import CommandCentre from "./CommandCentre";
 import CRM from "./CRM";
+import DataAndPrivacy from "./DataAndPrivacy";
+import Drivers from "./Drivers";
+import EventsAndBulk from "./EventsAndBulk";
+import Exceptions from "./Exceptions";
 import Finance from "./Finance";
+import Flights from "./Flights";
 import Inbox from "./Inbox";
+import IdentityAndCompliance from "./IdentityAndCompliance";
+import Integrations from "./Integrations";
 import LRAndTrips from "./LRAndTrips";
+import PartnersAndApi from "./PartnersAndApi";
 import Pricing from "./Pricing";
 import QuotesAndPayments from "./QuotesAndPayments";
-import StubModule from "./StubModule";
-
-const STUB_NAMES: Partial<Record<ModuleKey, string>> = {
-  exc: "Exceptions",
-  evt: "Events & bulk",
-  drv: "Drivers",
-  flt: "Flights",
-  cap: "Capacity & roster",
-  id: "Identity & compliance",
-  part: "Partners & API",
-  rules: "Rules & notifications",
-  integ: "Integrations",
-  sec: "Security & audit",
-  data: "Data & privacy",
-};
+import RulesAndNotifications from "./RulesAndNotifications";
+import SecurityAndAudit from "./SecurityAndAudit";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<ModuleKey>("cmd");
@@ -33,10 +29,20 @@ export default function AdminPage() {
       {tab === "ship" && <Inbox />}
       {tab === "quote" && <QuotesAndPayments />}
       {tab === "lr" && <LRAndTrips />}
-      {tab === "fin" && <Finance />}
+      {tab === "exc" && <Exceptions />}
+      {tab === "evt" && <EventsAndBulk />}
+      {tab === "drv" && <Drivers />}
+      {tab === "flt" && <Flights />}
+      {tab === "cap" && <CapacityAndRoster />}
       {tab === "crm" && <CRM />}
       {tab === "price" && <Pricing />}
-      {STUB_NAMES[tab] && <StubModule name={STUB_NAMES[tab]!} />}
+      {tab === "id" && <IdentityAndCompliance />}
+      {tab === "fin" && <Finance />}
+      {tab === "part" && <PartnersAndApi />}
+      {tab === "rules" && <RulesAndNotifications />}
+      {tab === "integ" && <Integrations />}
+      {tab === "sec" && <SecurityAndAudit />}
+      {tab === "data" && <DataAndPrivacy />}
     </AdminShell>
   );
 }
