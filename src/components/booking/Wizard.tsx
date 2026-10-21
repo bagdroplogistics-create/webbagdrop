@@ -2,8 +2,9 @@
 /** The customer booking wizard — the migration template for every other page.
  *  Pattern: typed draft state → pure pricing preview → SERVER-SIGNED quote
  *  (/api/quote) → booking saved in the shared Admin OS shape. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CITIES, inr, quote } from "@/lib/pricing";
+import { computeTravelPlan, isSlotFeasible } from "@/lib/travelPlan";
 import { createBooking, newBookingId, nowIso, watchBooking } from "@/lib/db";
 import type { Booking, Mode, SignedQuote, UseCase } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select, Tile } from "@/components/ui";
@@ -25,7 +26,7 @@ interface Draft {
   uc: UseCase; mode: Mode;
   from: string; to: string; fromOther: string; toOther: string;
   pickAddr: string; dropAddr: string;
-  date: string; slot: string; flight: string;
+  date: string; pickupDate: string; slot: string; flight: string; flightTime: string;
   bags: number; oversize: number;
   name: string; mobile: string; email: string; note: string;
 }
@@ -35,7 +36,7 @@ export default function Wizard() {
   const [today, setToday] = useState("");
   const [d, setD] = useState<Draft>({
     uc: "d2a", mode: "air", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
-    pickAddr: "", dropAddr: "", date: "", slot: "", flight: "",
+    pickAddr: "", dropAddr: "", date: "", pickupDate: "", slot: "", flight: "", flightTime: "",
     bags: 2, oversize: 0, name: "", mobile: "", email: "", note: "",
   });
   /* dates come from the clock, which prerender forbids — set them on mount */
@@ -45,6 +46,28 @@ export default function Wizard() {
     setD((p) => (p.date ? p : { ...p, date: new Date(now + 4 * 86400000).toISOString().slice(0, 10) }));
   }, []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+
+  /** Flight/train/sailing-aware pickup planning (ported from the admin
+   *  team-quote form's travelPlan() — the original customer wizard never
+   *  had this, just a generic fixed slot list regardless of departure
+   *  time). Auto-fills the suggested date/slot, same "keep tracking until
+   *  the customer types their own value" pattern as the admin form. */
+  const plan = useMemo(
+    () => computeTravelPlan(d.mode, d.uc === "a2d", d.date, d.flightTime),
+    [d.mode, d.uc, d.date, d.flightTime]
+  );
+  const autoRef = useRef({ pickupDate: "", slot: "" });
+  useEffect(() => {
+    if (plan.suggestedPickupDate && (!d.pickupDate || d.pickupDate === autoRef.current.pickupDate)) {
+      autoRef.current.pickupDate = plan.suggestedPickupDate;
+      if (d.pickupDate !== plan.suggestedPickupDate) set("pickupDate", plan.suggestedPickupDate);
+    }
+    if (plan.suggestedSlot && (!d.slot || d.slot === autoRef.current.slot)) {
+      autoRef.current.slot = plan.suggestedSlot;
+      if (d.slot !== plan.suggestedSlot) set("slot", plan.suggestedSlot);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.suggestedPickupDate, plan.suggestedSlot]);
 
   const fromName = d.from === "other" ? d.fromOther || "Other city" : d.from;
   const toName = d.to === "other" ? d.toOther || "Other city" : d.to;
@@ -95,7 +118,7 @@ export default function Wizard() {
       uc: d.uc, ucName: SERVICES.find((s) => s.uc === d.uc)?.title ?? d.uc, mode: d.mode,
       from: fromName, to: toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
       zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
-      date: d.date, ref: d.flight.toUpperCase(), slot: d.slot,
+      date: d.date, pickupDate: d.pickupDate || d.date, flightTime: d.flightTime || null, ref: d.flight.toUpperCase(), slot: d.slot,
       bags: d.bags, oversize: d.oversize, billed: ror ? Math.max(d.bags + d.oversize, 1) : signed?.billed ?? d.bags,
       traveller: { name: d.name, mobile: d.mobile, email: d.email, res: "in" },
       payer: null, note: d.note, source: "website · next",
@@ -212,9 +235,30 @@ export default function Wizard() {
                 <Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} />
               </Field>
             </div>
-            <p className="mb-2 text-xs text-muted">Pickup window</p>
+            {plan.usesFlightTime && (
+              <div className="mb-3">
+                <Field label={d.uc === "a2d" ? (d.mode === "air" ? "Flight arrival time" : "Arrival time") : d.mode === "air" ? "Flight departure time" : d.mode === "rail" ? "Train departure time" : "Sailing time"}>
+                  <Input type="time" value={d.flightTime} onChange={(e) => set("flightTime", e.target.value)} />
+                </Field>
+                <p className="mt-1.5 text-xs text-muted">{plan.cutoffNote}</p>
+              </div>
+            )}
+            <p className="mb-2 text-xs text-muted">
+              Pickup window{plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (the evening before — your departure time needs it)` : ""}
+            </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SLOTS.map((s) => <Tile key={s} selected={d.slot === s} onClick={() => set("slot", s)} title={s} sub={s === "08:00–10:00" ? "most chosen" : ""} />)}
+              {SLOTS.map((s) => {
+                const feasible = isSlotFeasible(s, plan, d.pickupDate || d.date);
+                return (
+                  <Tile
+                    key={s}
+                    selected={d.slot === s}
+                    onClick={() => { if (feasible) set("slot", s); }}
+                    title={s}
+                    sub={!feasible ? "too late for this flight" : s === plan.suggestedSlot ? "suggested" : s === "08:00–10:00" ? "most chosen" : ""}
+                  />
+                );
+              })}
             </div>
           </>
         )}
