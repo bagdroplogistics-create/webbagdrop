@@ -66,7 +66,7 @@ export interface Traveller {
 }
 
 export interface Payment {
-  mode: "full" | "hold" | "cash";
+  mode: "full" | "cash";
   amount: number;
   status: "captured";
   gateway: string;

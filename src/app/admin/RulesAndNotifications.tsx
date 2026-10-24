@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { Badge, Card } from "@/components/ui";
 
 const RULES: { key: string; event: string; audience: string; langs: string; def: boolean }[] = [
-  { key: "quote.ready", event: "Quote ready", audience: "Customer · WhatsApp, SMS, email · pay or hold", langs: "EN HI GU", def: true },
+  { key: "quote.ready", event: "Quote ready", audience: "Customer · WhatsApp, SMS, email · pay now", langs: "EN HI GU", def: true },
   { key: "quote.expiring", event: "Quote lock expiring (2h left)", audience: "Customer · WhatsApp reminder", langs: "EN HI", def: true },
   { key: "booking.submitted", event: "Booking submitted", audience: "Ops inbox · new-booking alert", langs: "internal", def: true },
   { key: "booking.accepted", event: "Booking accepted", audience: "Customer · confirmation + captain ETA", langs: "EN HI GU", def: true },

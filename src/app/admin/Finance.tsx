@@ -73,7 +73,7 @@ export default function Finance() {
         <Kpi label="Captured today" value={inr(kpis.capturedToday)} />
         <Kpi label="Captured, all time" value={inr(kpis.capturedAll)} />
         <Kpi label="GST collected" value={inr(kpis.gst)} />
-        <Kpi label="Balance due" value={inr(kpis.balanceDue)} hint="from 20% holds" />
+        <Kpi label="Balance due" value={inr(kpis.balanceDue)} hint="partial payments" />
       </div>
 
       <Card>

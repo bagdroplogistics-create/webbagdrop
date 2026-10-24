@@ -30,7 +30,7 @@ export default function QuotePay({ id }: { id: string }) {
   const expired = !!b.quote.validUntil && new Date(b.quote.validUntil).getTime() < Date.now();
   const paid = !!b.pay;
 
-  async function pay(mode: "full" | "hold") {
+  async function pay() {
     if (!b || b === "loading") return;
     const bk: Booking = b;
     setPaying(true); setErr("");
@@ -41,7 +41,7 @@ export default function QuotePay({ id }: { id: string }) {
         qid: bk.quote.qid, fromName: bk.from, toName: bk.to,
         bags: bk.bags, oversize: bk.oversize,
         total: bk.quote.total, validUntil: bk.quote.validUntil,
-        signature: bk.quote.signature, mode,
+        signature: bk.quote.signature, mode: "full",
       }),
     });
     const j = await res.json();
@@ -49,7 +49,7 @@ export default function QuotePay({ id }: { id: string }) {
     if (!res.ok || j.error) { setErr(j.detail ?? j.error ?? "Payment failed"); return; }
     const updated = await updateBooking(
       bk.id,
-      { status: "submitted", pay: { mode, amount: j.amount, status: "captured", gateway: j.gateway, at: j.capturedAt } },
+      { status: "submitted", pay: { mode: "full", amount: j.amount, status: "captured", gateway: j.gateway, at: j.capturedAt } },
       `Paid ${inr(j.amount)} via quote link · signature verified server-side · ${j.reference}`
     );
     setB(updated);
@@ -87,15 +87,12 @@ export default function QuotePay({ id }: { id: string }) {
 
       {paid ? (
         <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
-          <b>Paid</b> · {inr(b.pay!.amount)} via {b.pay!.gateway}. {b.pay!.amount < b.quote.total ? `Balance ${inr(b.quote.total - b.pay!.amount)} at pickup.` : "Booking is with operations."}
+          <b>Paid</b> · {inr(b.pay!.amount)} via {b.pay!.gateway}. Booking is with operations.
         </p>
       ) : expired ? (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">This price lock has expired — message the team and a fresh quote arrives in a minute.</p>
       ) : (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          <Button variant="outline" disabled={paying} onClick={() => void pay("hold")}>Hold with 20% · {inr(Math.round(b.quote.total * 0.2))}</Button>
-          <Button disabled={paying} onClick={() => void pay("full")}>{paying ? "Verifying signature…" : `Pay ${inr(b.quote.total)}`}</Button>
-        </div>
+        <Button className="w-full" disabled={paying} onClick={() => void pay()}>{paying ? "Verifying signature…" : `Pay ${inr(b.quote.total)}`}</Button>
       )}
       {err && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Refused:</b> {err}</p>}
       <p className="mt-4 text-center text-[11px] text-faint">The server verifies the quote signature before capture — a price edited in the browser is refused.</p>

@@ -4,8 +4,9 @@
  *  wizard), get a shareable payment link, and track every open quote until
  *  it's paid. Same pricing engine and signed-quote model as the website —
  *  see src/app/api/admin/quotes/route.ts. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CITIES, inr, quote } from "@/lib/pricing";
+import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, Mode, UseCase } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
@@ -23,14 +24,14 @@ const SERVICES: { uc: UseCase; mode: Mode; title: string }[] = [
 interface Draft {
   title: string; name: string; mobile: string; email: string; res: "in" | "intl";
   uc: UseCase; mode: Mode; fromName: string; toName: string;
-  pickAddr: string; dropAddr: string; date: string; flight: string;
+  pickAddr: string; dropAddr: string; date: string; pickupDate: string; flight: string; flightTime: string; slot: string;
   bags: number; oversize: number; note: string; validHours: 24 | 48 | 168;
 }
 
 const EMPTY: Draft = {
   title: "Mr.", name: "", mobile: "", email: "", res: "in",
   uc: "d2a", mode: "air", fromName: "Ahmedabad", toName: "Mumbai",
-  pickAddr: "", dropAddr: "", date: "", flight: "",
+  pickAddr: "", dropAddr: "", date: "", pickupDate: "", flight: "", flightTime: "", slot: "",
   bags: 2, oversize: 0, note: "", validHours: 24,
 };
 
@@ -50,6 +51,26 @@ export default function QuotesAndPayments() {
   );
   const ror = "error" in preview;
 
+  /** Flight/train/sailing-aware pickup planning — same logic as the website
+   *  wizard (src/lib/travelPlan.ts), so a team-created quote gets the same
+   *  cutoff-correct pickup slot as a self-serve booking. */
+  const plan = useMemo(
+    () => computeTravelPlan(d.mode, d.uc === "a2d", d.date, d.flightTime),
+    [d.mode, d.uc, d.date, d.flightTime]
+  );
+  const autoRef = useRef({ pickupDate: "", slot: "" });
+  useEffect(() => {
+    if (plan.suggestedPickupDate && (!d.pickupDate || d.pickupDate === autoRef.current.pickupDate)) {
+      autoRef.current.pickupDate = plan.suggestedPickupDate;
+      if (d.pickupDate !== plan.suggestedPickupDate) set("pickupDate", plan.suggestedPickupDate);
+    }
+    if (plan.suggestedSlot && (!d.slot || d.slot === autoRef.current.slot)) {
+      autoRef.current.slot = plan.suggestedSlot;
+      if (d.slot !== plan.suggestedSlot) set("slot", plan.suggestedSlot);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.suggestedPickupDate, plan.suggestedSlot]);
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState<Booking | null>(null);
@@ -63,6 +84,7 @@ export default function QuotesAndPayments() {
         title: d.title, name: d.name, mobile: d.mobile, email: d.email || undefined, res: d.res,
         fromName: d.fromName, toName: d.toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
         uc: d.uc, ucName: svc?.title, mode: d.mode, date: d.date, flight: d.flight,
+        pickupDate: d.pickupDate || d.date, flightTime: d.flightTime || undefined, slot: d.slot,
         bags: d.bags, oversize: d.oversize, note: d.note, validHours: d.validHours,
       }),
     });
@@ -120,6 +142,20 @@ export default function QuotesAndPayments() {
             <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} /></Field>
             <Field label="Travel date"><Input type="date" value={d.date} onChange={(e) => set("date", e.target.value)} /></Field>
             <Field label="Flight / reference (optional)"><Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" /></Field>
+            {plan.usesFlightTime && (
+              <Field label={d.uc === "a2d" ? (d.mode === "air" ? "Flight arrival time" : "Arrival time") : d.mode === "air" ? "Flight departure time" : d.mode === "rail" ? "Train departure time" : "Sailing time"}>
+                <Input type="time" value={d.flightTime} onChange={(e) => set("flightTime", e.target.value)} />
+              </Field>
+            )}
+            <Field label={`Preferred pickup time${plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (evening before)` : ""}`}>
+              <Select value={d.slot} onChange={(e) => set("slot", e.target.value)}>
+                <option value="">— Select time —</option>
+                {SLOTS.filter((s) => isSlotFeasible(s.label, plan, d.pickupDate || d.date)).map((s) => (
+                  <option key={s.label} value={s.label}>{s.label}{s.label === plan.suggestedSlot ? " · suggested" : ""}</option>
+                ))}
+              </Select>
+            </Field>
+            {plan.usesFlightTime && <p className="mb-2 text-xs text-muted sm:col-span-2">{plan.cutoffNote}</p>}
             <Field label="Bags"><Input type="number" min={0} value={d.bags} onChange={(e) => set("bags", Number(e.target.value))} /></Field>
             <Field label="Oversize"><Input type="number" min={0} value={d.oversize} onChange={(e) => set("oversize", Number(e.target.value))} /></Field>
             <Field label="Price lock">

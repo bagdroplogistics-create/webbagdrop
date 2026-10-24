@@ -9,7 +9,7 @@ import { quotePayload, verify } from "@/lib/sign";
 export async function POST(req: Request) {
   let b: {
     qid?: string; fromName?: string; toName?: string; bags?: number; oversize?: number;
-    total?: number; validUntil?: string; signature?: string; mode?: "full" | "hold";
+    total?: number; validUntil?: string; signature?: string;
   };
   try {
     b = await req.json();
@@ -31,11 +31,10 @@ export async function POST(req: Request) {
   if (new Date(String(b.validUntil)).getTime() < Date.now()) {
     return NextResponse.json({ error: "QUOTE_EXPIRED" }, { status: 410 });
   }
-  const amount = b.mode === "hold" ? Math.round(Number(b.total) * 0.2) : Math.round(Number(b.total));
   /* Razorpay/Stripe order creation goes here in production. */
   return NextResponse.json({
     ok: true,
-    amount,
+    amount: Math.round(Number(b.total)),
     gateway: "Razorpay (demo)",
     capturedAt: new Date().toISOString(),
     reference: `pay_${Math.random().toString(36).slice(2, 12)}`,
