@@ -42,13 +42,20 @@ h2.big em{font-style:italic;color:var(--label)}
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;height:92px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(20px,5vw,56px);background:transparent;color:var(--on-dark);transition:background .4s ease,color .4s ease,box-shadow .4s ease}
 .nav.scrolled{background:rgba(244,238,228,.94);backdrop-filter:blur(10px);color:var(--ink);box-shadow:0 1px 0 var(--line-2)}
 .nav .logo{display:flex;align-items:center}
-.nav .logo img{height:clamp(48px,8vw,80px);width:auto;display:block;filter:brightness(0) invert(1);transition:filter .4s ease}
-.nav.scrolled .logo img{filter:none}
+/* The logo file is a flat white silhouette, so a filter-revealed "true
+ * color" is invisible on a light background (reported bug: white-on-white
+ * once .scrolled makes the nav background cream). Rendered as a CSS mask
+ * instead, so its color is ours to set: white on the hero, ink once
+ * scrolled (readable on the cream background), gold on hover either way. */
+.nav .logo .mark{display:block;height:clamp(48px,8vw,80px);aspect-ratio:1092/1552;width:auto;background-color:#fff;-webkit-mask:url(/logo-white.png) center/contain no-repeat;mask:url(/logo-white.png) center/contain no-repeat;transition:background-color .3s ease}
+.nav.scrolled .logo .mark{background-color:var(--ink)}
+.nav .logo:hover .mark{background-color:var(--gold)}
 .nav-links{display:flex;align-items:center;gap:34px;font-size:12.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase}
-.nav-links a{text-decoration:none}
-.nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:999px;transition:background .2s,color .2s}
-.nav-links .pill:hover{background:currentColor;color:var(--forest)}
-.nav.scrolled .nav-links .pill:hover{color:var(--cream)}
+.nav-links a{text-decoration:none;transition:color .2s ease}
+.nav-links a:not(.pill):hover{color:var(--gold)}
+.nav.scrolled .nav-links a:not(.pill):hover{color:var(--gold-2)}
+.nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:999px;transition:background .2s,color .2s,border-color .2s}
+.nav-links .pill:hover{background:var(--gold);border-color:var(--gold);color:var(--forest)}
 .hamburger{display:none;background:none;border:0;color:inherit;cursor:pointer;padding:8px;flex-direction:column;gap:5px;width:42px;height:42px;align-items:center;justify-content:center}
 .hamburger span{width:22px;height:1.5px;background:currentColor;display:block}
 @media (max-width:860px){.nav-links{display:none}.hamburger{display:flex}}
@@ -294,7 +301,7 @@ footer .base{border-top:1px solid rgba(244,238,228,.1);margin-top:44px;padding-t
 
 export const Y2K_HTML = `
 <nav class="nav" id="siteNav" aria-label="Main">
-  <a class="logo" href="#top" aria-label="Bagdrop"><img src="/logo-white.png" alt="Bagdrop"/></a>
+  <a class="logo" href="#top" aria-label="Bagdrop"><span class="mark"></span></a>
   <div class="nav-links">
     <a href="#celebration">Celebration</a>
     <a href="#destination">Destination</a>
