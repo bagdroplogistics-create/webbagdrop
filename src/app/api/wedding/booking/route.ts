@@ -35,7 +35,14 @@ function notifySheet(doc: Booking) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch((e) => console.error("Y2K sheet webhook failed:", e));
+    redirect: "follow",
+  })
+    .then(async (res) => {
+      const text = await res.text().catch(() => "");
+      if (!res.ok) { console.error("Y2K sheet webhook non-OK:", res.status, text.slice(0, 500)); return; }
+      console.log("Y2K sheet webhook ok:", text.slice(0, 200));
+    })
+    .catch((e) => console.error("Y2K sheet webhook failed:", e));
 }
 
 /** Create-or-update one wedding-desk family booking. Public (guests use it),
