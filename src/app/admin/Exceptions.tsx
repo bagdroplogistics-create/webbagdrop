@@ -28,7 +28,7 @@ const RESPONSES: [string, string][] = [
 
 function hrs(iso: string) { return (Date.now() - new Date(iso).getTime()) / 3600000; }
 
-function deriveExceptions(all: Booking[]): ExceptionRow[] {
+export function deriveExceptions(all: Booking[]): ExceptionRow[] {
   const out: ExceptionRow[] = [];
   const acked = (b: Booking, key: string) => ((b.admin as Record<string, unknown>).ackExceptions as string[] | undefined)?.includes(key);
 

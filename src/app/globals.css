@@ -24,3 +24,46 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Admin OS — scoped to .admin-os only, so the booking site's own brand
+ * tokens above (customer wizard, weddings, Y2K) are never touched. Matches
+ * the team's reference design: warm paper background, navy rail, mono
+ * accents, Manrope/IBM Plex type. */
+.admin-os {
+  --a-bg: #F7F5F2;
+  --a-surface: #FFFFFF;
+  --a-surface-2: #F0ECE6;
+  --a-line: #DDD6CC;
+  --a-fg: #1A1714;
+  --a-muted: #6B6259;
+  --a-accent: #F25C05;
+  --a-navy: #1B2A4A;
+  --a-ok: #1E7F4F;
+  --a-warn: #B7791F;
+  --a-bad: #C0392B;
+  --a-info: #1F5FA8;
+  --a-ok-bg: #E6F4EC;
+  --a-warn-bg: #FBF1DC;
+  --a-bad-bg: #FBE6E3;
+  --a-info-bg: #E4EEFA;
+  --a-display: "Manrope", system-ui, sans-serif;
+  --a-mono: "IBM Plex Mono", ui-monospace, monospace;
+  background: var(--a-bg);
+  color: var(--a-fg);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+.admin-os .a-card { background: var(--a-surface); border: 1px solid var(--a-line); border-radius: 10px; padding: 14px; }
+.admin-os .a-stripe { border-left-width: 4px; border-left-style: solid; border-left-color: var(--a-line); padding-left: 10px; }
+.admin-os .a-stripe-ok { border-left-color: var(--a-ok); }
+.admin-os .a-stripe-warn { border-left-color: var(--a-warn); }
+.admin-os .a-stripe-bad { border-left-color: var(--a-bad); }
+.admin-os .a-stripe-info { border-left-color: var(--a-info); }
+.admin-os .a-live { font-family: var(--a-mono); font-size: 11px; color: var(--a-ok); }
+.admin-os .a-live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--a-ok); margin-right: 6px; animation: a-pulse 1.6s infinite; }
+@keyframes a-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .admin-os .a-live::before { animation: none; } }
+.admin-os .a-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; }
+.admin-os .a-dot-ok { background: var(--a-ok); }
+.admin-os .a-dot-warn { background: var(--a-warn); }
+.admin-os .a-dot-bad { background: var(--a-bad); }
+.admin-os .a-dot-info { background: var(--a-info); }

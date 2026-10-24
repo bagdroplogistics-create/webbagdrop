@@ -1,9 +1,9 @@
 "use client";
-/** Admin OS shell — grouped sidebar + header, matching the reference layout
- *  the team supplied (navy sidebar with OPERATE/COMMERCE/INTELLIGENCE/
- *  PLATFORM groups, a header bar with quick links and a live-feed dot).
- *  Swaps in for the old flat pill-tab nav; every module's own content is
- *  unchanged — only the surrounding chrome moved. */
+/** Admin OS shell — grouped sidebar + header, pixel-matched to the team's
+ *  reference design ("Bagdrop Platform command.html": navy #1B2A4A rail,
+ *  warm-paper #F7F5F2 canvas, Manrope/IBM Plex Mono type, orange #F25C05
+ *  accent). Scoped entirely under the "admin-os" class (see globals.css)
+ *  so none of this touches the booking site's own brand tokens. */
 import { useState, type ReactNode } from "react";
 
 export type ModuleKey =
@@ -59,45 +59,63 @@ const GROUPS: NavGroup[] = [
 
 const ALL_ITEMS = GROUPS.flatMap((g) => g.items);
 
+const FONTS =
+  "https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap";
+
 export default function AdminShell({ tab, setTab, children }: { tab: ModuleKey; setTab: (k: ModuleKey) => void; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const current = ALL_ITEMS.find((i) => i.key === tab) ?? ALL_ITEMS[0];
 
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="admin-os flex min-h-screen">
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="stylesheet" href={FONTS} />
+
       {/* mobile toggle */}
       <button
-        className="fixed left-3 top-3 z-50 flex size-9 items-center justify-center rounded-lg bg-ink text-white lg:hidden"
+        className="fixed left-3 top-3 z-50 flex size-9 items-center justify-center rounded-lg text-white lg:hidden"
+        style={{ background: "var(--a-navy)" }}
         onClick={() => setOpen((o) => !o)}
         aria-label="Toggle menu"
       >
         ☰
       </button>
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto bg-ink text-white transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="p-5">
-          <div className="font-display text-lg font-extrabold tracking-tight">
-            BAG<span className="text-brand">DROP</span> <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand">ADMIN</span>
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-[232px] overflow-y-auto p-3 text-white transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        style={{ background: "var(--a-navy)" }}
+      >
+        <div className="px-2 pb-3.5 pt-1">
+          <div className="text-lg font-extrabold tracking-tight" style={{ fontFamily: "var(--a-display)" }}>
+            BAG<span style={{ color: "var(--a-accent)" }}>DROP</span> Admin OS
           </div>
-          <div className="mt-3 text-sm font-bold">BAGDROP Admin OS</div>
-          <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">one platform · one database</div>
+          <div className="mt-0.5 text-[10px] font-normal uppercase tracking-wider text-white/70" style={{ fontFamily: "var(--a-mono)" }}>
+            one platform · one database · rev 2
+          </div>
         </div>
 
-        <nav className="px-3 pb-4">
+        <nav>
           {GROUPS.map((g) => (
-            <div key={g.label} className="mb-4">
-              <div className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-white/35">{g.label}</div>
+            <div key={g.label}>
+              <div className="px-2 pb-1 pt-3 text-[10px] uppercase tracking-wider text-white/55" style={{ fontFamily: "var(--a-mono)" }}>{g.label}</div>
               {g.items.map((item, i) => (
                 <button
                   key={`${g.label}-${item.key}-${i}`}
                   onClick={() => { setTab(item.key); setOpen(false); }}
-                  className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors cursor-pointer ${
-                    tab === item.key && !item.noHighlight ? "bg-brand text-white" : "text-white/80 hover:bg-white/10"
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] cursor-pointer ${
+                    tab === item.key && !item.noHighlight ? "font-semibold" : "text-white/92 hover:bg-white/10"
                   }`}
+                  style={tab === item.key && !item.noHighlight ? { background: "var(--a-accent)", color: "#fff" } : undefined}
                 >
                   <span>{item.name}</span>
                   {item.badge && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${item.badgeTone === "live" ? "bg-green-500/20 text-green-300" : "bg-white/10 text-white/50"}`}>
+                    <span
+                      className="ml-auto rounded-full px-1.5 py-0.5 text-[10px]"
+                      style={{
+                        fontFamily: "var(--a-mono)",
+                        background: tab === item.key && !item.noHighlight ? "rgba(0,0,0,.18)" : "rgba(255,255,255,.14)",
+                      }}
+                    >
                       {item.badge}
                     </span>
                   )}
@@ -107,29 +125,33 @@ export default function AdminShell({ tab, setTab, children }: { tab: ModuleKey; 
           ))}
         </nav>
 
-        <div className="border-t border-white/10 p-4 text-[11px] text-white/40">
-          <div className="font-semibold text-white/70">Bagdrop Logistics</div>
-          <div>Admin console · real data</div>
+        <div className="mt-3.5 border-t border-white/15 p-2.5 text-xs text-white/85">
+          <div className="font-semibold" style={{ fontFamily: "var(--a-display)" }}>Bagdrop Ops</div>
+          <div>Admin console</div>
+          <div className="mt-0.5 text-[11px] text-white/55" style={{ fontFamily: "var(--a-mono)" }}>live session</div>
         </div>
       </aside>
 
       {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
 
-      <div className="flex-1 lg:pl-0">
-        <header className="sticky top-0 z-20 border-b border-line bg-white/90 backdrop-blur">
-          <div className="flex h-14 items-center justify-between gap-4 px-4 pl-14 lg:pl-6">
-            <h1 className="truncate font-display text-base font-bold">{current.name}</h1>
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <a href="/" target="_blank" rel="noreferrer" className="hidden text-brand hover:underline sm:inline">View booking site</a>
-              <span className="hidden sm:inline">·</span>
-              <span className="flex items-center gap-1.5">
-                <i className="size-1.5 rounded-full bg-green-500" /> live feed
-              </span>
+      <div className="min-w-0 flex-1">
+        <main className="px-4 py-4.5 lg:px-5.5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 pl-10 lg:pl-0">
+            <div>
+              <h1 className="text-[22px] font-extrabold" style={{ fontFamily: "var(--a-display)" }}>{current.name}</h1>
+              {current.key === "cmd" && (
+                <div className="mt-0.5 max-w-[76ch] text-[13px]" style={{ color: "var(--a-muted)" }}>Everything moving right now. Reads from the event log, not from table scans.</div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <a href="/" target="_blank" rel="noreferrer" className="hidden rounded-lg border px-3 py-2 text-[13px] sm:inline" style={{ borderColor: "var(--a-line)", background: "var(--a-surface)" }}>
+                View booking site
+              </a>
+              <span className="a-live">live feed</span>
             </div>
           </div>
-        </header>
-
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+          {children}
+        </main>
       </div>
     </div>
   );
