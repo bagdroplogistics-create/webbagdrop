@@ -4,10 +4,13 @@
  *  travel under one event code, booked across sectors (pickup-city legs)
  *  each with a suggested per-bag rate from the pricing engine.
  *
- *  Not yet ported: the guest-facing landing page (the static build's
- *  wedding.html — a separate customer-facing page, not an admin module).
  *  This covers the admin side: create an event, see its real bag/family
- *  counts from assigned bookings, convert an inquiry into one. */
+ *  counts from assigned bookings, convert an inquiry into one. The guest-
+ *  facing side — the landing page at /weddings?code=… and, for the Y2K
+ *  event specifically, the full booking desk at /e/[code] — lives in
+ *  src/app/weddings and src/app/e/[code] (see EventDetail's "View guest
+ *  page" link below). Both read/write the same `events`/`bookings` rows
+ *  this module does. */
 import { useEffect, useMemo, useState } from "react";
 import { CITIES, inr, quote } from "@/lib/pricing";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
@@ -236,7 +239,12 @@ function EventDetail({
           <h3 className="font-display text-base font-bold">{event.name} <span className="font-mono text-xs font-normal text-faint">{event.id}</span></h3>
           <p className="text-xs text-muted">{event.venue}, {event.venueCity} · {event.dates.in} → {event.dates.out}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void toggleStatus()}>{event.status === "open" ? "Close event" : "Reopen"}</Button>
+        <div className="flex gap-2">
+          <a href={`/weddings?code=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">
+            <Button size="sm" variant="outline">View guest page ↗</Button>
+          </a>
+          <Button size="sm" variant="outline" onClick={() => void toggleStatus()}>{event.status === "open" ? "Close event" : "Reopen"}</Button>
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-3 gap-3">

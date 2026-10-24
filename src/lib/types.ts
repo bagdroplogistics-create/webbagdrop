@@ -126,7 +126,28 @@ export interface Booking {
   docs?: DocRecord[];
   /** Set when this booking belongs to a wedding/group event (WeddingEvent.id). */
   eventCode?: string | null;
+  eventName?: string;
+  family?: { name: string; side?: string; guests?: number };
+  /** Full wedding-desk state (the Y2K family wizard, /e/[code]). One
+   *  document, two views: the Admin OS sees the booking fields above; the
+   *  wedding desk re-hydrates its wizard + per-bag statuses from this. */
+  wedding?: WeddingDeskRecord;
 }
+
+/** The wedding desk's own record, carried on the booking under .wedding. */
+export interface WeddingDeskRecord {
+  bookingId: string;
+  state: unknown; // the wizard's full form state — owned by the desk page
+  bagStatus: Record<string, string>; // tag id -> Y2K stage label
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The Y2K desk's 8 bag stages, in order. Stage index -> booking status:
+ *  1-2 picked_up · 3/4/6 in_transit · 5/7 delivered. */
+export const WEDDING_STAGES = [
+  "Booked", "Picked up", "At hub", "In transit", "At Taj", "In room", "Return pickup", "Delivered home",
+] as const;
 
 /** A wedding/group-travel event — the `events` table. Guests book under one
  *  event code; sectors are the pickup-city legs the event covers, each with
@@ -149,6 +170,34 @@ export interface WeddingEvent {
   sectors: EventSector[];
   contacts: { host: string; hostMobile: string; planner?: string; onsite?: string };
   landing: { names?: string; hashtag?: string; datesText?: string; sides?: string; celebration?: string; destination?: string };
+}
+
+/** A wedding/event record read by the PUBLIC guest pages (/weddings,
+ *  /e/[code]) — same `events` table and jsonb-doc shape as WeddingEvent
+ *  above (the Admin OS's "Events & bulk" module), just the narrower,
+ *  optional-field view those pages were built against. Both read and
+ *  write the same rows; `page` is the guest desk's own route, if it has
+ *  one (e.g. "/e/y2k"). */
+export interface BagdropEvent {
+  id: string;
+  created: string;
+  status: "open" | "closed";
+  name: string;
+  type: string;
+  venueCity: string;
+  venue: string;
+  dates: { in: string; out: string };
+  direction: "both" | "out";
+  billing: "host" | "family";
+  expected?: { families?: number; bags?: number };
+  rates?: { oversize?: number; minBags?: number; slabPct?: number; depositPct?: number };
+  sectors: EventSector[];
+  contacts?: { host?: string; hostMobile?: string; planner?: string; onsite?: string };
+  landing?: {
+    names?: string; hashtag?: string; datesText?: string; sides?: string;
+    celebration?: string; destination?: string;
+  };
+  page?: string;
 }
 
 /** Document types that go through the same race-safe numbering as LR
