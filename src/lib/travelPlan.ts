@@ -7,14 +7,21 @@
  *  this applies the admin form's real logic to the customer wizard too. */
 import type { Mode } from "./types";
 
-export const SLOTS: { label: string; startMin: number }[] = [
-  { label: "06:00–08:00", startMin: 480 },
-  { label: "08:00–10:00", startMin: 600 },
-  { label: "10:00–12:00", startMin: 720 },
-  { label: "12:00–14:00", startMin: 840 },
-  { label: "16:00–18:00", startMin: 1080 },
-  { label: "18:00–20:00", startMin: 1200 },
-];
+function to12h(totalMin: number): string {
+  const h24 = Math.floor(totalMin / 60), m = totalMin % 60;
+  const ampm = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+/** Specific pickup times, 30-minute increments, 06:00–20:00 — operating
+ *  hours match the original's 06:00–20:00 window, just at finer
+ *  granularity (a dropdown of exact times rather than 6 broad 2h windows). */
+export const SLOTS: { label: string; startMin: number }[] = (() => {
+  const out: { label: string; startMin: number }[] = [];
+  for (let m = 6 * 60; m <= 20 * 60; m += 30) out.push({ label: to12h(m), startMin: m });
+  return out;
+})();
 
 /** Counter cutoff, in hours before departure/sailing — 4h air, 1.5h rail, 3h sea. */
 const CUTOFF_HOURS: Partial<Record<Mode, number>> = { air: 4, rail: 1.5, sea: 3 };
@@ -87,7 +94,7 @@ export function computeTravelPlan(mode: Mode, arriving: boolean, date: string, t
     // Counter time is too early (or past midnight) for any same-day window — pick up the evening before.
     dateShifted = true;
     suggestedPickupDate = date ? shiftDate(date, -1) : "";
-    suggestedSlot = suggestedSlot && prevDay ? suggestedSlot : "18:00–20:00";
+    suggestedSlot = suggestedSlot && prevDay ? suggestedSlot : SLOTS[SLOTS.length - 1].label;
   }
 
   return {

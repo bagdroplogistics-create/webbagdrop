@@ -4,7 +4,7 @@
  *  (/api/quote) → booking saved in the shared Admin OS shape. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CITIES, inr, quote } from "@/lib/pricing";
-import { computeTravelPlan, isSlotFeasible } from "@/lib/travelPlan";
+import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import { createBooking, newBookingId, nowIso, watchBooking } from "@/lib/db";
 import type { Booking, Mode, SignedQuote, UseCase } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select, Tile } from "@/components/ui";
@@ -18,7 +18,6 @@ const SERVICES: { uc: UseCase; mode: Mode; title: string; sub: string }[] = [
   { uc: "rail", mode: "rail", title: "Railway station", sub: "Vande Bharat, Rajdhani" },
   { uc: "cruise", mode: "sea", title: "Cruise terminal", sub: "Mumbai, Goa, Kochi sailings" },
 ];
-const SLOTS = ["06:00–08:00", "08:00–10:00", "10:00–12:00", "12:00–14:00", "16:00–18:00", "18:00–20:00"];
 const STEPS = ["Service", "Route", "When", "Bags", "You", "Price", "Verify", "Pay"];
 const AAD_DEMO = "112233";
 
@@ -243,23 +242,14 @@ export default function Wizard() {
                 <p className="mt-1.5 text-xs text-muted">{plan.cutoffNote}</p>
               </div>
             )}
-            <p className="mb-2 text-xs text-muted">
-              Pickup window{plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (the evening before — your departure time needs it)` : ""}
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SLOTS.map((s) => {
-                const feasible = isSlotFeasible(s, plan, d.pickupDate || d.date);
-                return (
-                  <Tile
-                    key={s}
-                    selected={d.slot === s}
-                    onClick={() => { if (feasible) set("slot", s); }}
-                    title={s}
-                    sub={!feasible ? "too late for this flight" : s === plan.suggestedSlot ? "suggested" : s === "08:00–10:00" ? "most chosen" : ""}
-                  />
-                );
-              })}
-            </div>
+            <Field label={`Preferred pickup time${plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (evening before)` : ""}`}>
+              <Select value={d.slot} onChange={(e) => set("slot", e.target.value)}>
+                <option value="">— Select time —</option>
+                {SLOTS.filter((s) => isSlotFeasible(s.label, plan, d.pickupDate || d.date)).map((s) => (
+                  <option key={s.label} value={s.label}>{s.label}{s.label === plan.suggestedSlot ? " · suggested" : ""}</option>
+                ))}
+              </Select>
+            </Field>
           </>
         )}
 
