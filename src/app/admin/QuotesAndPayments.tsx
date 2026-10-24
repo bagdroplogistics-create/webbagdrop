@@ -23,16 +23,16 @@ const SERVICES: { uc: UseCase; mode: Mode; title: string }[] = [
 
 interface Draft {
   title: string; name: string; mobile: string; email: string; res: "in" | "intl";
-  uc: UseCase; mode: Mode; fromName: string; toName: string;
+  uc: UseCase; mode: Mode; fromName: string; toName: string; fromOther: string; toOther: string;
   pickAddr: string; dropAddr: string; date: string; pickupDate: string; flight: string; flightTime: string; slot: string;
-  bags: number; oversize: number; note: string; validHours: 24 | 48 | 168;
+  bags: number; oversize: number; note: string;
 }
 
 const EMPTY: Draft = {
   title: "Mr.", name: "", mobile: "", email: "", res: "in",
-  uc: "d2a", mode: "air", fromName: "Ahmedabad", toName: "Mumbai",
+  uc: "d2a", mode: "air", fromName: "Ahmedabad", toName: "Mumbai", fromOther: "", toOther: "",
   pickAddr: "", dropAddr: "", date: "", pickupDate: "", flight: "", flightTime: "", slot: "",
-  bags: 2, oversize: 0, note: "", validHours: 24,
+  bags: 2, oversize: 0, note: "",
 };
 
 export default function QuotesAndPayments() {
@@ -43,11 +43,18 @@ export default function QuotesAndPayments() {
     [all]
   );
 
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(new Date(Date.now()).toISOString().slice(0, 10)); }, []);
+
   const [d, setD] = useState<Draft>(EMPTY);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+
+  const fromName = d.fromName === "other" ? d.fromOther || "Other city" : d.fromName;
+  const toName = d.toName === "other" ? d.toOther || "Other city" : d.toName;
+  const isOther = d.fromName === "other" || d.toName === "other";
   const preview = useMemo(
-    () => quote({ fromName: d.fromName, toName: d.toName, bags: d.bags, oversize: d.oversize, mode: d.mode, date: d.date }),
-    [d.fromName, d.toName, d.bags, d.oversize, d.mode, d.date]
+    () => (isOther ? { error: "RATE_ON_REQUEST" as const } : quote({ fromName, toName, bags: d.bags, oversize: d.oversize, mode: d.mode, date: d.date })),
+    [isOther, fromName, toName, d.bags, d.oversize, d.mode, d.date]
   );
   const ror = "error" in preview;
 
@@ -82,10 +89,10 @@ export default function QuotesAndPayments() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: d.title, name: d.name, mobile: d.mobile, email: d.email || undefined, res: d.res,
-        fromName: d.fromName, toName: d.toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
+        fromName, toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
         uc: d.uc, ucName: svc?.title, mode: d.mode, date: d.date, flight: d.flight,
         pickupDate: d.pickupDate || d.date, flightTime: d.flightTime || undefined, slot: d.slot,
-        bags: d.bags, oversize: d.oversize, note: d.note, validHours: d.validHours,
+        bags: d.bags, oversize: d.oversize, note: d.note,
       }),
     });
     const j = await r.json();
@@ -97,7 +104,7 @@ export default function QuotesAndPayments() {
 
   const link = saved ? `${typeof window !== "undefined" ? window.location.origin : ""}/q/${saved.id}` : "";
   const waText = saved
-    ? `Hi ${saved.traveller.name.split(" ")[0]}, here's your Bagdrop quote for ${saved.from} → ${saved.to}: ${inr(saved.quote.total)}, locked for ${d.validHours}h.\nPay securely here: ${link}`
+    ? `Hi ${saved.traveller.name.split(" ")[0]}, here's your Bagdrop quote for ${saved.from} → ${saved.to}: ${inr(saved.quote.total)}, locked for 24h.\nPay securely here: ${link}`
     : "";
 
   return (
@@ -131,16 +138,24 @@ export default function QuotesAndPayments() {
             <Field label="Pickup city">
               <Select value={d.fromName} onChange={(e) => set("fromName", e.target.value)}>
                 {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
+                <option value="other">Others · tell us the city</option>
               </Select>
             </Field>
             <Field label="Delivery city">
               <Select value={d.toName} onChange={(e) => set("toName", e.target.value)}>
                 {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
+                <option value="other">Others · tell us the city</option>
               </Select>
             </Field>
+            {d.fromName === "other" && (
+              <Field label="Your pickup city"><Input value={d.fromOther} onChange={(e) => set("fromOther", e.target.value)} placeholder="Type the city" /></Field>
+            )}
+            {d.toName === "other" && (
+              <Field label="Your delivery city"><Input value={d.toOther} onChange={(e) => set("toOther", e.target.value)} placeholder="Type the city" /></Field>
+            )}
             <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} /></Field>
             <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} /></Field>
-            <Field label="Travel date"><Input type="date" value={d.date} onChange={(e) => set("date", e.target.value)} /></Field>
+            <Field label="Travel date"><Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} /></Field>
             <Field label="Flight / reference (optional)"><Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" /></Field>
             {plan.usesFlightTime && (
               <Field label={d.uc === "a2d" ? (d.mode === "air" ? "Flight arrival time" : "Arrival time") : d.mode === "air" ? "Flight departure time" : d.mode === "rail" ? "Train departure time" : "Sailing time"}>
@@ -158,13 +173,6 @@ export default function QuotesAndPayments() {
             {plan.usesFlightTime && <p className="mb-2 text-xs text-muted sm:col-span-2">{plan.cutoffNote}</p>}
             <Field label="Bags"><Input type="number" min={0} value={d.bags} onChange={(e) => set("bags", Number(e.target.value))} /></Field>
             <Field label="Oversize"><Input type="number" min={0} value={d.oversize} onChange={(e) => set("oversize", Number(e.target.value))} /></Field>
-            <Field label="Price lock">
-              <Select value={d.validHours} onChange={(e) => set("validHours", Number(e.target.value) as Draft["validHours"])}>
-                <option value={24}>24 hours</option>
-                <option value={48}>48 hours</option>
-                <option value={168}>7 days</option>
-              </Select>
-            </Field>
             <Field label="Note (optional)"><Input value={d.note} onChange={(e) => set("note", e.target.value)} /></Field>
           </div>
 
