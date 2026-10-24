@@ -8,20 +8,32 @@
 import type { Mode } from "./types";
 
 function to12h(totalMin: number): string {
-  const h24 = Math.floor(totalMin / 60), m = totalMin % 60;
+  const t = ((totalMin % 1440) + 1440) % 1440;
+  const h24 = Math.floor(t / 60), m = t % 60;
   const ampm = h24 < 12 ? "AM" : "PM";
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-/** Specific pickup times, 30-minute increments, 06:00–20:00 — operating
- *  hours match the original's 06:00–20:00 window, just at finer
- *  granularity (a dropdown of exact times rather than 6 broad 2h windows). */
+/** Every pickup time of the day, 30-minute increments, listed starting at
+ *  06:00 AM and wrapping through midnight to 05:30 AM — a very early or
+ *  very late flight still has a close-by pickup option, not just the old
+ *  06:00–20:00 operating-hours window. startMin keeps climbing past 1440
+ *  (not wrapped) so the list — and the cutoff math below — stays in a
+ *  single increasing order; to12h() wraps it back to a real clock label. */
 export const SLOTS: { label: string; startMin: number }[] = (() => {
   const out: { label: string; startMin: number }[] = [];
-  for (let m = 6 * 60; m <= 20 * 60; m += 30) out.push({ label: to12h(m), startMin: m });
+  for (let i = 0; i < 48; i++) {
+    const m = 6 * 60 + i * 30;
+    out.push({ label: to12h(m), startMin: m });
+  }
   return out;
 })();
+
+/** Fallback "pick up the evening before" slot when no same-day window fits
+ *  — the latest slot that's still that calendar evening (11:30 PM), not
+ *  literally the last SLOTS entry (which is now an early-morning time). */
+const LAST_EVENING_SLOT = SLOTS.find((s) => s.startMin === 23 * 60 + 30)!.label;
 
 /** Counter cutoff, in hours before departure/sailing — 4h air, 1.5h rail, 3h sea. */
 const CUTOFF_HOURS: Partial<Record<Mode, number>> = { air: 4, rail: 1.5, sea: 3 };
@@ -94,7 +106,7 @@ export function computeTravelPlan(mode: Mode, arriving: boolean, date: string, t
     // Counter time is too early (or past midnight) for any same-day window — pick up the evening before.
     dateShifted = true;
     suggestedPickupDate = date ? shiftDate(date, -1) : "";
-    suggestedSlot = suggestedSlot && prevDay ? suggestedSlot : SLOTS[SLOTS.length - 1].label;
+    suggestedSlot = suggestedSlot && prevDay ? suggestedSlot : LAST_EVENING_SLOT;
   }
 
   return {
