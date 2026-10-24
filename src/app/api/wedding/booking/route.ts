@@ -2,6 +2,42 @@ import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
 
+/** Mirrors every new Y2K booking into a Google Sheet, alongside the Admin OS,
+ *  via a Google Apps Script "Web App" (see the setup doc for the script and
+ *  deployment steps). Fire-and-forget: a Sheets outage never blocks a real
+ *  booking, which has already been saved to Supabase by the time this runs.
+ *  Configured with Y2K_SHEET_WEBHOOK_URL + Y2K_SHEET_SECRET — both unset
+ *  until the team deploys the Apps Script, so this silently no-ops until
+ *  then. Only fires for brand-new bookings, not edits, so re-saving a
+ *  booking from the desk doesn't add a duplicate row. */
+function notifySheet(doc: Booking) {
+  const url = process.env.Y2K_SHEET_WEBHOOK_URL;
+  if (!url) return;
+  const payload = {
+    secret: process.env.Y2K_SHEET_SECRET ?? "",
+    bookingId: doc.id,
+    createdAt: doc.created,
+    familyName: doc.family?.name ?? "",
+    leadName: doc.traveller?.name ?? "",
+    mobile: doc.traveller?.mobile ?? "",
+    email: doc.traveller?.email ?? "",
+    side: doc.family?.side ?? "",
+    travellers: doc.family?.guests ?? "",
+    bags: doc.bags ?? "",
+    oversize: doc.oversize ?? "",
+    fromCity: doc.from ?? "",
+    toCity: doc.to ?? "",
+    pickupDate: doc.date ?? "",
+    pickupSlot: doc.slot ?? "",
+    note: doc.note ?? "",
+  };
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch((e) => console.error("Y2K sheet webhook failed:", e));
+}
+
 /** Create-or-update one wedding-desk family booking. Public (guests use it),
  *  but guarded the same way the SECURITY DEFINER RPCs guard the other
  *  customer writes — the anon key itself still has no path to the table:
@@ -41,6 +77,7 @@ export async function POST(req: Request) {
   const { data: prevRow, error: prevErr } = await sb.from("bookings").select("doc").eq("id", doc.id).maybeSingle();
   if (prevErr) return NextResponse.json({ error: prevErr.message }, { status: 500 });
   const prev = prevRow?.doc as Booking | undefined;
+  const isNew = !prev;
 
   if (prev) {
     const prevMobile = String(prev.traveller?.mobile ?? "").replace(/\D/g, "");
@@ -63,5 +100,6 @@ export async function POST(req: Request) {
     id: doc.id, doc, status: doc.status, created: doc.created,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (isNew) notifySheet(doc);
   return NextResponse.json({ ok: true, booking: doc });
 }
