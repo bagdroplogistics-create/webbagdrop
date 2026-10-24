@@ -25,7 +25,7 @@ interface Draft {
   uc: UseCase; mode: Mode;
   from: string; to: string; fromOther: string; toOther: string;
   pickAddr: string; dropAddr: string;
-  date: string; pickupDate: string; slot: string; flight: string; flightTime: string;
+  date: string; pickupDate: string; deliveryDate: string; slot: string; flight: string; flightTime: string;
   bags: number; oversize: number;
   name: string; mobile: string; email: string; note: string;
 }
@@ -35,7 +35,7 @@ export default function Wizard() {
   const [today, setToday] = useState("");
   const [d, setD] = useState<Draft>({
     uc: "d2a", mode: "air", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
-    pickAddr: "", dropAddr: "", date: "", pickupDate: "", slot: "", flight: "", flightTime: "",
+    pickAddr: "", dropAddr: "", date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "",
     bags: 2, oversize: 0, name: "", mobile: "", email: "", note: "",
   });
   /* dates come from the clock, which prerender forbids — set them on mount */
@@ -117,7 +117,7 @@ export default function Wizard() {
       uc: d.uc, ucName: SERVICES.find((s) => s.uc === d.uc)?.title ?? d.uc, mode: d.mode,
       from: fromName, to: toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
       zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
-      date: d.date, pickupDate: d.pickupDate || d.date, flightTime: d.flightTime || null, ref: d.flight.toUpperCase(), slot: d.slot,
+      date: d.date, pickupDate: d.pickupDate || d.date, deliveryDate: d.deliveryDate || null, flightTime: d.flightTime || null, ref: d.flight.toUpperCase(), slot: d.slot,
       bags: d.bags, oversize: d.oversize, billed: ror ? Math.max(d.bags + d.oversize, 1) : signed?.billed ?? d.bags,
       traveller: { name: d.name, mobile: d.mobile, email: d.email, res: "in" },
       payer: null, note: d.note, source: "website · next",
@@ -230,8 +230,11 @@ export default function Wizard() {
               <Field label={d.mode === "air" ? "Flight number" : "Reference (optional)"}>
                 <Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" />
               </Field>
-              <Field label="Travel date">
+              <Field label="Pickup Date">
                 <Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} />
+              </Field>
+              <Field label="Delivery Date (optional)">
+                <Input type="date" value={d.deliveryDate} min={d.date || today} onChange={(e) => set("deliveryDate", e.target.value)} />
               </Field>
             </div>
             {plan.usesFlightTime && (
@@ -356,8 +359,9 @@ export default function Wizard() {
           {([
             ["Service", SERVICES.find((s) => s.uc === d.uc)?.title],
             ["Route", `${fromName} → ${toName}`],
-            ["Travel", `${d.date}${d.flight ? ` · ${d.flight.toUpperCase()}` : ""}`],
-            ["Pickup", d.slot || "—"],
+            ["Pickup date", `${d.date}${d.flight ? ` · ${d.flight.toUpperCase()}` : ""}`],
+            ["Pickup time", d.slot || "—"],
+            ["Delivery date", d.deliveryDate || "—"],
             ["Pieces", `${d.bags} bags${d.oversize ? ` + ${d.oversize} oversize` : ""}`],
             ["Traveller", d.name || "—"],
           ] as const).map(([k, v]) => (

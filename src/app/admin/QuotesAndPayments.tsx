@@ -24,14 +24,14 @@ const SERVICES: { uc: UseCase; mode: Mode; title: string }[] = [
 interface Draft {
   title: string; name: string; mobile: string; email: string; res: "in" | "intl";
   uc: UseCase; mode: Mode; fromName: string; toName: string; fromOther: string; toOther: string;
-  pickAddr: string; dropAddr: string; date: string; pickupDate: string; flight: string; flightTime: string; slot: string;
+  pickAddr: string; dropAddr: string; date: string; pickupDate: string; deliveryDate: string; flight: string; flightTime: string; slot: string;
   bags: number; oversize: number; note: string;
 }
 
 const EMPTY: Draft = {
   title: "Mr.", name: "", mobile: "", email: "", res: "in",
   uc: "d2a", mode: "air", fromName: "Ahmedabad", toName: "Mumbai", fromOther: "", toOther: "",
-  pickAddr: "", dropAddr: "", date: "", pickupDate: "", flight: "", flightTime: "", slot: "",
+  pickAddr: "", dropAddr: "", date: "", pickupDate: "", deliveryDate: "", flight: "", flightTime: "", slot: "",
   bags: 2, oversize: 0, note: "",
 };
 
@@ -91,7 +91,7 @@ export default function QuotesAndPayments() {
         title: d.title, name: d.name, mobile: d.mobile, email: d.email || undefined, res: d.res,
         fromName, toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
         uc: d.uc, ucName: svc?.title, mode: d.mode, date: d.date, flight: d.flight,
-        pickupDate: d.pickupDate || d.date, flightTime: d.flightTime || undefined, slot: d.slot,
+        pickupDate: d.pickupDate || d.date, deliveryDate: d.deliveryDate || undefined, flightTime: d.flightTime || undefined, slot: d.slot,
         bags: d.bags, oversize: d.oversize, note: d.note,
       }),
     });
@@ -155,7 +155,8 @@ export default function QuotesAndPayments() {
             )}
             <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} /></Field>
             <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} /></Field>
-            <Field label="Travel date"><Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} /></Field>
+            <Field label="Pickup Date"><Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} /></Field>
+            <Field label="Delivery Date (optional)"><Input type="date" value={d.deliveryDate} min={d.date || today} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
             <Field label="Flight / reference (optional)"><Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" /></Field>
             {plan.usesFlightTime && (
               <Field label={d.uc === "a2d" ? (d.mode === "air" ? "Flight arrival time" : "Arrival time") : d.mode === "air" ? "Flight departure time" : d.mode === "rail" ? "Train departure time" : "Sailing time"}>

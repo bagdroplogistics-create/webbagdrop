@@ -15,7 +15,7 @@ import type { Booking, Mode, UseCase } from "@/lib/types";
 interface QuoteRequest {
   title?: string; name: string; mobile: string; email?: string; res?: "in" | "intl";
   fromName: string; toName: string; pickAddr?: string; dropAddr?: string;
-  uc?: UseCase; ucName?: string; mode?: Mode; date?: string; pickupDate?: string; flightTime?: string; slot?: string; flight?: string;
+  uc?: UseCase; ucName?: string; mode?: Mode; date?: string; pickupDate?: string; deliveryDate?: string; flightTime?: string; slot?: string; flight?: string;
   bags: number; oversize: number; note?: string; source?: string;
   validHours?: 24 | 48 | 168;
 }
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     uc: b.uc ?? "", ucName: b.ucName ?? b.uc ?? "", mode,
     from: b.fromName, to: b.toName, pickAddr: b.pickAddr ?? "", dropAddr: b.dropAddr ?? "",
     zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
-    date: b.date ?? "", pickupDate: b.pickupDate || b.date || undefined, flightTime: b.flightTime || null,
+    date: b.date ?? "", pickupDate: b.pickupDate || b.date || undefined, deliveryDate: b.deliveryDate || null, flightTime: b.flightTime || null,
     ref: (b.flight ?? "").toUpperCase(), slot: b.slot ?? "",
     bags, oversize, billed: ror ? Math.max(bags + oversize, 1) : q.billed,
     traveller: { title: b.title, name: b.name, mobile: b.mobile, email: b.email, res: b.res ?? "in" },
