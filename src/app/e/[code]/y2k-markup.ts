@@ -42,7 +42,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;height:92px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(20px,5vw,56px);background:transparent;color:var(--on-dark);transition:background .4s ease,color .4s ease,box-shadow .4s ease}
 .nav.scrolled{background:rgba(244,238,228,.94);backdrop-filter:blur(10px);color:var(--ink);box-shadow:0 1px 0 var(--line-2)}
 .nav .logo{display:flex;align-items:center}
-.nav .logo img{height:clamp(40px,7vw,64px);width:auto;display:block;filter:brightness(0) invert(1);transition:filter .4s ease}
+.nav .logo img{height:clamp(48px,8vw,80px);width:auto;display:block;filter:brightness(0) invert(1);transition:filter .4s ease}
 .nav.scrolled .logo img{filter:none}
 .nav-links{display:flex;align-items:center;gap:34px;font-size:12.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase}
 .nav-links a{text-decoration:none}
@@ -460,7 +460,7 @@ export const Y2K_HTML = `
 
 <footer>
   <div class="wrap">
-    <img src="/logo-white.png" alt="Bagdrop" style="display:block;margin:0 auto 20px;height:64px;width:auto"/>
+    <img src="/logo-white.png" alt="Bagdrop" style="display:block;margin:0 auto 36px;height:clamp(64px,14vw,120px);width:auto;opacity:.95"/>
     <div class="n">Yashna · Yash</div>
     <div class="d">17 &amp; 18 DECEMBER 2026 · UDAIPUR</div>
     <div class="h">#Y2K</div>
