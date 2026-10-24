@@ -51,6 +51,26 @@ body {
   background: var(--a-bg);
   color: var(--a-fg);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
+
+  /* Re-point the shared Tailwind theme tokens (globals.css's @theme above)
+   * to these same admin-os values. Every existing module already uses
+   * ordinary utilities like text-muted/font-display/border-line/bg-brand —
+   * CSS custom properties cascade, so overriding the token here retints
+   * all of them automatically, with no per-file changes. Scoped to
+   * .admin-os only, so the booking site's own pages (which never render
+   * inside this wrapper) keep the original tokens untouched. */
+  --color-brand: var(--a-accent);
+  --color-brand-dark: #C94E04;
+  --color-brand-soft: var(--a-ok-bg);
+  --color-ink: var(--a-fg);
+  --color-muted: var(--a-muted);
+  --color-faint: #948C82;
+  --color-line: var(--a-line);
+  --color-paper: var(--a-surface-2);
+  --color-canvas: var(--a-bg);
+  --font-display: var(--a-display);
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: var(--a-mono);
 }
 .admin-os .a-card { background: var(--a-surface); border: 1px solid var(--a-line); border-radius: 10px; padding: 14px; }
 .admin-os .a-stripe { border-left-width: 4px; border-left-style: solid; border-left-color: var(--a-line); padding-left: 10px; }

@@ -10,7 +10,7 @@
  *  not real vehicle telemetry — everything else on this page is real data. */
 import { useEffect, useState } from "react";
 import { inr } from "@/lib/pricing";
-import { anomalies, brief, forecast, stats, type Forecast, type Notice, type Stats } from "@/lib/intelligence";
+import { anomalies, brief, stats, type Notice, type Stats } from "@/lib/intelligence";
 import { watchAdminBookings } from "@/lib/adminApi";
 import { watchEvents } from "@/lib/eventsApi";
 import type { Booking, WeddingEvent } from "@/lib/types";
@@ -26,7 +26,7 @@ const LABEL: Record<string, string> = {
  *  effect, never during render — Next's Cache Components flags a bare
  *  Date.now() read in a Client Component's render path. */
 interface Computed {
-  s: Stats; notices: Notice[]; fc: Forecast; briefText: string;
+  s: Stats; notices: Notice[]; briefText: string;
   feed: (Booking["events"][number] & { bookingId: string })[];
   pickupsNext24h: number; cutoffsToday: number; exceptionsOpen: number;
 }
@@ -42,7 +42,6 @@ export default function CommandCentre() {
   useEffect(() => {
     const s = stats(all);
     const notices = anomalies(all);
-    const fc = forecast(all);
     const feed = all
       .flatMap((b) => b.events.map((e) => ({ ...e, bookingId: b.id })))
       .sort((a, b) => b.at.localeCompare(a.at))
@@ -52,14 +51,13 @@ export default function CommandCentre() {
     const pickupsNext24h = all.filter((b) => (b.pickupDate || b.date) === todayKey && activeStatuses.includes(b.status)).length;
     const cutoffsToday = all.filter((b) => b.date === todayKey && (b.mode === "air" || b.mode === "rail" || b.mode === "sea")).length;
     const exceptionsOpen = deriveExceptions(all).length;
-    setComputed({ s, notices, fc, briefText: brief(s, notices), feed, pickupsNext24h, cutoffsToday, exceptionsOpen });
+    setComputed({ s, notices, briefText: brief(s, notices), feed, pickupsNext24h, cutoffsToday, exceptionsOpen });
   }, [all]);
 
   if (!computed) return <p className="text-sm" style={{ color: "var(--a-muted)" }}>Reading the day…</p>;
-  const { s, notices, fc, briefText, feed, pickupsNext24h, cutoffsToday, exceptionsOpen } = computed;
+  const { s, notices, briefText, feed, pickupsNext24h, cutoffsToday, exceptionsOpen } = computed;
   const needsDecision = all.filter((b) => b.status === "submitted").slice(0, 8);
   const eventsOpen = events.filter((e) => e.status === "open").length;
-  const maxPieces = Math.max(1, ...fc.history.map((h) => h.actual), ...fc.future.map((f) => f.hi ?? 0));
 
   return (
     <div className="grid gap-3">
@@ -132,26 +130,6 @@ export default function CommandCentre() {
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="a-card">
-        <H3 r="80% band · retrains on every booking">Pieces per day · actual and forecast</H3>
-        <p className="mb-2 text-xs" style={{ color: "var(--a-muted)" }}>{fc.note}</p>
-        <div className="flex h-36 items-end gap-1">
-          {fc.history.map((h) => (
-            <div key={h.day} className="flex-1" title={`${h.day} · ${h.actual} pieces`}>
-              <div className="rounded-t" style={{ height: `${Math.max(2, (h.actual / maxPieces) * 100)}%`, background: "color-mix(in srgb, var(--a-accent) 70%, transparent)" }} />
-            </div>
-          ))}
-          {fc.future.slice(0, 7).map((f) => (
-            <div key={f.day} className="flex-1" title={`${f.day} · forecast ${Math.round(f.mu ?? 0)} (${Math.round(f.lo ?? 0)}–${Math.round(f.hi ?? 0)})`}>
-              <div className="rounded-t border border-dashed" style={{ height: `${Math.max(2, ((f.mu ?? 0) / maxPieces) * 100)}%`, borderColor: "color-mix(in srgb, var(--a-accent) 60%, transparent)", background: "color-mix(in srgb, var(--a-accent) 15%, transparent)" }} />
-            </div>
-          ))}
-        </div>
-        <p className="mt-1.5 text-[11px]" style={{ fontFamily: "var(--a-mono)", color: "var(--a-muted)" }}>
-          solid = actual, last 14 days · dashed = forecast, next 7 days · next week ≈ {fc.weekTotal} pieces · ~{fc.captainsNeeded} captain{fc.captainsNeeded === 1 ? "" : "s"} needed
-        </p>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
