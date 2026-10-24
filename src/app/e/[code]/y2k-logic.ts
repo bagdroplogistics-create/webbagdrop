@@ -1,9 +1,15 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/** Y2K wedding desk logic — ported line-for-line from the static build's
- *  y2k.html inline script (family wizard, tag preview, tracker, ops desk,
- *  canvas art, countdown). Only the data layer changed, to fit the Admin OS
- *  security model:
+/** Y2K wedding desk logic (family wizard, tag preview, tracker, ops desk,
+ *  countdown, nav). The booking wizard (steps, validation, tags, tracker,
+ *  ops) is unchanged; the marketing chrome around it — nav, hero, banner,
+ *  celebration, destination, travel — was redesigned to match the live
+ *  bagdrop.co/y2k page: real photography replaces the old canvas mountain
+ *  art (so the ridges()/drawArt() canvas painters and their resize listener
+ *  are gone), the travel section's tag-demo preview is gone (that page has
+ *  a luggage photo there instead), and step 0 ("Who's booking?") drops the
+ *  phone-number "Find my family" guest-list lookup to match the live
+ *  page's simpler lead-guest/mobile/email/side form. Data layer:
  *   - DB.get("bookings", code)   -> getBookingDoc (get_booking RPC, one row)
  *   - DB.put("bookings", ...)    -> saveWeddingBooking (server route; event
  *                                   must be open, same-mobile guard, status/
@@ -43,14 +49,6 @@ export function initY2k(): () => void {
   const CITIES = ["Mumbai", "Thane", "Navi Mumbai", "Other city"];
   const EVENT_CODE = "Y2K-WED";
 
-  /* Sample guest list: stands in for the host's rooming list (demo data). */
-  const DEMO_LIST = [
-    { phone: "9820011111", family: "Mehta family", side: "bride", members: [
-      { name: "Rajesh Mehta", room: "214" }, { name: "Neha Mehta", room: "214" }, { name: "Aarav Mehta", room: "216" }, { name: "Kusum Mehta", room: "108", note: "Ground floor, step-free" }] },
-    { phone: "9820022222", family: "Shah family", side: "groom", members: [
-      { name: "Paresh Shah", room: "305" }, { name: "Rina Shah", room: "305" }, { name: "Dev Shah", room: "" }] },
-  ];
-
   /* ---------- Helpers ---------- */
   const $ = (s: string, r: Document | HTMLElement = document) => r.querySelector(s) as HTMLElement | null;
   const esc = (s: any) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
@@ -66,7 +64,7 @@ export function initY2k(): () => void {
   function blankMember(n: number) { return { id: "G" + pad(n), name: "", phone: "", room: "", roomFromList: false, note: "", arrDate: "16 Dec", arrTime: "", mode: "Flight", travelNo: "", depDate: "19 Dec", depTime: "" }; }
   function blankPickup(n: number) { return { id: "P" + n, label: n === 1 ? "Home" : "", city: "Mumbai", address: "", pincode: "", landmark: "", lift: "Lift available", contact: "", contactPhone: "", window: "early", date: "", slot: "", members: [] as string[] }; }
   function fresh(): any {
-    return { family: { phone: "", lead: "", email: "", side: "", familyName: "", fromList: false, listChecked: false },
+    return { family: { phone: "", lead: "", email: "", side: "", familyName: "" },
       members: [blankMember(1)], pickups: [blankPickup(1)], bags: [] as any[], extraReturn: "0", retSameRoom: "room", notes: "",
       decl: { items: false, value: false, terms: false, consent: false }, seq: { g: 1, p: 1, b: 0 } };
   }
@@ -153,17 +151,11 @@ export function initY2k(): () => void {
 
   /* ---------- Step renderers ---------- */
   function rStep0() {
-    const f = S.family; const found = f.listChecked;
-    return `<h3 class="ph">Who's booking?</h3><p class="psub">Start with your mobile number. If you're on the host's guest list, we'll fill in your family and rooms for you.</p>
+    const f = S.family;
+    return `<h3 class="ph">Who's booking?</h3><p class="psub">Start with the lead guest. You can add family members, pickups and bags in the next steps.</p>
   <div class="grid">
-    <div class="full" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end">
-      ${inp("family.phone", "Mobile / WhatsApp", { type: "tel", im: "numeric", max: 13, ph: "10-digit number", ac: "tel" })}
-      <button class="btn ghost" type="button" data-act="lookup" style="min-height:46px;margin-bottom:${showErrors && E["family.phone"] ? "22px" : "0"}">Find my family</button>
-    </div>
-    ${found ? (f.fromList ? `<div class="full callout ok">Found <b>${esc(f.familyName)}</b> on the guest list: ${S.members.length} guests, rooms from the host's rooming list. You can change anything on the next step.</div>`
-      : `<div class="full callout">This number isn't on the guest list we have. That's fine: carry on and add your family by hand. We'll match rooms with the host before pickup.</div>`)
-      : `<div class="full hint">Demo: try <b>9820011111</b> (bride's side) or <b>9820022222</b> (groom's side). Sample guest list, not real guests.</div>`}
-    ${inp("family.lead", "Your full name", { ph: "Full name", ac: "name" })}
+    ${inp("family.lead", "Lead guest name", { ph: "Full name", ac: "name" })}
+    ${inp("family.phone", "Mobile / WhatsApp", { type: "tel", im: "numeric", max: 13, ph: "10-digit number", ac: "tel" })}
     ${inp("family.email", "Email", { type: "email", opt: true, ph: "your@email.com", ac: "email" })}
     <div class="f full${bad("family.side")}"><span class="lab">You're a guest of</span>
       <div class="seg" style="margin-top:7px">
@@ -451,7 +443,6 @@ export function initY2k(): () => void {
     const go = (e.target as HTMLElement).closest("[data-go]") as HTMLButtonElement | null; if (go && !go.disabled) { step = +go.dataset.go!; showErrors = false; renderPanel(); scrollPanel(); return; }
     const a = (e.target as HTMLElement).closest("[data-act]") as HTMLElement | null; if (!a) return;
     const i = +(a.dataset.i ?? -1), act = a.dataset.act;
-    if (act === "lookup") return lookup();
     if (act === "addMember") { S.seq.g++; S.members.push(blankMember(S.seq.g)); }
     if (act === "rmMember") { const id = S.members[i].id; S.members.splice(i, 1); S.pickups.forEach((p: any) => p.members = p.members.filter((x: string) => x !== id)); S.bags.forEach((b: any) => { if (b.owner === id) b.owner = ""; }); }
     if (act === "addPickup") { S.seq.p++; const p = blankPickup(S.seq.p); S.pickups.push(p); }
@@ -478,21 +469,6 @@ export function initY2k(): () => void {
     showErrors = false;
     if (step < 5) { step++; maxStep = Math.max(maxStep, step); renderPanel(); scrollPanel(); } else void confirmBooking();
   }, { signal });
-  function lookup() {
-    const ph = String(S.family.phone).replace(/\D/g, "").slice(-10);
-    if (!phoneOk(ph)) { showErrors = true; renderPanel(); return; }
-    const hit = DEMO_LIST.find((x) => x.phone === ph);
-    S.family.listChecked = true; S.family.fromList = !!hit;
-    if (hit) {
-      S.family.familyName = hit.family; S.family.side = hit.side;
-      if (!S.family.lead) S.family.lead = hit.members[0].name;
-      S.members = hit.members.map((m: any, i: number) => Object.assign(blankMember(i + 1), { name: m.name, room: m.room, roomFromList: !!m.room, note: m.note || "" }));
-      S.seq.g = S.members.length;
-      S.pickups[0].members = S.members.map((m: any) => m.id);
-      S.pickups[0].contact = S.family.lead; S.pickups[0].contactPhone = ph;
-    }
-    showErrors = false; renderPanel();
-  }
 
   /* ---------- Save ---------- */
   async function confirmBooking() {
@@ -563,51 +539,35 @@ export function initY2k(): () => void {
     } catch { toast("Couldn't update. Check your access."); }
   }
 
-  /* ---------- Art ---------- */
-  function ridges(cv: HTMLCanvasElement, opt: any) {
-    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = Math.max(1, r.width * dpr); cv.height = Math.max(1, r.height * dpr);
-    const x = cv.getContext("2d")!, W = cv.width, H = cv.height;
-    const g = x.createLinearGradient(0, 0, 0, H); opt.sky.forEach((c: string, i: number) => g.addColorStop(i / (opt.sky.length - 1), c)); x.fillStyle = g; x.fillRect(0, 0, W, H);
-    if (opt.sun) { const s = x.createRadialGradient(W * opt.sun[0], H * opt.sun[1], 0, W * opt.sun[0], H * opt.sun[1], W * .5); s.addColorStop(0, opt.sun[2]); s.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = s; x.fillRect(0, 0, W, H); }
-    opt.layers.forEach((L: any, li: number) => {
-      x.beginPath(); x.moveTo(0, H);
-      for (let i = 0; i <= W; i += 4 * dpr) { const t = i / W; const y = H * L.base - Math.sin(t * L.f + li) * H * L.a - Math.sin(t * L.f * 2.7 + li * 3) * H * L.a * .45 - Math.sin(t * L.f * 7.3 + li) * H * L.a * .12; x.lineTo(i, y); }
-      x.lineTo(W, H); x.closePath(); x.fillStyle = L.c; x.fill();
-      if (L.lake) { x.fillStyle = L.lake; x.beginPath(); x.ellipse(W * .66, H * L.base + H * .02, W * .16, H * .018, 0, 0, Math.PI * 2); x.fill(); }
-    });
-    if (opt.palace) { const px = W * .62, py = H * .72, pw = W * .34; x.fillStyle = "#1b1612";
-      x.beginPath(); x.moveTo(px, H); x.lineTo(px, py); for (let k = 0; k < 7; k++) { const cx = px + pw * (k + .5) / 7; x.lineTo(cx - pw * .035, py); x.quadraticCurveTo(cx, py - H * .06, cx + pw * .035, py); } x.lineTo(px + pw, py); x.lineTo(px + pw, H); x.fill();
-      let h = 99; for (let k = 0; k < 160; k++) { h = (h * 1103515245 + 12345) >>> 0; const lx = px + (h % 1000) / 1000 * pw; h = (h * 1103515245 + 12345) >>> 0; const ly = py + (h % 1000) / 1000 * (H - py) * .8 + H * .01; x.fillStyle = `rgba(255,${190 + (h % 50)},${110 + (h % 40)},${.55 + (h % 40) / 100})`; x.fillRect(lx, ly, 2 * dpr, 2 * dpr); } }
-    const v = x.createLinearGradient(0, 0, 0, H); v.addColorStop(0, "rgba(20,16,12,.15)"); v.addColorStop(1, opt.fade || "rgba(20,16,12,.55)"); x.fillStyle = v; x.fillRect(0, 0, W, H);
-  }
-  function drawArt() {
-    ridges($("#heroArt") as HTMLCanvasElement, { sky: ["#6f5f4c", "#a48a6a", "#c9ad86", "#8a7158"], sun: [.68, .42, "rgba(255,226,170,.35)"],
-      layers: [{ base: .62, a: .06, f: 5, c: "#7a6650" }, { base: .7, a: .07, f: 4, c: "#5f4f3e", lake: "rgba(214,196,160,.45)" }, { base: .8, a: .06, f: 6, c: "#46392c" }, { base: .92, a: .08, f: 3, c: "#2f261d" }] });
-    ridges($("#duskArt") as HTMLCanvasElement, { sky: ["#3a3550", "#8a5a62", "#d98a5a", "#e7b272"], sun: [.5, .62, "rgba(255,200,140,.4)"],
-      layers: [{ base: .66, a: .05, f: 6, c: "#5b4256" }, { base: .76, a: .06, f: 4, c: "#3d2d3b" }, { base: .88, a: .06, f: 5, c: "#241b22" }], palace: true, fade: "rgba(18,14,16,.6)" });
-  }
-  let rz: ReturnType<typeof setTimeout>;
-  window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawArt, 150); }, { signal });
-
   /* ---------- Countdown ---------- */
   function tick() { let d = Math.max(0, WEDDING.getTime() - Date.now()); const D = Math.floor(d / 864e5); d -= D * 864e5; const h = Math.floor(d / 36e5); d -= h * 36e5; const m = Math.floor(d / 6e4); const s = Math.floor((d - m * 6e4) / 1e3);
     $("#cd-d")!.textContent = String(D); $("#cd-h")!.textContent = pad(h); $("#cd-m")!.textContent = pad(m); $("#cd-s")!.textContent = pad(s); }
   tick(); timers.push(setInterval(tick, 1000));
 
-  /* ---------- Demo tags in Travel section ---------- */
-  (function () {
-    const st1 = { family: { side: "bride", familyName: "Mehta family" }, members: [{ id: "G01", name: "Rajesh Mehta", room: "214" }] };
-    const st2 = { family: { side: "groom", familyName: "Shah family" }, members: [{ id: "G02", name: "Rina Shah", room: "305" }] };
-    const el = $("#tagDemo")!;
-    el.innerHTML = tagHTML({ id: "B01", owner: "G01", type: "large", colour: "Navy", deliverTo: "room", ret: true, retDate: "19 Dec" }, st1, "Y2K-F214") +
-      tagHTML({ id: "B03", owner: "G02", type: "garment", colour: "Maroon", deliverTo: "room", hang: true, value: "80000", ret: true, retDate: "20 Dec" }, st2, "Y2K-F305");
-    drawTagCodes(el);
-  })();
+  /* ---------- Nav: solid background past the hero, hamburger drawer ---------- */
+  function onScroll() {
+    const nav = $("#siteNav"); if (!nav) return;
+    if (window.scrollY > 80) nav.classList.add("scrolled"); else nav.classList.remove("scrolled");
+  }
+  onScroll();
+  window.addEventListener("scroll", onScroll, { signal, passive: true });
+  function openDrawer() { $("#navDrawer")?.classList.add("open"); $("#navBackdrop")?.classList.add("open"); }
+  function closeDrawer() { $("#navDrawer")?.classList.remove("open"); $("#navBackdrop")?.classList.remove("open"); }
+  $("#navOpen")?.addEventListener("click", openDrawer, { signal });
+  $("#navClose")?.addEventListener("click", closeDrawer, { signal });
+  $("#navBackdrop")?.addEventListener("click", closeDrawer, { signal });
+  document.querySelectorAll("[data-nav-link]").forEach((a) => a.addEventListener("click", closeDrawer, { signal }));
+
+  /* ---------- Fade-up reveal as sections scroll into view ---------- */
+  const revealObserver = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => { entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); revealObserver?.unobserve(en.target); } }); }, { threshold: 0.15 })
+    : null;
+  document.querySelectorAll(".reveal").forEach((el) => (revealObserver ? revealObserver.observe(el) : el.classList.add("in")));
+  if (revealObserver) unsubs.push(() => revealObserver.disconnect());
 
   /* ---------- Boot ---------- */
   try { const raw = localStorage.getItem("y2k-booking"); if (raw) { booking = JSON.parse(raw); mode = "done"; } } catch {}
-  drawArt(); renderPanel(); renderTrack();
+  renderPanel(); renderTrack();
 
   if (booking) watchMine(booking.bookingId);
   /* ops desk: opened from the admin console with ?ops=1 — the manifest reads

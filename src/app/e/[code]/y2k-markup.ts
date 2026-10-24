@@ -1,9 +1,12 @@
-/** Y2K wedding desk — CSS and body markup, verbatim from the static build's
- *  y2k.html ("make no mistakes": the page was signed off as-is, so the DOM
- *  and styles are carried over byte-for-byte; y2k-logic.ts drives them). */
+/** Y2K wedding desk — CSS and body markup. The marketing chrome (nav, hero,
+ *  banner, celebration, destination, travel) was redesigned to match the
+ *  live bagdrop.co/y2k page (real photography, fixed/hamburger nav, dark
+ *  "wedding-synced" banner) — see the redesign note in y2k-logic.ts. The
+ *  booking wizard, track and ops sections further down (the "Booking"
+ *  comment block) are unchanged: bagdrop.co/y2k's own wizard CSS (its
+ *  ".ywz" namespace) is the same design already ported here. */
 
 export const Y2K_CSS = `
-/* Layout: same rhythm as bagdrop.co/y2k (sepia hero, cream, dusk, forest, cream booking desk, deep-forest footer), with a family booking wizard, tag preview, tracker and ops desk added. Single, deliberate light look. */
 :root{
   --cream:#F4EEE4; --paper:#FBF8F2; --card:#FFFFFF; --ink:#2B2620; --body:#5A5145;
   --label:#6B5A3E; --stone:#8A8172; --line:#E0D5C2; --line-2:#EDE5D6;
@@ -33,39 +36,50 @@ h2.big em{font-style:italic;color:var(--label)}
 .lede{max-width:56ch;color:var(--body)}
 .on-dark .lede{color:rgba(244,238,228,.78)}
 
-/* Nav */
-.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:rgba(244,238,228,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line-2)}
-.nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.logo svg{width:30px;height:40px}
-.logo b{font-size:10px;letter-spacing:.14em;font-weight:700}
-.nav ul{display:flex;gap:28px;list-style:none;margin:0;padding:0;align-items:center}
-.nav ul a{text-decoration:none;font-size:12px;letter-spacing:.18em;text-transform:uppercase}
-.nav .pill{border:1px solid var(--ink);border-radius:99px;padding:9px 18px}
-.nav .pill:hover{background:var(--ink);color:var(--cream)}
-@media (max-width:760px){.nav ul li.hide-sm{display:none}.nav ul{gap:14px}}
+/* Nav — fixed, transparent over the hero; gains a solid background once
+ *  scrolled past it (logic.ts toggles .scrolled). Collapses to a hamburger
+ *  + slide-in drawer under 860px. */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;height:92px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(20px,5vw,56px);background:transparent;color:var(--on-dark);transition:background .4s ease,color .4s ease,box-shadow .4s ease}
+.nav.scrolled{background:rgba(244,238,228,.94);backdrop-filter:blur(10px);color:var(--ink);box-shadow:0 1px 0 var(--line-2)}
+.nav .logo{display:flex;align-items:center}
+.nav .logo img{height:clamp(40px,7vw,64px);width:auto;display:block;filter:brightness(0) invert(1);transition:filter .4s ease}
+.nav.scrolled .logo img{filter:none}
+.nav-links{display:flex;align-items:center;gap:34px;font-size:12.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase}
+.nav-links a{text-decoration:none}
+.nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:999px;transition:background .2s,color .2s}
+.nav-links .pill:hover{background:currentColor;color:var(--forest)}
+.nav.scrolled .nav-links .pill:hover{color:var(--cream)}
+.hamburger{display:none;background:none;border:0;color:inherit;cursor:pointer;padding:8px;flex-direction:column;gap:5px;width:42px;height:42px;align-items:center;justify-content:center}
+.hamburger span{width:22px;height:1.5px;background:currentColor;display:block}
+@media (max-width:860px){.nav-links{display:none}.hamburger{display:flex}}
+.navdrawer-backdrop{position:fixed;inset:0;z-index:110;background:rgba(20,16,10,.45);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .35s ease}
+.navdrawer-backdrop.open{opacity:1;pointer-events:auto}
+.navdrawer{position:fixed;top:0;right:0;bottom:0;z-index:120;width:min(82vw,340px);background:var(--forest);color:var(--on-dark);transform:translateX(100%);transition:transform .42s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:28px 30px;box-shadow:-20px 0 60px rgba(0,0,0,.3)}
+.navdrawer.open{transform:translateX(0)}
+.navdrawer .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+.navdrawer .head span{font-family:var(--display);font-size:22px;letter-spacing:.04em}
+.navdrawer .close{background:rgba(255,255,255,.1);border:0;color:var(--on-dark);width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
+.navdrawer nav{display:flex;flex-direction:column;gap:4px;font-family:var(--display)}
+.navdrawer nav a{font-size:30px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none}
+.navdrawer .cta{margin-top:auto;text-align:center;background:var(--gold);color:var(--forest);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:18px;border-radius:999px;text-decoration:none}
 
-/* Hero */
-.hero{position:relative;min-height:620px;display:grid;place-items:center;text-align:center;color:var(--on-dark);overflow:hidden;background:#4a3e30}
-.hero canvas,.dusk canvas{position:absolute;inset:0;width:100%;height:100%}
-.hero .in{position:relative;padding-block:90px 70px}
-.hero .place{font-size:12px;letter-spacing:.42em;text-transform:uppercase;opacity:.85}
-.names{font-family:var(--display);font-style:italic;font-weight:400;font-size:clamp(64px,13vw,152px);line-height:1;letter-spacing:-.01em;margin:.25em 0 .2em;display:flex;align-items:center;justify-content:center;gap:.25em;flex-wrap:wrap}
-.names .heart{width:.3em;height:.3em;color:var(--sand)}
-.date-pill{display:inline-flex;align-items:center;gap:14px;border:1px solid rgba(244,238,228,.35);background:rgba(36,30,22,.35);border-radius:99px;padding:10px 22px;font-size:13px;letter-spacing:.24em}
-.date-pill:before,.date-pill:after{content:"";width:24px;height:1px;background:rgba(244,238,228,.5)}
-.count{display:flex;justify-content:center;gap:clamp(20px,5vw,56px);margin-top:34px}
-.count div{display:grid;gap:2px}
-.count b{font-family:var(--display);font-weight:400;font-size:clamp(36px,6vw,56px);line-height:1;color:var(--sand);font-variant-numeric:tabular-nums}
-.count span{font-size:10px;letter-spacing:.28em;text-transform:uppercase;opacity:.7}
-
-/* Strip */
-.strip{background:var(--cream);padding-block:64px;text-align:center}
-.strip h3{font-family:var(--display);font-weight:400;font-size:clamp(28px,4vw,40px);margin:0 0 8px;letter-spacing:.04em;text-transform:uppercase}
-.strip p{margin:0 auto 22px;max-width:52ch;color:var(--body)}
-.chips{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper);border-radius:99px;padding:7px 14px;font-size:12px;letter-spacing:.08em;color:var(--label)}
-.chip i{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
+/* Hero — real photography instead of canvas art */
+.hero{position:relative;min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 20px 56px;overflow:hidden;color:var(--on-dark)}
+.hero .bg{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-image:url(/images/y2k-hero-mountains.webp)}
+.hero .shade{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(20,16,10,.55) 0%,rgba(20,16,10,.32) 30%,rgba(20,16,10,.42) 58%,rgba(20,16,10,.82) 100%)}
+.hero .vignette{position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse 60% 45% at 50% 46%,rgba(20,16,10,.4) 0%,transparent 70%)}
+.hero .ridge{position:absolute;left:0;right:0;bottom:0;width:100%;height:200px;z-index:1;pointer-events:none;opacity:.5}
+.hero .in{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center}
+.hero .place{font-size:12px;font-weight:500;letter-spacing:.42em;text-transform:uppercase;opacity:.9;margin-bottom:28px;padding-left:.42em}
+.names{font-family:var(--display);font-weight:400;font-size:clamp(52px,13vw,152px);line-height:.94;letter-spacing:-.01em;margin:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:clamp(14px,4vw,44px);text-shadow:0 2px 30px rgba(0,0,0,.55),0 1px 4px rgba(0,0,0,.4)}
+.names em{font-style:italic}
+.names .heart{width:clamp(28px,7vw,62px);height:auto;flex-shrink:0;color:var(--sand)}
+.date-pill{display:flex;align-items:center;gap:16px;margin-top:34px;background:rgba(20,16,10,.32);border:1px solid rgba(232,206,154,.4);backdrop-filter:blur(2px);padding:12px 24px;border-radius:999px;font-size:clamp(12px,1.6vw,15px);letter-spacing:.28em;text-transform:uppercase;font-weight:600;color:var(--sand-2);text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.date-pill .ln{width:28px;height:1px;background:rgba(232,206,154,.6)}
+.count{display:flex;gap:clamp(20px,6vw,52px);margin-top:48px}
+.count div{display:flex;flex-direction:column;align-items:center;gap:8px}
+.count b{font-family:var(--display);font-weight:400;font-size:clamp(34px,7vw,56px);line-height:1;color:var(--sand);font-variant-numeric:tabular-nums}
+.count span{font-size:10px;letter-spacing:.24em;text-transform:uppercase;opacity:.8}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;cursor:pointer;font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;border-radius:var(--r);padding:16px 26px;background:var(--forest);color:var(--on-dark);text-decoration:none;transition:transform .15s,background .15s}
 .btn:hover{background:var(--forest-2);transform:translateY(-1px)}
@@ -75,36 +89,60 @@ h2.big em{font-style:italic;color:var(--label)}
 .btn.sm{padding:10px 14px;font-size:11px;border-radius:10px}
 .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
 
+/* Banner — "travel light to the mountains" card right under the hero */
+.banner-wrap{background:var(--cream);padding:clamp(40px,7vw,80px) clamp(20px,5vw,56px) clamp(20px,4vw,48px);position:relative;z-index:3}
+.banner{max-width:1120px;margin:0 auto;background:#4A3B29;color:var(--on-dark);border-radius:26px;padding:clamp(30px,5vw,52px);display:flex;flex-wrap:wrap;align-items:center;gap:clamp(22px,4vw,48px);box-shadow:0 30px 70px rgba(45,32,18,.28);position:relative;overflow:hidden}
+.banner .ridge2{position:absolute;right:-20px;bottom:-10px;width:320px;height:120px;opacity:.14;pointer-events:none}
+.banner .copy{flex:1 1 340px;min-width:min(260px,100%)}
+.banner .copy .eyebrow{color:var(--sand)}
+.banner .copy p{font-family:var(--display);font-size:clamp(24px,3.4vw,36px);line-height:1.24;margin:16px 0 0;font-weight:400}
+.banner .stats-cta{flex:0 0 auto;display:flex;flex-direction:column;gap:14px;min-width:min(220px,100%)}
+.banner .bstats{display:flex;gap:22px}
+.banner .bstats b{font-family:var(--display);font-weight:400;font-size:30px;color:var(--sand);display:block;line-height:1}
+.banner .bstats span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.banner .cta{text-align:center;background:var(--sand);color:#3A2E1C;font-family:var(--sans);font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:16px 28px;border-radius:999px;text-decoration:none}
+
 /* Celebration */
-.cel{padding-block:100px}
+.cel{padding-block:clamp(96px,14vw,168px) clamp(60px,9vw,110px)}
 .two{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(28px,6vw,80px);align-items:center}
 .two>*{min-width:0}
 @media (max-width:860px){.two{grid-template-columns:1fr}}
 .stats{display:flex;gap:40px;margin-top:28px;flex-wrap:wrap}
 .stats b{display:block;font-family:var(--display);font-weight:400;font-size:44px;line-height:1}
 .stats span{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--stone)}
-.monocard{aspect-ratio:4/5;max-width:100%;border-radius:22px;background:radial-gradient(120% 90% at 30% 10%,#FFFDF8,#EFE5D3 70%);border:1px solid var(--line);display:grid;place-items:center;text-align:center;padding:30px;position:relative;box-shadow:0 30px 60px -30px rgba(58,46,28,.35)}
-.monocard:before{content:"";position:absolute;inset:14px;border:1px solid var(--line);border-radius:14px}
-.mono{font-family:var(--display);font-style:italic;font-size:clamp(90px,12vw,150px);line-height:.9;color:var(--label)}
-.mono small{display:block;font-style:normal;font-size:13px;letter-spacing:.32em;text-transform:uppercase;color:var(--stone);margin-top:22px;font-family:var(--sans)}
-.tag-hash{font-family:var(--display);font-size:22px;letter-spacing:.2em;color:var(--gold-2);margin-top:6px}
+.cel .photo{position:relative}
+.cel .frame{position:relative;width:100%;aspect-ratio:4/5;border-radius:22px;overflow:hidden;box-shadow:0 30px 60px rgba(45,32,18,.16)}
+.cel .frame img{width:100%;height:100%;object-fit:cover;display:block}
+.cel .badge{position:absolute;bottom:-22px;left:-22px;background:var(--cream);padding:18px 24px;border-radius:16px;box-shadow:0 14px 34px rgba(45,32,18,.12);font-family:var(--display);font-style:italic;font-size:20px;color:var(--label)}
 
-/* Dusk */
-.dusk{position:relative;min-height:520px;color:var(--on-dark);overflow:hidden;background:#2b2230;display:flex;align-items:center}
-.dusk .wrap{position:relative;width:100%;padding-block:90px}
-.dusk h2{font-family:var(--display);font-weight:400;font-size:clamp(52px,8vw,96px);line-height:1;margin:.25em 0 .35em}
-.dusk h2 em{display:block}
-.dusk p{max-width:46ch;color:rgba(244,238,228,.85)}
+/* Destination — full-bleed photo */
+.dusk{position:relative;min-height:86vh;display:flex;align-items:flex-end;padding:clamp(40px,8vw,88px) clamp(20px,5vw,56px);overflow:hidden;color:var(--on-dark)}
+.dusk .bg{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-image:url(/images/y2k-taj-aravali-dusk.webp)}
+.dusk .shade{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(20,16,10,.34) 0%,rgba(20,16,10,.05) 40%,rgba(20,16,10,.78) 100%)}
+.dusk .in{position:relative;z-index:2;max-width:1120px;margin:0 auto;width:100%}
+.dusk h2{font-family:var(--display);font-weight:400;font-size:clamp(42px,8vw,96px);line-height:1;margin:18px 0 0;letter-spacing:-.01em}
+.dusk h2 em{font-style:italic;display:block}
+.dusk p{font-size:clamp(15px,1.8vw,18px);line-height:1.8;max-width:52ch;margin:24px 0 0;color:rgba(244,238,228,.9)}
 
 /* Travel */
-.travel{background:var(--forest);color:var(--on-dark);padding-block:100px;position:relative}
-.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:56px}
-@media (max-width:980px){.steps{grid-template-columns:repeat(2,1fr)}}
+.travel{background:var(--forest);color:var(--on-dark);padding-block:clamp(88px,12vw,148px);position:relative;overflow:hidden}
+.travel .ridge3{position:absolute;left:0;right:0;top:0;width:100%;height:220px;opacity:.1;pointer-events:none}
+.travel .photo{position:relative}
+.travel .frame{position:relative;width:100%;aspect-ratio:4/3;border-radius:22px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.28)}
+.travel .frame img{width:100%;height:100%;object-fit:cover;display:block}
+.travel .badge{position:absolute;bottom:-18px;left:-18px;background:var(--sand);color:var(--forest);padding:12px 20px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.22);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:56px}
+@media (max-width:860px){.steps{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.steps{grid-template-columns:1fr}}
 .step{background:var(--forest-card);border:1px solid rgba(244,238,228,.08);border-radius:18px;padding:26px 22px}
 .step b{font-family:var(--display);font-weight:400;font-size:40px;color:var(--gold);line-height:1}
 .step h4{margin:14px 0 6px;font-size:16px;font-weight:600}
 .step p{margin:0;font-size:14px;color:rgba(244,238,228,.7)}
+
+/* Fade-up reveal on scroll (logic.ts toggles .in via IntersectionObserver) */
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
 
 /* Luggage tag */
 .ltag{position:relative;background:var(--paper);color:var(--ink);border-radius:16px 16px 16px 16px;padding:18px 18px 16px 34px;border:1px solid var(--line);min-width:0;box-shadow:0 18px 40px -24px rgba(0,0,0,.45);font-size:13px}
@@ -120,8 +158,6 @@ h2.big em{font-style:italic;color:var(--label)}
 .ltag .meta span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--label)}
 .ltag .meta span.hot{background:#F6E7D3;border-color:#E4C79C;color:#7A4E14}
 .ltag canvas{width:64px;height:64px;image-rendering:pixelated;flex:none}
-.tagdemo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
-@media (max-width:520px){.tagdemo{grid-template-columns:1fr}}
 
 /* Booking */
 .book{padding-block:100px}
@@ -257,28 +293,44 @@ footer .base{border-top:1px solid rgba(244,238,228,.1);margin-top:44px;padding-t
 `;
 
 export const Y2K_HTML = `
-<nav class="nav" aria-label="Main">
-  <div class="wrap">
-    <a class="logo" href="#top" aria-label="Bagdrop">
-      <svg viewBox="0 0 30 40" aria-hidden="true"><rect x="10" y="0" width="10" height="7" rx="2" fill="none" stroke="#111" stroke-width="2.4"/><path d="M4 7h12c6 0 10 4 10 9 0 2.6-1.2 4.7-3 6 2.6 1.4 4 3.8 4 6.8C27 34 23 38 17 38H4z" fill="#111"/><path d="M11 18l7 5-7 5z" fill="#F4EEE4"/></svg>
-      <b>BAGDROP</b>
-    </a>
-    <ul>
-      <li class="hide-sm"><a href="#celebration">Celebration</a></li>
-      <li class="hide-sm"><a href="#destination">Destination</a></li>
-      <li class="hide-sm"><a href="#travel">Travel</a></li>
-      <li><a href="#track">Track</a></li>
-      <li><a class="pill" href="#book">Book bags</a></li>
-    </ul>
+<nav class="nav" id="siteNav" aria-label="Main">
+  <a class="logo" href="#top" aria-label="Bagdrop"><img src="/logo-white.png" alt="Bagdrop"/></a>
+  <div class="nav-links">
+    <a href="#celebration">Celebration</a>
+    <a href="#destination">Destination</a>
+    <a href="#travel">Travel</a>
+    <a class="pill" href="#book">Book Bags</a>
   </div>
+  <button type="button" class="hamburger" id="navOpen" aria-label="Open menu">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
 
+<div class="navdrawer-backdrop" id="navBackdrop"></div>
+<aside class="navdrawer" id="navDrawer">
+  <div class="head">
+    <span>Yashna &amp; Yash</span>
+    <button type="button" class="close" id="navClose" aria-label="Close menu">&times;</button>
+  </div>
+  <nav>
+    <a href="#celebration" data-nav-link>The Celebration</a>
+    <a href="#destination" data-nav-link>The Destination</a>
+    <a href="#travel" data-nav-link>Travel Light</a>
+  </nav>
+  <a href="#book" class="cta" data-nav-link>Book Luggage Pickup</a>
+</aside>
+
 <header class="hero" id="top">
-  <canvas id="heroArt" aria-hidden="true"></canvas>
-  <div class="in wrap">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="shade" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+  <svg class="ridge" viewBox="0 0 1440 220" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 220 L0 150 L180 92 L340 138 L520 60 L700 128 L900 44 L1080 120 L1260 78 L1440 132 L1440 220 Z" fill="none" stroke="rgba(244,238,228,0.35)" stroke-width="1.2"/>
+  </svg>
+  <div class="in">
     <div class="place">Taj Aravali · Udaipur</div>
-    <h1 class="names">Yashna <svg class="heart" viewBox="0 0 24 24" aria-label="and"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg> Yash</h1>
-    <div class="date-pill">17 &amp; 18 DECEMBER 2026</div>
+    <h1 class="names"><em>Yashna</em> <svg class="heart" viewBox="0 0 24 24" aria-label="and"><path d="M12 21.2s-8.2-5.1-10.4-10C-0.2 6.6 2.6 3.4 6.2 4c2 .3 3.2 1.7 3.8 3 .6-1.3 1.8-2.7 3.8-3 3.6-.6 6.4 2.6 4.6 7.2-2.2 4.9-10.4 10-10.4 10Z" fill="none" stroke="currentColor" stroke-width="1"/></svg> <em>Yash</em></h1>
+    <div class="date-pill"><span class="ln"></span>17 &amp; 18 December 2026<span class="ln"></span></div>
     <div class="count" aria-live="off">
       <div><b id="cd-d">--</b><span>Days</span></div>
       <div><b id="cd-h">--</b><span>Hours</span></div>
@@ -288,70 +340,76 @@ export const Y2K_HTML = `
   </div>
 </header>
 
-<section class="strip">
-  <div class="wrap">
-    <h3>Travel light to the mountains</h3>
-    <p>One booking for your whole family. Every bag tagged, sealed and tracked from your door in Mumbai to your room at Taj Aravali, and back home after.</p>
-    <div class="chips">
-      <span class="chip"><i></i>Room-matched delivery</span>
-      <span class="chip"><i></i>Tagged &amp; sealed</span>
-      <span class="chip"><i></i>Live tracking</span>
-      <span class="chip"><i></i>Return home included</span>
+<section class="banner-wrap">
+  <div class="banner reveal">
+    <svg class="ridge2" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 120 L60 60 L120 92 L200 30 L280 84 L340 48 L400 90 L400 120 Z" fill="none" stroke="#E8CE9A" stroke-width="2"/>
+    </svg>
+    <div class="copy">
+      <div class="eyebrow">Travel light to the mountains</div>
+      <p>Arrive with only your best self. We&#x27;ll carry your bags door-to-destination. Your bags reach before you do!</p>
     </div>
-    <p style="margin-top:28px"><a class="btn" href="#book">Book luggage pickup</a></p>
+    <div class="stats-cta">
+      <div class="bstats">
+        <div><b>Wedding</b><span>Synced</span></div>
+        <div><b>100%</b><span>Fully wrapped</span></div>
+      </div>
+      <a href="#book" class="cta">Book Luggage Pickup</a>
+    </div>
   </div>
 </section>
 
 <section class="cel" id="celebration">
   <div class="wrap two">
-    <div>
-      <div class="eyebrow">01 · The celebration</div>
+    <div class="reveal">
+      <div class="eyebrow">01 — The Celebration</div>
       <h2 class="big">Two days in the <em>Aravallis</em>, one forever.</h2>
-      <p class="lede">We're gathering the people we love most in the folds of the oldest mountains in India, for slow mornings, long evenings, and a wedding under an open Udaipur sky. No rush, no noise. Just us, and you.</p>
+      <p class="lede">We're gathering the people we love most in the folds of the oldest mountains in India — for slow mornings, long evenings, and a wedding under an open Udaipur sky. No rush, no noise. Just us, and you.</p>
       <div class="stats">
         <div><b>2</b><span>Days</span></div>
         <div><b>1</b><span>Palace</span></div>
         <div><b>∞</b><span>Memories</span></div>
       </div>
     </div>
-    <div class="monocard" aria-label="Wedding monogram">
-      <div>
-        <div class="mono">Y<span style="font-size:.5em;vertical-align:middle;color:var(--gold-2)"> &amp; </span>Y</div>
-        <div class="tag-hash">#Y2K</div>
-        <div class="mono"><small>17 · 18 December 2026</small></div>
-      </div>
+    <div class="reveal photo">
+      <div class="frame"><img src="/images/y2k-couple.jpeg" alt="Yashna &amp; Yash"/></div>
+      <div class="badge">#Y2K</div>
     </div>
   </div>
 </section>
 
-<section class="dusk on-dark" id="destination">
-  <canvas id="duskArt" aria-hidden="true"></canvas>
-  <div class="wrap">
-    <div class="eyebrow">02 · The destination</div>
-    <h2>Taj Aravali,<em>Udaipur</em></h2>
-    <p>Tucked into the Aravalli range above the City of Lakes: terraced gardens, still water, and mountain light that turns gold at dusk. A 30-minute drive from Maharana Pratap Airport.</p>
+<section class="dusk" id="destination">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="shade" aria-hidden="true"></div>
+  <div class="in">
+    <div class="reveal">
+      <div class="eyebrow">02 — The Destination</div>
+      <h2>Taj Aravali,<br/><em>Udaipur</em></h2>
+      <p>Tucked into the Aravalli range above the City of Lakes — terraced gardens, still water, and mountain light that turns gold at dusk. A 30-minute drive from Maharana Pratap Airport.</p>
+    </div>
   </div>
 </section>
 
-<section class="travel on-dark" id="travel">
+<section class="travel" id="travel">
+  <svg class="ridge3" viewBox="0 0 1440 260" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 260 L0 180 L200 100 L400 160 L620 70 L840 150 L1060 60 L1260 140 L1440 90 L1440 260 Z" fill="none" stroke="#E8CE9A" stroke-width="1.4"/>
+  </svg>
   <div class="wrap">
     <div class="two">
-      <div>
-        <div class="eyebrow">03 · Travel light</div>
-        <h2 class="big">Your bags, handled. So the mountains are all <em>you</em> carry.</h2>
-        <p class="lede">Powered by Bagdrop. Every bag gets its own tag, linked to the person it belongs to and the room they're staying in. You see each one move, and you get a photo when it reaches your room.</p>
+      <div class="reveal">
+        <div class="eyebrow">03 — Travel Light</div>
+        <h2 class="big">Your bags, handled.<br/>So the mountains are all you carry.</h2>
+        <p class="lede">Powered by Bagdrop. We collect your luggage in Mumbai and deliver it straight to your room at Taj Aravali — wedding-synced &amp; fully wrapped.</p>
       </div>
-      <div>
-        <div class="eyebrow" style="margin-bottom:4px">What goes on every bag</div>
-        <div class="tagdemo" id="tagDemo"></div>
-        <p class="hint" style="color:rgba(244,238,228,.55);margin-top:12px">Gold band: bride's side. Maroon band: groom's side. Sample tags.</p>
+      <div class="reveal photo">
+        <div class="frame"><img src="/images/y2k-bagdrop-luggage.webp" alt="Bagdrop luggage delivery"/></div>
+        <div class="badge">Mumbai → Udaipur</div>
       </div>
     </div>
     <div class="steps">
-      <div class="step"><b>01</b><h4>Door pickup in Mumbai</h4><p>One booking covers every family member, even when they live at different addresses.</p></div>
-      <div class="step"><b>02</b><h4>Tagged, photographed, sealed</h4><p>Each bag is scanned, weighed and sealed at your door. You get the list with photos on WhatsApp.</p></div>
-      <div class="step"><b>03</b><h4>In your room after check-in</h4><p>Matched to the host's rooming list. Bags arriving early wait safely at the bell desk.</p></div>
-      <div class="step"><b>04</b><h4>Home again after</h4><p>We collect from your room at checkout and deliver to any address, or to the airport.</p></div>
+      <div class="reveal step"><b>01</b><h4>Door pickup, Mumbai</h4><p>From home or the airport — one tap and we're there.</p></div>
+      <div class="reveal step"><b>02</b><h4>Wedding-synced transit</h4><p>Tracked end-to-end, timed to land when you do.</p></div>
+      <div class="reveal step"><b>03</b><h4>Delivered to your room</h4><p>Waiting at Taj Aravali before you check in.</p></div>
     </div>
   </div>
 </section>
@@ -359,9 +417,9 @@ export const Y2K_HTML = `
 <section class="book" id="book">
   <div class="wrap">
     <div class="head">
-      <div class="eyebrow">04 · Reserve your pickup</div>
-      <h2 class="big">Book for your whole family</h2>
-      <p class="lede">About three minutes for a family of four. You can edit your booking until 24 hours before pickup.</p>
+      <div class="eyebrow">04 — Reserve Your Pickup</div>
+      <h2 class="big">Book your luggage pickup</h2>
+      <p class="lede">One request for your whole family. Pickups run 10–12 December 2026 from Mumbai.</p>
     </div>
     <div class="desk">
       <div class="panel" id="panel"></div>
@@ -402,8 +460,7 @@ export const Y2K_HTML = `
 
 <footer>
   <div class="wrap">
-    <svg viewBox="0 0 30 40" width="38" height="50" aria-hidden="true"><rect x="10" y="0" width="10" height="7" rx="2" fill="none" stroke="#F4EEE4" stroke-width="2.4"/><path d="M4 7h12c6 0 10 4 10 9 0 2.6-1.2 4.7-3 6 2.6 1.4 4 3.8 4 6.8C27 34 23 38 17 38H4z" fill="#F4EEE4"/><path d="M11 18l7 5-7 5z" fill="#24291F"/></svg>
-    <div style="font-size:11px;letter-spacing:.2em;font-weight:700">BAGDROP</div>
+    <img src="/logo-white.png" alt="Bagdrop" style="display:block;margin:0 auto 20px;height:64px;width:auto"/>
     <div class="n">Yashna · Yash</div>
     <div class="d">17 &amp; 18 DECEMBER 2026 · UDAIPUR</div>
     <div class="h">#Y2K</div>
