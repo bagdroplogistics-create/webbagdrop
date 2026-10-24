@@ -55,7 +55,7 @@ export default function Inbox() {
           <span className="ml-auto flex gap-1.5">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${filter === f ? "bg-brand text-white" : "bg-paper text-muted hover:text-ink"}`}>
+                className={`rounded-lg border px-3 py-1.5 text-[12.5px] font-bold transition-colors cursor-pointer ${filter === f ? "border-brand bg-brand text-white" : "border-line bg-white text-ink hover:border-stone-300"}`}>
                 {FILTER_LABEL[f]}
               </button>
             ))}

@@ -87,3 +87,14 @@ body {
 .admin-os .a-dot-warn { background: var(--a-warn); }
 .admin-os .a-dot-bad { background: var(--a-bad); }
 .admin-os .a-dot-info { background: var(--a-info); }
+
+/* Reference buttons are flat, 8px-radius, border-only, Manrope-bold —
+ * shorter and squarer than the customer flow's tall pill buttons the
+ * shared <Button> renders by default (h-11/h-8/h-13 + rounded-xl/lg).
+ * Targeting those exact height utilities by tag+class beats Tailwind's
+ * own rule (higher specificity: element+class vs. class alone) without
+ * touching Input/Select/Tile, which share the radius utilities but
+ * never the height ones. */
+.admin-os button.h-11 { height: auto; padding: 7px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; }
+.admin-os button.h-8 { height: auto; padding: 4px 9px; border-radius: 8px; font-size: 11.5px; font-weight: 700; }
+.admin-os button.h-13 { height: auto; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; }
