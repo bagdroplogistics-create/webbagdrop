@@ -17,7 +17,11 @@ const LABEL: Record<BookingStatus, string> = {
   accepted: "accepted", assigned: "captain assigned", picked_up: "picked up",
   in_transit: "in transit", delivered: "delivered", rejected: "rejected", cancelled: "cancelled",
 };
-const FILTERS = ["all", "submitted", "accepted", "moving", "closed"] as const;
+const FILTERS = ["all", "submitted", "revised", "accepted", "rejected", "quoted"] as const;
+const FILTER_LABEL: Record<(typeof FILTERS)[number], string> = {
+  all: "All", submitted: "Needs decision", revised: "Revised",
+  accepted: "Accepted", rejected: "Rejected", quoted: "Quoted, unpaid",
+};
 
 export default function Inbox() {
   const [all, setAll] = useState<Booking[]>([]);
@@ -28,12 +32,7 @@ export default function Inbox() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
 
-  const list = useMemo(() => all.filter((b) => {
-    if (filter === "all") return true;
-    if (filter === "moving") return ["assigned", "picked_up", "in_transit"].includes(b.status);
-    if (filter === "closed") return ["delivered", "rejected", "cancelled"].includes(b.status);
-    return b.status === filter;
-  }), [all, filter]);
+  const list = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
 
   const booking = all.find((b) => b.id === sel) ?? null;
 
@@ -56,8 +55,8 @@ export default function Inbox() {
           <span className="ml-auto flex gap-1.5">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition-colors cursor-pointer ${filter === f ? "bg-brand text-white" : "bg-paper text-muted hover:text-ink"}`}>
-                {f}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${filter === f ? "bg-brand text-white" : "bg-paper text-muted hover:text-ink"}`}>
+                {FILTER_LABEL[f]}
               </button>
             ))}
           </span>
@@ -66,12 +65,12 @@ export default function Inbox() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
-                <th className="py-2 pr-2">Ref</th><th className="pr-2">Traveller</th><th className="pr-2">Route · date</th><th className="pr-2 text-right">Total</th><th>Status</th>
+                <th className="py-2 pr-2">Ref</th><th className="pr-2">Traveller</th><th className="pr-2">Route · date</th><th className="pr-2 text-right">Pcs</th><th className="pr-2 text-right">Total</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
               {list.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-muted">No bookings{filter !== "all" ? " in this filter" : " yet — make one on the booking page"}.</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-muted">No bookings{filter !== "all" ? " in this filter" : " yet — make one on the booking page"}.</td></tr>
               )}
               {list.map((b) => (
                 <tr key={b.id} onClick={() => setSel(b.id)}
@@ -79,6 +78,7 @@ export default function Inbox() {
                   <td className="py-2.5 pr-2 font-mono text-xs">{b.id}</td>
                   <td className="pr-2">{b.traveller.name || "—"}<br /><span className="text-xs text-faint">{b.traveller.mobile}</span></td>
                   <td className="pr-2">{b.from} → {b.to}<br /><span className="text-xs text-faint">{b.ucName} · {b.date}</span></td>
+                  <td className="pr-2 text-right font-mono">{b.bags}{b.oversize ? `+${b.oversize}` : ""}</td>
                   <td className="pr-2 text-right font-mono">{b.quote.breakdown.ror ? "ROR" : inr(b.quote.total)}</td>
                   <td><Badge tone={TONE[b.status]}>{LABEL[b.status]}</Badge></td>
                 </tr>
