@@ -225,8 +225,8 @@ function TripDetail({
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <div>
           <h4 className="mb-1.5 text-xs font-semibold text-muted">Expenses · {inr(expTotal)}</h4>
-          <ul className="mb-2 space-y-1 text-xs">
-            {trip.expenses.map((e, i) => <li key={i} className="flex justify-between"><span>{e.head}{e.note ? ` · ${e.note}` : ""}</span><span>{inr(e.amount)}</span></li>)}
+          <ul className="mb-2 text-xs">
+            {trip.expenses.map((e, i) => <li key={i} className="flex justify-between border-b border-dashed border-line py-1 last:border-0"><span>{e.head}{e.note ? ` · ${e.note}` : ""}</span><span>{inr(e.amount)}</span></li>)}
           </ul>
           <div className="flex flex-wrap gap-1.5">
             <Select value={exp.head} onChange={(e) => setExp((p) => ({ ...p, head: e.target.value }))} className="w-auto text-xs">
@@ -239,8 +239,8 @@ function TripDetail({
         </div>
         <div>
           <h4 className="mb-1.5 text-xs font-semibold text-muted">Advances · {inr(advTotal)}</h4>
-          <ul className="mb-2 space-y-1 text-xs">
-            {trip.advances.map((a, i) => <li key={i} className="flex justify-between"><span>{a.note || "advance"}</span><span>{inr(a.amount)}</span></li>)}
+          <ul className="mb-2 text-xs">
+            {trip.advances.map((a, i) => <li key={i} className="flex justify-between border-b border-dashed border-line py-1 last:border-0"><span>{a.note || "advance"}</span><span>{inr(a.amount)}</span></li>)}
           </ul>
           <div className="flex flex-wrap gap-1.5">
             <Input className="w-24" placeholder="₹" value={adv.amount} onChange={(e) => setAdv((p) => ({ ...p, amount: e.target.value }))} />

@@ -175,8 +175,8 @@ function DocumentPanel({ bookings, onIssued }: { bookings: Booking[]; onIssued: 
         <ul className="space-y-1 text-xs">
           {(booking.docs ?? []).length === 0 && <li className="text-muted">No documents yet on this booking.</li>}
           {(booking.docs ?? []).map((d, i) => (
-            <li key={i}>
-              <button onClick={() => setViewing(d)} className="flex w-full justify-between border-b border-dashed border-line py-1 text-left last:border-0 hover:text-brand">
+            <li key={i} className="border-b border-dashed border-line last:border-0">
+              <button onClick={() => setViewing(d)} className="flex w-full justify-between py-1 text-left hover:text-brand">
                 <span>{DOC_LABEL[d.type]} <span className="font-mono">{d.no}</span></span>
                 <span>{inr(d.amount)}</span>
               </button>

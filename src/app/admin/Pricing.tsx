@@ -214,10 +214,10 @@ function CitiesEditor({ extraCities, onSave }: { extraCities: City[]; onSave: (c
   return (
     <Card>
       <h3 className="mb-2 font-display text-sm font-bold">Extra cities <span className="font-normal text-faint">on top of the built-in 20</span></h3>
-      <ul className="mb-2 space-y-1 text-xs">
+      <ul className="mb-2 text-xs">
         {list.length === 0 && <li className="text-muted">None added yet.</li>}
         {list.map((c, i) => (
-          <li key={c.name} className="flex justify-between">
+          <li key={c.name} className="flex justify-between border-b border-dashed border-line py-1 last:border-0">
             <span>{c.name} · {c.zone}{c.ap ? ` · ${c.ap}` : ""}</span>
             <button className="text-red-700 hover:underline" onClick={() => { const next = list.filter((_, idx) => idx !== i); setList(next); onSave(next); }}>remove</button>
           </li>
