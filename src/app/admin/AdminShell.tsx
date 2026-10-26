@@ -62,7 +62,9 @@ const ALL_ITEMS = GROUPS.flatMap((g) => g.items);
 const FONTS =
   "https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap";
 
-export default function AdminShell({ tab, setTab, children }: { tab: ModuleKey; setTab: (k: ModuleKey) => void; children: ReactNode }) {
+export default function AdminShell({
+  tab, setTab, search, onSearchChange, children,
+}: { tab: ModuleKey; setTab: (k: ModuleKey) => void; search: string; onSearchChange: (s: string) => void; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const current = ALL_ITEMS.find((i) => i.key === tab) ?? ALL_ITEMS[0];
 
@@ -144,6 +146,14 @@ export default function AdminShell({ tab, setTab, children }: { tab: ModuleKey; 
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
+              <input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search shipment, LR, name, phone…"
+                aria-label="Global search"
+                className="min-w-[220px] rounded-lg border px-3 py-2 text-[13px]"
+                style={{ borderColor: "var(--a-line)", background: "var(--a-surface)", color: "var(--a-fg)" }}
+              />
               <a href="/" target="_blank" rel="noreferrer" className="hidden rounded-lg border px-3 py-2 text-[13px] sm:inline" style={{ borderColor: "var(--a-line)", background: "var(--a-surface)" }}>
                 View booking site
               </a>

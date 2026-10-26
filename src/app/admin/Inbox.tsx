@@ -23,7 +23,7 @@ const FILTER_LABEL: Record<(typeof FILTERS)[number], string> = {
   accepted: "Accepted", rejected: "Rejected", quoted: "Quoted, unpaid",
 };
 
-export default function Inbox() {
+export default function Inbox({ search = "" }: { search?: string }) {
   const [all, setAll] = useState<Booking[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [sel, setSel] = useState<string | null>(null);
@@ -32,7 +32,13 @@ export default function Inbox() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
 
-  const list = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
+  const q = search.trim().toLowerCase();
+  const list = useMemo(() => all.filter((b) => {
+    if (filter !== "all" && b.status !== filter) return false;
+    if (!q) return true;
+    return [b.id, b.ref, b.lr?.no, b.traveller.name, b.traveller.mobile, b.from, b.to]
+      .some((v) => v?.toLowerCase().includes(q));
+  }), [all, filter, q]);
 
   const booking = all.find((b) => b.id === sel) ?? null;
 

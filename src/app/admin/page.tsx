@@ -22,13 +22,14 @@ import SecurityAndAudit from "./SecurityAndAudit";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<ModuleKey>("cmd");
+  const [search, setSearch] = useState("");
 
   return (
-    <AdminShell tab={tab} setTab={setTab}>
+    <AdminShell tab={tab} setTab={setTab} search={search} onSearchChange={setSearch}>
       {tab === "cmd" && <CommandCentre />}
-      {tab === "ship" && <Inbox />}
+      {tab === "ship" && <Inbox search={search} />}
       {tab === "quote" && <QuotesAndPayments />}
-      {tab === "lr" && <LRAndTrips />}
+      {tab === "lr" && <LRAndTrips search={search} />}
       {tab === "exc" && <Exceptions />}
       {tab === "evt" && <EventsAndBulk />}
       {tab === "drv" && <Drivers />}

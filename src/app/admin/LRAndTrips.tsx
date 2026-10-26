@@ -23,12 +23,17 @@ function tripExpense(t: Trip): number {
   return t.expenses.reduce((a, e) => a + e.amount, 0);
 }
 
-export default function LRAndTrips() {
+export default function LRAndTrips({ search = "" }: { search?: string }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   useEffect(() => watchTrips(setTrips, (e) => setErr(String(e))), []);
+
+  const q = search.trim().toLowerCase();
+  const visibleTrips = useMemo(() => !q ? trips : trips.filter((t) =>
+    [t.id, t.route, t.vehicle].some((v) => v?.toLowerCase().includes(q))
+  ), [trips, q]);
 
   const [sel, setSel] = useState<string | null>(null);
   const trip = trips.find((t) => t.id === sel) ?? null;
@@ -101,8 +106,8 @@ export default function LRAndTrips() {
                   </tr>
                 </thead>
                 <tbody>
-                  {trips.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted">No trips yet.</td></tr>}
-                  {trips.map((t) => {
+                  {visibleTrips.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted">{q ? "No trips match." : "No trips yet."}</td></tr>}
+                  {visibleTrips.map((t) => {
                     const rev = tripRevenue(bookings, t.id), exp = tripExpense(t);
                     return (
                       <tr key={t.id} onClick={() => setSel(t.id)} className={`cursor-pointer border-b border-line last:border-0 ${sel === t.id ? "bg-paper" : ""}`}>
