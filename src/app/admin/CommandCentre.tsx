@@ -15,6 +15,19 @@ import { watchAdminBookings } from "@/lib/adminApi";
 import { watchEvents } from "@/lib/eventsApi";
 import type { Booking, WeddingEvent } from "@/lib/types";
 import { deriveExceptions } from "./Exceptions";
+import { CAPTAINS } from "./Drivers";
+
+/** AMD hub → BRD hub → MUM hub, same backbone as the map's lane path
+ *  (M80,120 L300,150 L520,90) — used to place each captain's marker at
+ *  a schematic point along the lane their job is on, alternating legs. */
+const LANES = [
+  { from: { x: 80, y: 120 }, to: { x: 300, y: 150 } },
+  { from: { x: 300, y: 150 }, to: { x: 520, y: 90 } },
+] as const;
+function laneLerp(i: number, t: number) {
+  const lane = LANES[i % LANES.length];
+  return { x: lane.from.x + (lane.to.x - lane.from.x) * t, y: lane.from.y + (lane.to.y - lane.from.y) * t };
+}
 
 const LABEL: Record<string, string> = {
   quoted: "quoted", identified: "verified", submitted: "needs decision", revised: "revised",
@@ -58,6 +71,14 @@ export default function CommandCentre() {
   const { s, notices, briefText, feed, pickupsNext24h, cutoffsToday, exceptionsOpen } = computed;
   const needsDecision = all.filter((b) => b.status === "submitted").slice(0, 8);
   const eventsOpen = events.filter((e) => e.status === "open").length;
+
+  const onRunStatuses = ["assigned", "picked_up", "in_transit"];
+  const captainJobs = CAPTAINS.map((c, i) => {
+    const job = all.find((b) => onRunStatuses.includes(b.status) && (b.admin as Record<string, unknown>).captain === c.name);
+    if (!job) return null;
+    const pos = laneLerp(i, 0.3 + (i % 2) * 0.35);
+    return { name: c.name, pcs: job.bags + job.oversize, id: job.id, x: pos.x, y: pos.y };
+  }).filter((x): x is { name: string; pcs: number; id: string; x: number; y: number } => x !== null);
 
   return (
     <div className="grid gap-3">
@@ -105,11 +126,17 @@ export default function CommandCentre() {
                 <circle cx="520" cy="90" r="9" fill="var(--a-navy)" /><text x="500" y="75">MUM hub</text>
                 <circle cx="420" cy="210" r="7" fill="var(--a-muted)" /><text x="405" y="232">GOA</text>
                 <circle cx="560" cy="60" r="5" fill="var(--a-ok)" /><text x="540" y="48">BOM T2 counter</text>
+                {captainJobs.map((c) => (
+                  <g key={c.id}>
+                    <circle cx={c.x} cy={c.y} r="5" fill="var(--a-accent)" />
+                    <text x={c.x - 10} y={c.y - 10}>{c.name} · {c.pcs} pcs</text>
+                  </g>
+                ))}
               </g>
             </svg>
           </div>
           <p className="mt-1.5 text-[11px]" style={{ fontFamily: "var(--a-mono)", color: "var(--a-muted)" }}>
-            Hub layout is fixed reference geography — vehicle GPS and captain live positions aren&apos;t wired up yet (same honest gap as the Drivers module).
+            Hub layout is fixed reference geography, not live GPS. Orange markers are real — today&apos;s on-run captains and piece counts, from the same assignment data as Drivers — placed at a schematic point along their lane, not their live position.
           </p>
         </div>
         <div className="a-card">

@@ -11,7 +11,7 @@ import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 
-const CAPTAINS = [
+export const CAPTAINS = [
   { name: "Ravi K", plate: "GJ06 AB 4412", role: "Pickup & delivery" },
   { name: "Amit S", plate: "MH04 CD 9091", role: "Line-haul" },
   { name: "Sameer D", plate: "GJ06 EF 2210", role: "Pickup & delivery" },
