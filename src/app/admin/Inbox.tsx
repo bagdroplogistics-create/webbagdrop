@@ -74,7 +74,7 @@ export default function Inbox() {
               )}
               {list.map((b) => (
                 <tr key={b.id} onClick={() => setSel(b.id)}
-                  className={`cursor-pointer border-b border-line/60 transition-colors hover:bg-paper ${sel === b.id ? "bg-brand-soft" : ""}`}>
+                  className={`cursor-pointer border-b border-line transition-colors hover:bg-paper ${sel === b.id ? "bg-brand-soft" : ""}`}>
                   <td className="py-2.5 pr-2 font-mono text-xs">{b.id}</td>
                   <td className="pr-2">{b.traveller.name || "—"}<br /><span className="text-xs text-faint">{b.traveller.mobile}</span></td>
                   <td className="pr-2">{b.from} → {b.to}<br /><span className="text-xs text-faint">{b.ucName} · {b.date}</span></td>
@@ -152,7 +152,7 @@ export default function Inbox() {
             <h4 className="mb-1 mt-5 text-[10px] font-semibold uppercase tracking-wider text-faint">Event log</h4>
             <div className="max-h-48 space-y-1.5 overflow-auto">
               {[...booking.events].reverse().map((e, i) => (
-                <p key={i} className="flex gap-2 border-b border-dashed border-line/60 pb-1.5 text-xs last:border-0">
+                <p key={i} className="flex gap-2 border-b border-dashed border-line pb-1.5 text-xs last:border-0">
                   <i className={`mt-1 size-1.5 shrink-0 rounded-full ${e.by === "admin" ? "bg-blue-500" : "bg-green-500"}`} />
                   <span className="flex-1">{e.text}</span>
                   <time className="shrink-0 text-faint">{new Date(e.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time>

@@ -56,15 +56,28 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
 }
 
 export function Badge({ tone = "muted", children }: { tone?: "ok" | "warn" | "bad" | "info" | "muted"; children: ReactNode }) {
-  const tones = {
-    ok: "bg-green-50 text-green-700",
-    warn: "bg-amber-50 text-amber-700",
-    bad: "bg-red-50 text-red-700",
-    info: "bg-blue-50 text-blue-700",
-    muted: "bg-paper text-muted",
-  } as const;
+  if (tone === "muted") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+        <i className="size-1.5 rounded-full bg-current opacity-80" />
+        {children}
+      </span>
+    );
+  }
+  // Colored tones use CSS-variable fallbacks (Tailwind's green/amber/red/blue
+  // -50/-700 shades) so the admin-os scope's --a-* tokens can re-tint them to
+  // the reference's exact ok/warn/bad/info palette, same as everything else
+  // in the cascade — without affecting the customer flow's Badge usage,
+  // where those --a-* variables are never defined.
+  const vars: Record<string, { bg: string; fg: string }> = {
+    ok: { bg: "var(--a-ok-bg, #f0fdf4)", fg: "var(--a-ok, #15803d)" },
+    warn: { bg: "var(--a-warn-bg, #fffbeb)", fg: "var(--a-warn, #b45309)" },
+    bad: { bg: "var(--a-bad-bg, #fef2f2)", fg: "var(--a-bad, #b91c1c)" },
+    info: { bg: "var(--a-info-bg, #eff6ff)", fg: "var(--a-info, #1d4ed8)" },
+  };
+  const { bg, fg } = vars[tone];
   return (
-    <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold", tones[tone])}>
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: bg, color: fg }}>
       <i className="size-1.5 rounded-full bg-current opacity-80" />
       {children}
     </span>
