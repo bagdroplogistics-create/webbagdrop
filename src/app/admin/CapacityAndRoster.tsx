@@ -52,7 +52,10 @@ export default function CapacityAndRoster() {
                 <div key={day} className="flex items-center gap-3 text-xs">
                   <span className="w-20 text-faint">{new Date(`${day}T12:00:00`).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" })}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-paper">
-                    <div className={`h-full rounded-full ${pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-brand"}`} style={{ width: `${pct}%` }} />
+                    <div
+                      className={`h-full rounded-full ${pct >= 90 || pct >= 70 ? "" : "bg-brand"}`}
+                      style={{ width: `${pct}%`, background: pct >= 90 ? "var(--a-bad, #ef4444)" : pct >= 70 ? "var(--a-warn, #f59e0b)" : undefined }}
+                    />
                   </div>
                   <span className="w-20 text-right">{pieces} / {cap}</span>
                 </div>

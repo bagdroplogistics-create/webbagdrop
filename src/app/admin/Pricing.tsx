@@ -179,7 +179,8 @@ function FallbackMatrix({ matrix, onSave }: { matrix: Record<Zone, number[]>; on
                     <td key={to} className="px-0.5 py-0.5">
                       <input
                         type="number" value={v} onChange={(e) => setCell(from, i, Number(e.target.value))}
-                        className={`w-16 rounded border px-1 py-0.5 text-right text-xs ${v < 2500 ? "border-red-400 bg-red-50" : "border-line"}`}
+                        className={`w-16 rounded border px-1 py-0.5 text-right text-xs ${v < 2500 ? "" : "border-line"}`}
+                        style={v < 2500 ? { borderColor: "var(--a-bad, #f87171)", background: "var(--a-bad-bg, #fef2f2)" } : undefined}
                       />
                     </td>
                   );
