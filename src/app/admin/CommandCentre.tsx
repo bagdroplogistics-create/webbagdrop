@@ -163,9 +163,9 @@ export default function CommandCentre() {
         <div className="a-card a-stripe a-stripe-warn">
           <H3>Needs a decision</H3>
           {needsDecision.length === 0 && <p className="text-sm" style={{ color: "var(--a-muted)" }}>Nothing waiting.</p>}
-          <ul className="space-y-1.5">
+          <ul>
             {needsDecision.map((b) => (
-              <li key={b.id} className="flex items-center justify-between text-[12.5px]">
+              <li key={b.id} className="flex items-center justify-between border-b py-1.5 text-[12.5px] last:border-0" style={{ borderColor: "var(--a-line)", borderBottomStyle: "dashed" }}>
                 <span style={{ fontFamily: "var(--a-mono)" }}>{b.id}</span>
                 <span style={{ color: "var(--a-muted)" }}>{b.from} → {b.to} · {inr(b.quote.total)}</span>
               </li>
@@ -175,9 +175,9 @@ export default function CommandCentre() {
         <div className="a-card a-stripe a-stripe-info">
           <H3>Copilot noticed</H3>
           {notices.length === 0 && <p className="text-sm" style={{ color: "var(--a-muted)" }}>Quiet.</p>}
-          <ul className="space-y-1.5">
+          <ul>
             {notices.map((n, i) => (
-              <li key={i} className="text-[12.5px]">
+              <li key={i} className="border-b py-1.5 text-[12.5px] last:border-0" style={{ borderColor: "var(--a-line)", borderBottomStyle: "dashed" }}>
                 <span
                   className="rounded-full px-1.5 py-0.5 text-[10.5px]"
                   style={{ fontFamily: "var(--a-mono)", background: n.sev === "warn" ? "var(--a-warn-bg)" : "var(--a-info-bg)", color: n.sev === "warn" ? "var(--a-warn)" : "var(--a-info)" }}
@@ -191,11 +191,11 @@ export default function CommandCentre() {
         </div>
         <div className="a-card a-stripe a-stripe-ok">
           <H3>Today&apos;s numbers</H3>
-          <ul className="space-y-1.5 text-[12.5px]">
+          <ul className="text-[12.5px]">
             {Object.entries(LABEL).map(([status, label]) => {
               const n = all.filter((b) => b.status === status).length;
               return n > 0 ? (
-                <li key={status} className="flex justify-between">
+                <li key={status} className="flex justify-between border-b py-1.5 last:border-0" style={{ borderColor: "var(--a-line)", borderBottomStyle: "dashed" }}>
                   <span style={{ color: "var(--a-muted)" }}>{label}</span><span className="font-semibold">{n}</span>
                 </li>
               ) : null;
