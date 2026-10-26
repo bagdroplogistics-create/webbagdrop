@@ -98,3 +98,17 @@ body {
 .admin-os button.h-11 { height: auto; padding: 7px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; }
 .admin-os button.h-8 { height: auto; padding: 4px 9px; border-radius: 8px; font-size: 11.5px; font-weight: 700; }
 .admin-os button.h-13 { height: auto; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+
+/* Reference cards are flat 10px-radius with no shadow, not the customer
+ * flow's rounded-2xl/shadow-card look the shared <Card> renders by
+ * default. The three-class combo only matches Card's own output (the
+ * one other rounded-2xl user, DocumentView's print preview, uses
+ * different padding/shadow classes, so it's untouched). */
+.admin-os .rounded-2xl.p-5.shadow-card { border-radius: 10px; padding: 14px; box-shadow: none; border-width: 1.5px; border-color: var(--a-line); }
+.admin-os .rounded-2xl.p-5.shadow-card:hover { box-shadow: none; }
+
+/* The reference's 1px hairline (#DDD6CC on white) reads fine in a
+ * static screenshot but washes out in a live browser at normal zoom —
+ * bump to 1.5px everywhere a card border appears so it stays visibly
+ * defined against both the white card and the warm paper canvas. */
+.admin-os .a-card { border-width: 1.5px; }
