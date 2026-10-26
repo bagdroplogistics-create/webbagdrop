@@ -153,7 +153,7 @@ export default function Inbox() {
             <div className="max-h-48 space-y-1.5 overflow-auto">
               {[...booking.events].reverse().map((e, i) => (
                 <p key={i} className="flex gap-2 border-b border-dashed border-line pb-1.5 text-xs last:border-0">
-                  <i className={`mt-1 size-1.5 shrink-0 rounded-full ${e.by === "admin" ? "bg-blue-500" : "bg-green-500"}`} />
+                  <i className="mt-1 size-1.5 shrink-0 rounded-full" style={{ background: e.by === "admin" ? "var(--a-info, #3b82f6)" : "var(--a-ok, #22c55e)" }} />
                   <span className="flex-1">{e.text}</span>
                   <time className="shrink-0 text-faint">{new Date(e.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time>
                 </p>
