@@ -1,10 +1,20 @@
 "use client";
 /** Admin OS · bookings inbox — the first migrated module and the pattern for
- *  the rest: typed live list, work drawer, actions appending to the event log. */
+ *  the rest: typed live list, work drawer, actions appending to the event log.
+ *
+ *  Also merges in bagdrop.co/admin's real leads (src/app/api/admin/production-leads)
+ *  so the whole live pipeline shows in one place, with its real status. Those
+ *  rows are read-only here: accept/revise/assign/progress call back into THIS
+ *  app's own booking record (adminApplyPatch → bagdrop-new's own Supabase
+ *  project) and have no defined meaning for a production lead, whose status
+ *  changes on bagdrop.co trigger real side effects there (customer emails,
+ *  auto-invoicing) that this app doesn't replicate. Wiring that safely is a
+ *  separate, explicit next step — not guessed at here. */
 import { useEffect, useMemo, useState } from "react";
 import { inr } from "@/lib/pricing";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, BookingStatus } from "@/lib/types";
+import type { ProductionLead } from "../api/admin/production-leads/route";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
 
 const TONE: Record<BookingStatus, "ok" | "warn" | "bad" | "info" | "muted"> = {
@@ -23,24 +33,81 @@ const FILTER_LABEL: Record<(typeof FILTERS)[number], string> = {
   accepted: "Accepted", rejected: "Rejected", quoted: "Quoted, unpaid",
 };
 
+/** Production's two status vocabularies, mapped to this app's Badge tones —
+ *  shown as-is (not translated into bagdrop-new's own status words), per
+ *  "show it with its real status". */
+const PROD_LEAD_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"> = {
+  new: "info", contacted: "warn", qualified: "warn", converted: "ok", lost: "bad",
+};
+const PROD_BOOKING_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"> = {
+  inquiry: "info", document_collection: "info", pending: "warn", review: "warn",
+  accepted: "ok", quote_sent: "warn", payment_pending: "warn", payment_approved: "ok",
+  confirmed: "ok", pickup_scheduled: "ok", picked_up: "ok", in_transit: "ok",
+  out_for_delivery: "ok", delivered: "ok", completed: "ok", rejected: "bad", cancelled: "bad",
+};
+
+interface Row {
+  key: string; source: "new" | "production";
+  ref: string; name: string; mobile: string; route: string; sub: string;
+  pcs: string; total: string; statusLabel: string; statusTone: "ok" | "warn" | "bad" | "info" | "muted";
+  sortAt: string;
+}
+
+function bookingRow(b: Booking): Row {
+  return {
+    key: `new:${b.id}`, source: "new",
+    ref: b.id, name: b.traveller.name || "—", mobile: b.traveller.mobile,
+    route: `${b.from} → ${b.to}`, sub: `${b.ucName} · ${b.date}`,
+    pcs: `${b.bags}${b.oversize ? `+${b.oversize}` : ""}`,
+    total: b.quote.breakdown.ror ? "ROR" : inr(b.quote.total),
+    statusLabel: LABEL[b.status], statusTone: TONE[b.status], sortAt: b.created,
+  };
+}
+function leadRow(l: ProductionLead): Row {
+  const status = l.booking?.status ?? l.status;
+  const tone = (l.booking ? PROD_BOOKING_TONE[l.booking.status ?? ""] : PROD_LEAD_TONE[l.status]) ?? "muted";
+  return {
+    key: `prod:${l.id}`, source: "production",
+    ref: l.leadNumber ?? l.id.slice(0, 8), name: l.name, mobile: l.phone,
+    route: `${l.fromCity ?? "—"} → ${l.toCity ?? "—"}`, sub: `${l.serviceInterest ?? "—"} · ${l.pickupDate ?? l.travelDate ?? "—"}`,
+    pcs: l.bagsCount != null ? String(l.bagsCount) : "—", total: "—",
+    statusLabel: status, statusTone: tone, sortAt: l.createdAt,
+  };
+}
+
 export default function Inbox({ search = "" }: { search?: string }) {
   const [all, setAll] = useState<Booking[]>([]);
+  const [leads, setLeads] = useState<ProductionLead[]>([]);
+  const [leadsErr, setLeadsErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
-  const [sel, setSel] = useState<string | null>(null);
+  const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
   const [form, setForm] = useState<{ kind: "accept" | "revise" | "reject" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
 
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
+  useEffect(() => {
+    let dead = false;
+    fetch("/api/admin/production-leads?limit=1000")
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`); return j as { leads: ProductionLead[] }; })
+      .then((j) => { if (!dead) setLeads(j.leads); })
+      .catch((e) => { if (!dead) setLeadsErr(e instanceof Error ? e.message : String(e)); });
+    return () => { dead = true; };
+  }, []);
 
   const q = search.trim().toLowerCase();
-  const list = useMemo(() => all.filter((b) => {
-    if (filter !== "all" && b.status !== filter) return false;
-    if (!q) return true;
-    return [b.id, b.ref, b.lr?.no, b.traveller.name, b.traveller.mobile, b.from, b.to]
-      .some((v) => v?.toLowerCase().includes(q));
-  }), [all, filter, q]);
+  const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
 
-  const booking = all.find((b) => b.id === sel) ?? null;
+  const rows = useMemo(() => {
+    const merged: Row[] = filter === "all"
+      ? [...newBookings.map(bookingRow), ...leads.map(leadRow)]
+      : newBookings.map(bookingRow);
+    merged.sort((a, b) => b.sortAt.localeCompare(a.sortAt));
+    if (!q) return merged;
+    return merged.filter((r) => [r.ref, r.name, r.mobile, r.route].some((v) => v?.toLowerCase().includes(q)));
+  }, [newBookings, leads, filter, q]);
+
+  const booking = sel?.source === "new" ? all.find((b) => b.id === sel.id) ?? null : null;
+  const lead = sel?.source === "production" ? leads.find((l) => l.id === sel.id) ?? null : null;
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
     await adminApplyPatch(b, patch, event);
@@ -54,10 +121,16 @@ export default function Inbox({ search = "" }: { search?: string }) {
           <b>Couldn&apos;t load bookings:</b> {err}
         </p>
       )}
+      {leadsErr && (
+        <p className="lg:col-span-2 rounded-xl bg-red-50 p-3 text-sm text-red-900">
+          <b>Couldn&apos;t load production leads:</b> {leadsErr}
+        </p>
+      )}
       <Card>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h2 className="font-display text-sm font-bold">Bookings inbox</h2>
           <Badge tone="ok">live</Badge>
+          <span className="text-xs text-faint">+ {leads.length} from bagdrop.co</span>
           <span className="ml-auto flex gap-1.5">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
@@ -75,27 +148,59 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </tr>
             </thead>
             <tbody>
-              {list.length === 0 && (
+              {rows.length === 0 && (
                 <tr><td colSpan={6} className="py-6 text-center text-muted">No bookings{filter !== "all" ? " in this filter" : " yet — make one on the booking page"}.</td></tr>
               )}
-              {list.map((b) => (
-                <tr key={b.id} onClick={() => setSel(b.id)}
-                  className={`cursor-pointer border-b border-line transition-colors hover:bg-paper ${sel === b.id ? "bg-brand-soft" : ""}`}>
-                  <td className="py-2.5 pr-2 font-mono text-xs">{b.id}</td>
-                  <td className="pr-2">{b.traveller.name || "—"}<br /><span className="text-xs text-faint">{b.traveller.mobile}</span></td>
-                  <td className="pr-2">{b.from} → {b.to}<br /><span className="text-xs text-faint">{b.ucName} · {b.date}</span></td>
-                  <td className="pr-2 text-right font-mono">{b.bags}{b.oversize ? `+${b.oversize}` : ""}</td>
-                  <td className="pr-2 text-right font-mono">{b.quote.breakdown.ror ? "ROR" : inr(b.quote.total)}</td>
-                  <td><Badge tone={TONE[b.status]}>{LABEL[b.status]}</Badge></td>
+              {rows.map((r) => {
+                const rowId = r.key.slice(r.key.indexOf(":") + 1);
+                const isSel = !!sel && sel.source === r.source && sel.id === rowId;
+                return (
+                <tr key={r.key} onClick={() => setSel({ source: r.source, id: rowId })}
+                  className={`cursor-pointer border-b border-line transition-colors hover:bg-paper ${isSel ? "bg-brand-soft" : ""}`}>
+                  <td className="py-2.5 pr-2 font-mono text-xs">
+                    {r.ref}
+                    {r.source === "production" && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>bagdrop.co</span>}
+                  </td>
+                  <td className="pr-2">{r.name || "—"}<br /><span className="text-xs text-faint">{r.mobile}</span></td>
+                  <td className="pr-2">{r.route}<br /><span className="text-xs text-faint">{r.sub}</span></td>
+                  <td className="pr-2 text-right font-mono">{r.pcs}</td>
+                  <td className="pr-2 text-right font-mono">{r.total}</td>
+                  <td><Badge tone={r.statusTone}>{r.statusLabel}</Badge></td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       </Card>
 
       <Card className="lg:sticky lg:top-20 self-start">
-        {!booking ? (
+        {lead ? (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-display text-base font-extrabold">{lead.leadNumber ?? lead.id.slice(0, 8)}</h3>
+              <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
+            </div>
+            <p className="mb-3 rounded-lg px-2.5 py-2 text-xs" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>
+              Read-only — from bagdrop.co/admin&apos;s own database. Accept/revise/assign aren&apos;t wired for production leads yet.
+            </p>
+            {([
+              ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
+              ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
+              ["Service", lead.serviceInterest ?? "—"],
+              ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
+              ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
+              ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
+              ["Source", lead.source ?? "—"],
+              ["Assigned to", lead.assignedTo ?? "unassigned"],
+            ] as const).map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+                <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
+              </div>
+            ))}
+            {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
+          </>
+        ) : !booking ? (
           <p className="text-sm text-muted">Select a booking — decide, revise, assign and progress from here. The customer&apos;s screen updates live.</p>
         ) : (
           <>
