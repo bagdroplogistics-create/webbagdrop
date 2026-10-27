@@ -22,11 +22,12 @@ export interface ProductionLead {
   pickupDate: string | null;
   deliveryDate: string | null;
   bagsCount: number | null;
+  flightNumber: string | null;
   notes: string | null;
   status: string;
   assignedTo: string | null;
   createdAt: string;
-  booking: { id: string; trackingId: string | null; status: string | null } | null;
+  booking: { id: string; trackingId: string | null; status: string | null; totalAmount: number | null } | null;
 }
 
 export async function GET(req: Request) {
@@ -45,14 +46,14 @@ export async function GET(req: Request) {
     id: string; lead_number: string | null; name: string; phone: string; email: string | null;
     source: string | null; service_interest: string | null; from_city: string | null; to_city: string | null;
     travel_date: string | null; pickup_date: string | null; delivery_date: string | null;
-    bags_count: number | null; notes: string | null; status: string; assigned_to: string | null;
+    bags_count: number | null; flight_number: string | null; notes: string | null; status: string; assigned_to: string | null;
     created_at: string; booking_id: string | null;
   }
 
   let query = sb
     .from("leads")
     .select(
-      "id, lead_number, name, phone, email, source, service_interest, from_city, to_city, travel_date, pickup_date, delivery_date, bags_count, notes, status, assigned_to, created_at, booking_id",
+      "id, lead_number, name, phone, email, source, service_interest, from_city, to_city, travel_date, pickup_date, delivery_date, bags_count, flight_number, notes, status, assigned_to, created_at, booking_id",
       { count: "exact" }
     )
     .order("created_at", { ascending: false })
@@ -66,10 +67,10 @@ export async function GET(req: Request) {
   const data = rawData as unknown as LeadRow[];
 
   const bookingIds = data.map((l) => l.booking_id).filter((id): id is string => !!id);
-  let bookingsById: Record<string, { tracking_id: string | null; status: string | null }> = {};
+  let bookingsById: Record<string, { tracking_id: string | null; status: string | null; total_amount: number | null }> = {};
   if (bookingIds.length > 0) {
-    const { data: bookings } = await sb.from("bookings").select("id, tracking_id, status").in("id", bookingIds);
-    bookingsById = Object.fromEntries((bookings ?? []).map((b) => [b.id, { tracking_id: b.tracking_id, status: b.status }]));
+    const { data: bookings } = await sb.from("bookings").select("id, tracking_id, status, total_amount").in("id", bookingIds);
+    bookingsById = Object.fromEntries((bookings ?? []).map((b) => [b.id, { tracking_id: b.tracking_id, status: b.status, total_amount: b.total_amount }]));
   }
 
   const leads: ProductionLead[] = (data ?? []).map((l) => ({
@@ -86,12 +87,16 @@ export async function GET(req: Request) {
     pickupDate: l.pickup_date,
     deliveryDate: l.delivery_date,
     bagsCount: l.bags_count,
+    flightNumber: l.flight_number,
     notes: l.notes,
     status: l.status,
     assignedTo: l.assigned_to,
     createdAt: l.created_at,
     booking: l.booking_id
-      ? { id: l.booking_id, trackingId: bookingsById[l.booking_id]?.tracking_id ?? null, status: bookingsById[l.booking_id]?.status ?? null }
+      ? {
+          id: l.booking_id, trackingId: bookingsById[l.booking_id]?.tracking_id ?? null,
+          status: bookingsById[l.booking_id]?.status ?? null, totalAmount: bookingsById[l.booking_id]?.total_amount ?? null,
+        }
       : null,
   }));
 

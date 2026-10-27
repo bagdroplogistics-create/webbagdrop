@@ -16,6 +16,9 @@ import { watchEvents } from "@/lib/eventsApi";
 import type { Booking, WeddingEvent } from "@/lib/types";
 import { deriveExceptions } from "./Exceptions";
 import { CAPTAINS } from "./Drivers";
+import { useProductionLeads } from "@/lib/useProductionLeads";
+
+const PROD_PRE_CONVERT = ["new", "contacted", "qualified"];
 
 /** AMD hub → BRD hub → MUM hub, same backbone as the map's lane path
  *  (M80,120 L300,150 L520,90) — used to place each captain's marker at
@@ -50,6 +53,8 @@ export default function CommandCentre() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
   useEffect(() => watchEvents(setEvents, () => {}), []);
+  const { leads: prodLeads } = useProductionLeads();
+  const prodNeedsDecision = prodLeads.filter((l) => PROD_PRE_CONVERT.includes(l.status));
 
   const [computed, setComputed] = useState<Computed | null>(null);
   useEffect(() => {
@@ -97,12 +102,12 @@ export default function CommandCentre() {
         <H3 live r="bookings and events written by customers and families">Live from the booking platform</H3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Bookings today" value={String(s.today)} />
-          <Kpi label="Needs decision" value={String(s.needsDecision)} />
+          <Kpi label="Needs decision" value={String(s.needsDecision + prodNeedsDecision.length)} />
           <Kpi label="Paid today" value={inr(s.paidToday)} />
           <Kpi label="Events open" value={String(eventsOpen)} />
         </div>
         <div className="mt-1.5 text-[11px]" style={{ fontFamily: "var(--a-mono)", color: "var(--a-muted)" }}>
-          Open Shipments to decide, revise, assign and progress. Events and bulk holds the manifest, tag and inward tools.
+          Open Shipments to decide, revise, assign and progress. Events and bulk holds the manifest, tag and inward tools. Needs decision includes {prodNeedsDecision.length} of {prodLeads.length} leads from bagdrop.co.
         </div>
       </div>
 
@@ -162,12 +167,18 @@ export default function CommandCentre() {
       <div className="grid gap-3 lg:grid-cols-3">
         <div className="a-card a-stripe a-stripe-warn">
           <H3>Needs a decision</H3>
-          {needsDecision.length === 0 && <p className="text-sm" style={{ color: "var(--a-muted)" }}>Nothing waiting.</p>}
+          {needsDecision.length === 0 && prodNeedsDecision.length === 0 && <p className="text-sm" style={{ color: "var(--a-muted)" }}>Nothing waiting.</p>}
           <ul>
             {needsDecision.map((b) => (
               <li key={b.id} className="flex items-center justify-between border-b py-1.5 text-[12.5px] last:border-0" style={{ borderColor: "var(--a-line)", borderBottomStyle: "dashed" }}>
                 <span style={{ fontFamily: "var(--a-mono)" }}>{b.id}</span>
                 <span style={{ color: "var(--a-muted)" }}>{b.from} → {b.to} · {inr(b.quote.total)}</span>
+              </li>
+            ))}
+            {prodNeedsDecision.slice(0, 8).map((l) => (
+              <li key={l.id} className="flex items-center justify-between border-b py-1.5 text-[12.5px] last:border-0" style={{ borderColor: "var(--a-line)", borderBottomStyle: "dashed" }}>
+                <span style={{ fontFamily: "var(--a-mono)" }}>{l.leadNumber ?? l.id.slice(0, 8)}</span>
+                <span style={{ color: "var(--a-muted)" }}>{l.fromCity ?? "—"} → {l.toCity ?? "—"}</span>
               </li>
             ))}
           </ul>

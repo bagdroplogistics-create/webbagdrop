@@ -17,7 +17,12 @@ import { lanes } from "@/lib/intelligence";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, DocRecord, DocType } from "@/lib/types";
 import { Badge, Button, Card, Select } from "@/components/ui";
+import { useProductionLeads } from "@/lib/useProductionLeads";
 import DocumentView from "./DocumentView";
+
+/** Post-acceptance booking statuses — the real "captured" set on
+ *  bagdrop.co (see bagdrop-web's own lead->booking status-sync order). */
+const PROD_CAPTURED_STATUSES = ["confirmed", "pickup_scheduled", "picked_up", "in_transit", "out_for_delivery", "delivered", "completed"];
 
 const dayKey = (iso: string) => (iso || "").slice(0, 10);
 
@@ -32,6 +37,10 @@ export default function Finance() {
   const [all, setAll] = useState<Booking[]>([]);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
+  const { leads: prodLeads } = useProductionLeads();
+  const prodCapturedAll = prodLeads
+    .filter((l) => l.booking && PROD_CAPTURED_STATUSES.includes(l.booking.status ?? ""))
+    .reduce((a, l) => a + (l.booking?.totalAmount ?? 0), 0);
 
   // Date.now() is read in an effect, not during render — Next's Cache
   // Components flags a bare current-time read in a Client Component's
@@ -74,6 +83,7 @@ export default function Finance() {
         <Kpi label="Captured, all time" value={inr(kpis.capturedAll)} />
         <Kpi label="GST collected" value={inr(kpis.gst)} />
         <Kpi label="Balance due" value={inr(kpis.balanceDue)} hint="partial payments" />
+        <Kpi label="Captured, bagdrop.co" value={inr(prodCapturedAll)} hint="confirmed bookings onward" />
       </div>
 
       <Card>

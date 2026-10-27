@@ -11,9 +11,11 @@
 import { useEffect, useState } from "react";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
+import type { ProductionLead } from "../api/admin/production-leads/route";
+import { useProductionLeads } from "@/lib/useProductionLeads";
 import { Badge, Button, Card } from "@/components/ui";
 
-interface ExceptionRow { key: string; bookingId: string; sev: "bad" | "warn"; text: string; action: string }
+interface ExceptionRow { key: string; bookingId: string; sev: "bad" | "warn"; text: string; action: string; prod?: boolean }
 
 const RESPONSES: [string, string][] = [
   ["Seal mismatch at handover", "Hold shipment · notify customer · photo evidence required before release"],
@@ -49,15 +51,30 @@ export function deriveExceptions(all: Booking[]): ExceptionRow[] {
   return out;
 }
 
+/** Same "decision overdue" rule as deriveExceptions, for bagdrop.co's real
+ *  leads — a lead still in new/contacted/qualified more than 2h after it
+ *  came in. No equivalent of ackExceptions exists on a production lead, so
+ *  these rows are informational only (acted on from Shipments instead). */
+export function deriveProductionExceptions(leads: ProductionLead[]): ExceptionRow[] {
+  const PRE_CONVERT = ["new", "contacted", "qualified"];
+  return leads
+    .filter((l) => PRE_CONVERT.includes(l.status) && hrs(l.createdAt) > 2)
+    .map((l) => ({
+      key: "decision_overdue", bookingId: l.leadNumber ?? l.id.slice(0, 8), sev: "bad" as const,
+      text: `Needs a decision — waiting ${Math.round(hrs(l.createdAt))}h with no response.`, action: "Open in Shipments", prod: true,
+    }));
+}
+
 export default function Exceptions() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
+  const { leads: prodLeads } = useProductionLeads();
 
   // deriveExceptions reads Date.now() — computed in an effect, never during
   // render (see the same note in CommandCentre.tsx/Finance.tsx).
   const [rows, setRows] = useState<ExceptionRow[]>([]);
-  useEffect(() => { setRows(deriveExceptions(bookings)); }, [bookings]);
+  useEffect(() => { setRows([...deriveExceptions(bookings), ...deriveProductionExceptions(prodLeads)]); }, [bookings, prodLeads]);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function ack(row: ExceptionRow) {
@@ -85,9 +102,11 @@ export default function Exceptions() {
                   <Badge tone={r.sev === "bad" ? "bad" : "warn"}>{r.bookingId}</Badge>
                   <p className="mt-1 text-xs text-muted">{r.text}</p>
                 </div>
-                <Button size="sm" variant="outline" disabled={busy === r.key + r.bookingId} onClick={() => void ack(r)}>
-                  {busy === r.key + r.bookingId ? "…" : r.action}
-                </Button>
+                {!r.prod && (
+                  <Button size="sm" variant="outline" disabled={busy === r.key + r.bookingId} onClick={() => void ack(r)}>
+                    {busy === r.key + r.bookingId ? "…" : r.action}
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

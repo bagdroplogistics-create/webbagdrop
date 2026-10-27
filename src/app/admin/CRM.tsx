@@ -21,7 +21,31 @@ import { crmSuggestions, followedKeySet, type Customer, crmCustomers } from "@/l
 import { watchAdminBookings } from "@/lib/adminApi";
 import { listCrmActivity, logActivity, setInquiryStatus, watchCrmActivity, watchInquiries } from "@/lib/crmApi";
 import type { Booking, CrmActivity, Inquiry } from "@/lib/types";
+import type { ProductionLead } from "../api/admin/production-leads/route";
+import { useProductionLeads } from "@/lib/useProductionLeads";
 import { Badge, Button, Card, Input } from "@/components/ui";
+
+/** Same grouping/tiering rule as crmCustomers() in src/lib/intelligence.ts,
+ *  applied to bagdrop.co's real leads (grouped by phone) instead of this
+ *  app's own bookings. */
+interface ProdCustomer { mobile: string; name: string; bookingsCount: number; value: number; lastRoute: string }
+function prodCustomers(leads: ProductionLead[]): (ProdCustomer & { tier: "gold" | "silver" | "prospect" })[] {
+  const by: Record<string, ProdCustomer> = {};
+  leads.forEach((l) => {
+    const m = (l.phone || "").replace(/\D/g, "");
+    if (!m) return;
+    const c = (by[m] = by[m] || { mobile: l.phone, name: l.name, bookingsCount: 0, value: 0, lastRoute: `${l.fromCity ?? "—"} → ${l.toCity ?? "—"}` });
+    c.name = l.name || c.name;
+    c.bookingsCount += 1;
+    c.value += l.booking?.totalAmount ?? 0;
+  });
+  return Object.values(by)
+    .map((c) => {
+      const tier: "gold" | "silver" | "prospect" = c.value >= 20000 || c.bookingsCount >= 3 ? "gold" : c.value > 0 ? "silver" : "prospect";
+      return { ...c, tier };
+    })
+    .sort((a, b) => b.value - a.value);
+}
 
 export default function CRM() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -40,13 +64,16 @@ export default function CRM() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   useEffect(() => { setCustomers(crmCustomers(bookings)); }, [bookings]);
+  const { leads: prodLeads } = useProductionLeads();
+  const prodCust = prodCustomers(prodLeads);
 
   const [q, setQ] = useState("");
   const filteredCustomers = customers.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.mobile.includes(q));
+  const filteredProdCustomers = prodCust.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.mobile.includes(q));
 
   const newLeads = inquiries.filter((i) => i.status === "new").length;
   const pipeline = inquiries.filter((i) => i.status === "new").reduce((a, i) => a + (i.bags || 60) * 3500 * 2, 0);
-  const gold = customers.filter((c) => c.tier === "gold").length;
+  const gold = customers.filter((c) => c.tier === "gold").length + prodCust.filter((c) => c.tier === "gold").length;
   const converted = bookings.filter((b) => b.pay).length;
   const conversion = bookings.length ? Math.round((100 * converted) / bookings.length) : 0;
 
@@ -65,7 +92,7 @@ export default function CRM() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi label="New leads" value={String(newLeads)} />
         <Kpi label="Pipeline" value={inr(pipeline)} hint="estimate" />
-        <Kpi label="Gold customers" value={String(gold)} hint={`of ${customers.length}`} />
+        <Kpi label="Gold customers" value={String(gold)} hint={`of ${customers.length + prodCust.length}`} />
         <Kpi label="Conversion" value={`${conversion}%`} />
       </div>
 
@@ -117,7 +144,9 @@ export default function CRM() {
       </Card>
 
       <Card>
-        <h3 className="mb-3 font-display text-sm font-bold">Customers</h3>
+        <h3 className="mb-3 font-display text-sm font-bold">
+          Customers <span className="font-normal text-faint">+ {prodCust.length} from bagdrop.co</span>
+        </h3>
         <Input className="mb-3" placeholder="Search name or mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="max-h-96 overflow-auto">
           <table className="w-full text-[13px]">
@@ -127,14 +156,23 @@ export default function CRM() {
               </tr>
             </thead>
             <tbody>
-              {filteredCustomers.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-muted">No customers yet.</td></tr>}
+              {filteredCustomers.length === 0 && filteredProdCustomers.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-muted">No customers yet.</td></tr>}
               {filteredCustomers.map((c) => (
-                <tr key={c.mobile} className="border-b border-line last:border-0">
+                <tr key={`new:${c.mobile}`} className="border-b border-line last:border-0">
                   <td className="py-2 pr-2">{c.name}<br /><span className="text-xs text-faint">{c.mobile}</span></td>
                   <td className="pr-2"><Badge tone={c.tier === "gold" ? "warn" : c.tier === "silver" ? "info" : "muted"}>{c.tier}</Badge></td>
                   <td className="pr-2 text-right">{c.bookings.length}</td>
                   <td className="pr-2 text-right">{inr(c.value)}</td>
                   <td className="text-xs text-faint">{c.last.from} → {c.last.to}</td>
+                </tr>
+              ))}
+              {filteredProdCustomers.map((c) => (
+                <tr key={`prod:${c.mobile}`} className="border-b border-line last:border-0">
+                  <td className="py-2 pr-2">{c.name}<br /><span className="text-xs text-faint">{c.mobile}</span></td>
+                  <td className="pr-2"><Badge tone={c.tier === "gold" ? "warn" : c.tier === "silver" ? "info" : "muted"}>{c.tier}</Badge></td>
+                  <td className="pr-2 text-right">{c.bookingsCount}</td>
+                  <td className="pr-2 text-right">{inr(c.value)}</td>
+                  <td className="text-xs text-faint">{c.lastRoute}</td>
                 </tr>
               ))}
             </tbody>

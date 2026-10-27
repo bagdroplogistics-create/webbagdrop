@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
+import { useProductionLeads } from "@/lib/useProductionLeads";
 import { Badge, Button, Card, Input } from "@/components/ui";
 
 interface FlightResult {
@@ -22,6 +23,8 @@ export default function Flights() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   const airBookings = bookings.filter((b) => b.mode === "air" && b.ref);
+  const { leads: prodLeads } = useProductionLeads();
+  const prodAirLeads = prodLeads.filter((l) => l.flightNumber);
 
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<FlightResult | null>(null);
@@ -65,7 +68,9 @@ export default function Flights() {
       </Card>
 
       <Card>
-        <h3 className="mb-3 font-display text-sm font-bold">Bookings on an air mode <Badge tone="ok">live</Badge></h3>
+        <h3 className="mb-3 font-display text-sm font-bold">
+          Bookings on an air mode <Badge tone="ok">live</Badge> <span className="font-normal text-faint">+ {prodAirLeads.length} from bagdrop.co</span>
+        </h3>
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
@@ -73,13 +78,21 @@ export default function Flights() {
             </tr>
           </thead>
           <tbody>
-            {airBookings.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted">No air-mode bookings yet.</td></tr>}
+            {airBookings.length === 0 && prodAirLeads.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted">No air-mode bookings yet.</td></tr>}
             {airBookings.map((b) => (
               <tr key={b.id} className="border-b border-line last:border-0">
                 <td className="py-2 pr-2 font-mono text-xs">{b.id}</td>
                 <td className="pr-2 font-mono text-xs">{b.ref || "—"}</td>
                 <td className="pr-2 text-xs">{b.from} → {b.to}</td>
                 <td className="text-xs text-muted">{b.date}</td>
+              </tr>
+            ))}
+            {prodAirLeads.map((l) => (
+              <tr key={l.id} className="border-b border-line last:border-0">
+                <td className="py-2 pr-2 font-mono text-xs">{l.leadNumber ?? l.id.slice(0, 8)}</td>
+                <td className="pr-2 font-mono text-xs">{l.flightNumber}</td>
+                <td className="pr-2 text-xs">{l.fromCity ?? "—"} → {l.toCity ?? "—"}</td>
+                <td className="text-xs text-muted">{l.pickupDate ?? l.travelDate ?? "—"}</td>
               </tr>
             ))}
           </tbody>

@@ -71,7 +71,8 @@ function leadRow(l: ProductionLead): Row {
     key: `prod:${l.id}`, source: "production",
     ref: l.leadNumber ?? l.id.slice(0, 8), name: l.name, mobile: l.phone,
     route: `${l.fromCity ?? "—"} → ${l.toCity ?? "—"}`, sub: `${l.serviceInterest ?? "—"} · ${l.pickupDate ?? l.travelDate ?? "—"}`,
-    pcs: l.bagsCount != null ? String(l.bagsCount) : "—", total: "—",
+    pcs: l.bagsCount != null ? String(l.bagsCount) : "—",
+    total: l.booking?.totalAmount ? inr(l.booking.totalAmount) : "—",
     statusLabel: status, statusTone: tone, sortAt: l.createdAt,
   };
 }
@@ -229,6 +230,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
               ["Service", lead.serviceInterest ?? "—"],
               ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
               ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
+              ["Quote", lead.booking?.totalAmount ? inr(lead.booking.totalAmount) : "—"],
               ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
               ["Source", lead.source ?? "—"],
               ["Assigned to", lead.assignedTo ?? "unassigned"],
