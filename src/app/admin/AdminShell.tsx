@@ -8,7 +8,7 @@ import { useState, type ReactNode } from "react";
 
 export type ModuleKey =
   | "cmd" | "ship" | "quote" | "lr" | "exc" | "evt" | "drv" | "flt" | "cap"
-  | "crm" | "price" | "id" | "fin" | "part" | "prodleads"
+  | "crm" | "price" | "id" | "fin" | "part"
   | "rules"
   | "integ" | "sec" | "data";
 
@@ -19,7 +19,6 @@ const GROUPS: NavGroup[] = [
   {
     label: "Operate",
     items: [
-      { key: "prodleads", name: "Production leads", badge: "bagdrop.co", badgeTone: "live" },
       { key: "cmd", name: "Command centre", badge: "live", badgeTone: "live" },
       { key: "ship", name: "Shipments", badge: "live", badgeTone: "live" },
       { key: "quote", name: "Quotes & payments", badge: "live", badgeTone: "live" },
