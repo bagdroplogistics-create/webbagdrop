@@ -16,6 +16,7 @@ import Integrations from "./Integrations";
 import LRAndTrips from "./LRAndTrips";
 import PartnersAndApi from "./PartnersAndApi";
 import Pricing from "./Pricing";
+import ProductionLeads from "./ProductionLeads";
 import QuotesAndPayments from "./QuotesAndPayments";
 import RulesAndNotifications from "./RulesAndNotifications";
 import SecurityAndAudit from "./SecurityAndAudit";
@@ -26,6 +27,7 @@ export default function AdminPage() {
 
   return (
     <AdminShell tab={tab} setTab={setTab} search={search} onSearchChange={setSearch}>
+      {tab === "prodleads" && <ProductionLeads search={search} />}
       {tab === "cmd" && <CommandCentre />}
       {tab === "ship" && <Inbox search={search} />}
       {tab === "quote" && <QuotesAndPayments />}
