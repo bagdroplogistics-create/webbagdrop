@@ -100,20 +100,23 @@ export default function Inbox({ search = "" }: { search?: string }) {
   }
   useEffect(() => { refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))); }, []);
 
-  /** Writes a status change to production via bagdrop-web's own admin API
-   *  (see src/app/api/admin/production-leads/[id]/route.ts) and refetches. */
-  async function prodAct(target: "lead" | "booking", id: string, status: string) {
+  /** Writes a status/price change to production via bagdrop-web's own admin
+   *  API (see src/app/api/admin/production-leads/[id]/route.ts) and refetches. */
+  async function prodAct(target: "lead" | "booking", id: string, status?: string, totalAmount?: number) {
     setProdBusy(true); setProdErr(null);
     try {
       const r = await fetch(`/api/admin/production-leads/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target, status }),
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target, status, totalAmount }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
+      setForm({ kind: null, captain: "", amount: "", reason: "" });
       await refetchLeads();
     } catch (e) { setProdErr(e instanceof Error ? e.message : String(e)); }
     setProdBusy(false);
   }
+
+  useEffect(() => { setForm({ kind: null, captain: "", amount: "", reason: "" }); }, [sel]);
 
   const q = search.trim().toLowerCase();
   const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
@@ -245,6 +248,9 @@ export default function Inbox({ search = "" }: { search?: string }) {
                   return (
                     <>
                       <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("lead", lead.id, "converted")}>Accept</Button>
+                      {lead.booking && (
+                        <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => setForm((f) => ({ ...f, kind: "revise", amount: "" }))}>Revise price</Button>
+                      )}
                       <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("lead", lead.id, "lost")}>Reject</Button>
                     </>
                   );
@@ -276,6 +282,16 @@ export default function Inbox({ search = "" }: { search?: string }) {
                 return null;
               })()}
             </div>
+
+            {form.kind === "revise" && lead.booking && (
+              <div className="mt-3 rounded-xl bg-paper p-3">
+                <Field label="Revised total (₹)"><Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
+                <Button size="sm" disabled={prodBusy || !form.amount}
+                  onClick={() => void prodAct("booking", lead.booking!.id, "quote_sent", Math.round(+form.amount || 0))}>
+                  Send revised price
+                </Button>
+              </div>
+            )}
           </>
         ) : !booking ? (
           <p className="text-sm text-muted">Select a booking — decide, revise, assign and progress from here. The customer&apos;s screen updates live.</p>
