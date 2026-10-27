@@ -26,7 +26,7 @@ export interface ProductionLead {
   status: string;
   assignedTo: string | null;
   createdAt: string;
-  booking: { trackingId: string | null; status: string | null } | null;
+  booking: { id: string; trackingId: string | null; status: string | null } | null;
 }
 
 export async function GET(req: Request) {
@@ -91,7 +91,7 @@ export async function GET(req: Request) {
     assignedTo: l.assigned_to,
     createdAt: l.created_at,
     booking: l.booking_id
-      ? { trackingId: bookingsById[l.booking_id]?.tracking_id ?? null, status: bookingsById[l.booking_id]?.status ?? null }
+      ? { id: l.booking_id, trackingId: bookingsById[l.booking_id]?.tracking_id ?? null, status: bookingsById[l.booking_id]?.status ?? null }
       : null,
   }));
 

@@ -3,13 +3,14 @@
  *  the rest: typed live list, work drawer, actions appending to the event log.
  *
  *  Also merges in bagdrop.co/admin's real leads (src/app/api/admin/production-leads)
- *  so the whole live pipeline shows in one place, with its real status. Those
- *  rows are read-only here: accept/revise/assign/progress call back into THIS
- *  app's own booking record (adminApplyPatch → bagdrop-new's own Supabase
- *  project) and have no defined meaning for a production lead, whose status
- *  changes on bagdrop.co trigger real side effects there (customer emails,
- *  auto-invoicing) that this app doesn't replicate. Wiring that safely is a
- *  separate, explicit next step — not guessed at here. */
+ *  so the whole live pipeline shows in one place, with its real status.
+ *  Accept/Reject/Mark-X on a production row PATCHes bagdrop.co's own admin
+ *  API (src/app/api/admin/production-leads/[id] → bagdrop-web's /api/admin/
+ *  leads or /bookings), so every real side effect there — customer emails,
+ *  auto-invoicing on delivery, status history, the completed-booking lock —
+ *  happens exactly as it does on bagdrop.co today. Only status values this
+ *  app has actually observed in production data, or that bagdrop-web's own
+ *  lead→booking status-sync map uses, are offered here — never invented. */
 import { useEffect, useMemo, useState } from "react";
 import { inr } from "@/lib/pricing";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
@@ -85,16 +86,34 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
   const [form, setForm] = useState<{ kind: "accept" | "revise" | "reject" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
 
+  const [prodBusy, setProdBusy] = useState(false);
+  const [prodErr, setProdErr] = useState<string | null>(null);
+
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
-  useEffect(() => {
-    let dead = false;
-    fetch("/api/admin/production-leads?limit=1000")
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`); return j as { leads: ProductionLead[] }; })
-      .then((j) => { if (!dead) setLeads(j.leads); })
-      .catch((e) => { if (!dead) setLeadsErr(e instanceof Error ? e.message : String(e)); });
-    return () => { dead = true; };
-  }, []);
+
+  async function refetchLeads() {
+    const r = await fetch("/api/admin/production-leads?limit=1000");
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
+    setLeads(j.leads as ProductionLead[]);
+  }
+  useEffect(() => { refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))); }, []);
+
+  /** Writes a status change to production via bagdrop-web's own admin API
+   *  (see src/app/api/admin/production-leads/[id]/route.ts) and refetches. */
+  async function prodAct(target: "lead" | "booking", id: string, status: string) {
+    setProdBusy(true); setProdErr(null);
+    try {
+      const r = await fetch(`/api/admin/production-leads/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target, status }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
+      await refetchLeads();
+    } catch (e) { setProdErr(e instanceof Error ? e.message : String(e)); }
+    setProdBusy(false);
+  }
 
   const q = search.trim().toLowerCase();
   const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
@@ -198,8 +217,9 @@ export default function Inbox({ search = "" }: { search?: string }) {
               <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
             </div>
             <p className="mb-3 rounded-lg px-2.5 py-2 text-xs" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>
-              Read-only — from bagdrop.co/admin&apos;s own database. Accept/revise/assign aren&apos;t wired for production leads yet.
+              From bagdrop.co/admin&apos;s own database — actions below write back there for real (customer emails, invoicing included).
             </p>
+            {prodErr && <p className="mb-3 rounded-lg bg-red-50 px-2.5 py-2 text-xs text-red-900">{prodErr}</p>}
             {([
               ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
               ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
@@ -215,6 +235,47 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </div>
             ))}
             {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {(() => {
+                const PRE_CONVERT = ["new", "contacted", "qualified"];
+                const EARLY_BOOKING = ["inquiry", "document_collection", "pending", "review", "accepted", "quote_created", "quote_sent", "payment_pending", "payment_approved", "confirmed", "pickup_scheduled"];
+                const bStatus = lead.booking?.status ?? null;
+                if (PRE_CONVERT.includes(lead.status) && (!bStatus || EARLY_BOOKING.includes(bStatus))) {
+                  return (
+                    <>
+                      <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("lead", lead.id, "converted")}>Accept</Button>
+                      <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("lead", lead.id, "lost")}>Reject</Button>
+                    </>
+                  );
+                }
+                if (!lead.booking) return null;
+                const bId = lead.booking.id;
+                if (bStatus && EARLY_BOOKING.includes(bStatus)) {
+                  return (
+                    <>
+                      <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "picked_up")}>Mark picked up</Button>
+                      <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "cancelled")}>Cancel</Button>
+                    </>
+                  );
+                }
+                if (bStatus === "picked_up") {
+                  return (
+                    <>
+                      <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "in_transit")}>Mark in transit</Button>
+                      <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "cancelled")}>Cancel</Button>
+                    </>
+                  );
+                }
+                if (bStatus === "in_transit") {
+                  return <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "delivered")}>Mark delivered</Button>;
+                }
+                if (bStatus === "delivered") {
+                  return <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "completed")}>Mark completed</Button>;
+                }
+                return null;
+              })()}
+            </div>
           </>
         ) : !booking ? (
           <p className="text-sm text-muted">Select a booking — decide, revise, assign and progress from here. The customer&apos;s screen updates live.</p>
