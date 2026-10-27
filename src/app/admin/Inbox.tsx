@@ -80,6 +80,8 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const [leads, setLeads] = useState<ProductionLead[]>([]);
   const [leadsErr, setLeadsErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
   const [form, setForm] = useState<{ kind: "accept" | "revise" | "reject" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
 
@@ -105,6 +107,10 @@ export default function Inbox({ search = "" }: { search?: string }) {
     if (!q) return merged;
     return merged.filter((r) => [r.ref, r.name, r.mobile, r.route].some((v) => v?.toLowerCase().includes(q)));
   }, [newBookings, leads, filter, q]);
+
+  useEffect(() => { setPage(1); }, [filter, q]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const booking = sel?.source === "new" ? all.find((b) => b.id === sel.id) ?? null : null;
   const lead = sel?.source === "production" ? leads.find((l) => l.id === sel.id) ?? null : null;
@@ -148,19 +154,16 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
+              {pageRows.length === 0 && (
                 <tr><td colSpan={6} className="py-6 text-center text-muted">No bookings{filter !== "all" ? " in this filter" : " yet — make one on the booking page"}.</td></tr>
               )}
-              {rows.map((r) => {
+              {pageRows.map((r) => {
                 const rowId = r.key.slice(r.key.indexOf(":") + 1);
                 const isSel = !!sel && sel.source === r.source && sel.id === rowId;
                 return (
                 <tr key={r.key} onClick={() => setSel({ source: r.source, id: rowId })}
                   className={`cursor-pointer border-b border-line transition-colors hover:bg-paper ${isSel ? "bg-brand-soft" : ""}`}>
-                  <td className="py-2.5 pr-2 font-mono text-xs">
-                    {r.ref}
-                    {r.source === "production" && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>bagdrop.co</span>}
-                  </td>
+                  <td className="py-2.5 pr-2 font-mono text-xs">{r.ref}</td>
                   <td className="pr-2">{r.name || "—"}<br /><span className="text-xs text-faint">{r.mobile}</span></td>
                   <td className="pr-2">{r.route}<br /><span className="text-xs text-faint">{r.sub}</span></td>
                   <td className="pr-2 text-right font-mono">{r.pcs}</td>
@@ -171,6 +174,19 @@ export default function Inbox({ search = "" }: { search?: string }) {
               })}
             </tbody>
           </table>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-xs text-muted">
+          <span>{rows.length} total · page {page} of {pageCount}</span>
+          <div className="flex gap-1.5">
+            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-[12.5px] font-bold disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">
+              Prev
+            </button>
+            <button disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-[12.5px] font-bold disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">
+              Next
+            </button>
+          </div>
         </div>
       </Card>
 
