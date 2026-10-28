@@ -2,22 +2,43 @@
 
 /* Bagdrop brand tokens — Tailwind v4 theme */
 @theme {
-  --color-brand: #ea580c;
-  --color-brand-dark: #c2410c;
-  --color-brand-soft: #fff7ed;
+  --color-brand: #ff6300;
+  --color-brand-dark: #d94f00;
+  --color-brand-soft: #fff3e9;
   --color-ink: #0b1426;
+  --color-graphite: #545454;
+  --color-steel: #747474;
   --color-muted: #6b7280;
   --color-faint: #9ca3af;
   --color-line: #e5e7eb;
   --color-paper: #f5f5f3;
   --color-canvas: #fafaf8;
   --color-cream: #f4eee4;
+  --color-navy: #0a1628;
   --font-display: var(--font-geist-sans);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --shadow-card: 0 1px 2px rgba(8, 15, 52, 0.05), 0 1px 3px rgba(8, 15, 52, 0.04);
   --shadow-card-lg: 0 2px 4px rgba(8, 15, 52, 0.06), 0 8px 24px -8px rgba(8, 15, 52, 0.1);
 }
+
+/* Landing page only — scroll-reveal + marquee primitives. Additive,
+ * unscoped by selector but harmless: nothing outside the landing
+ * components uses [data-reveal]/.bd-marquee, and .admin-os keeps its own
+ * token scope above untouched.
+ *
+ * The hide-until-revealed rule only applies once <html data-motion> is set
+ * (by MotionGate, after mount) — so content stays fully visible if JS is
+ * slow, fails, or is disabled, and only animates in when it can. */
+html[data-motion] [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+html[data-motion] [data-reveal][data-in] { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .bd-marquee-track { animation: none !important; }
+}
+@keyframes bd-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.bd-marquee-track { animation: bd-marquee linear infinite; }
+.bd-marquee-track:hover { animation-play-state: paused; }
 
 body {
   background: var(--color-canvas);
