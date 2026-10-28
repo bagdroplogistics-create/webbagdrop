@@ -14,10 +14,10 @@ export default function UseCases() {
               <Icon name={u.icon} size={20} />
             </span>
             <div className="flex flex-col gap-1">
-              <span className="text-[13px] text-steel">{u.problem}</span>
-              <span className="font-display text-[15px] font-bold leading-tight text-ink">{u.solution}</span>
+              <span className="text-[14px] text-steel">{u.problem}</span>
+              <span className="font-display text-[16px] font-bold leading-tight text-ink">{u.solution}</span>
             </div>
-            <a href="#book" className="mt-auto flex items-center gap-1.5 text-[13px] font-semibold text-brand opacity-0 transition-opacity group-hover:opacity-100">
+            <a href="#book" className="mt-auto flex items-center gap-1.5 text-[14px] font-semibold text-brand opacity-0 transition-opacity group-hover:opacity-100">
               Book this <Icon name="arrow" size={13} />
             </a>
           </Reveal>

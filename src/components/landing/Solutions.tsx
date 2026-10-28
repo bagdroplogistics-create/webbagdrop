@@ -20,14 +20,14 @@ export default function Solutions() {
               ) : null}
               <div className="relative flex flex-col gap-3">
                 {s.tag && (
-                  <span className="w-fit rounded-full bg-brand px-2.5 py-0.5 font-mono text-[9px] font-semibold tracking-[0.1em] text-white">
+                  <span className="w-fit rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.1em] text-white">
                     {s.tag.toUpperCase()}
                   </span>
                 )}
                 <span className="flex size-10 items-center justify-center rounded-xl bg-brand-soft text-brand">
                   <Icon name={s.icon} size={18} />
                 </span>
-                <span className="flex items-center justify-between gap-2 font-display text-[15px] font-bold leading-tight text-ink">
+                <span className="flex items-center justify-between gap-2 font-display text-[16px] font-bold leading-tight text-ink">
                   {s.title}
                   <Icon name="arrow" size={15} className="shrink-0 text-faint transition-colors group-hover:text-brand" />
                 </span>

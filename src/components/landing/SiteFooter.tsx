@@ -15,7 +15,7 @@ export default function SiteFooter() {
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 border-b border-white/10 pb-12 sm:grid-cols-3 lg:grid-cols-6">
           <div className="col-span-2 flex flex-col gap-4 lg:col-span-2">
             <Image src="/images/logo-horizontal.png" alt="Bagdrop" width={150} height={34} className="h-8 w-auto" />
-            <p className="max-w-[260px] text-[14px] text-white/60">The baggage infrastructure layer for modern travel.</p>
+            <p className="max-w-[260px] text-[15px] text-white/60">The baggage infrastructure layer for modern travel.</p>
             <div className="flex gap-2.5">
               {SOCIALS.map((s) => (
                 <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex size-9 items-center justify-center rounded-lg border border-white/15 text-white transition-colors hover:border-brand hover:bg-brand">
@@ -26,14 +26,14 @@ export default function SiteFooter() {
           </div>
           {FOOTER_COLS.map((col) => (
             <div key={col.h} className="flex flex-col gap-2.5">
-              <span className="font-mono text-[11px] font-semibold tracking-[0.16em] text-brand">{col.h.toUpperCase()}</span>
+              <span className="font-mono text-[12px] font-semibold tracking-[0.16em] text-brand">{col.h.toUpperCase()}</span>
               {col.items.map((it) => (
-                <a key={it} href="#top" className="text-[13.5px] text-white/60 transition-colors hover:text-white">{it}</a>
+                <a key={it} href="#top" className="text-[15px] text-white/60 transition-colors hover:text-white">{it}</a>
               ))}
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 text-[12px] text-white/50">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 text-[13px] text-white/50">
           <span>© 2026 Bagdrop Logistics Solutions Pvt. Ltd. All rights reserved.</span>
           <span className="font-mono tracking-wide">Mumbai · Delhi · Goa · Gujarat · Rajasthan · Hyderabad · Bangalore</span>
         </div>

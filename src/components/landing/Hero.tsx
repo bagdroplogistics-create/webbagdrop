@@ -47,30 +47,25 @@ export default function Hero() {
             ))}
           </div>
 
-          <div key={step} className="bd-step-in flex items-center gap-2.5 font-mono text-[11px] font-semibold tracking-[0.25em] text-brand">
+          <div key={step} className="bd-step-in flex items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.25em] text-brand">
             <span className="h-[3px] w-10 bg-brand" /> {active.n} · {active.tag}
           </div>
 
-          <h1 key={`h-${step}`} className="bd-step-in font-display text-[clamp(2.4rem,5.2vw,3.75rem)] font-extrabold leading-[0.98] tracking-tight text-ink text-balance">
+          <h1 key={`h-${step}`} className="bd-step-in font-display text-[clamp(2.6rem,5.6vw,4.1rem)] font-extrabold leading-[0.98] tracking-tight text-ink text-balance">
             {active.a}<br />
             <span className="text-brand">{active.b}</span>
           </h1>
-          <p key={`d-${step}`} className="bd-step-in max-w-lg text-[17px] leading-relaxed text-graphite">
+          <p key={`d-${step}`} className="bd-step-in max-w-lg text-[18px] leading-relaxed text-graphite">
             {active.d}
           </p>
 
           <Reveal delay={240} className="flex flex-wrap gap-3">
-            <a href="#book" className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark">
+            <a href="#book" className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-[16px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark">
               Book a Pickup <Icon name="arrow" size={16} />
             </a>
-            <a href="#how" className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-6 py-3.5 text-[15px] font-semibold text-ink transition-colors hover:border-ink/30">
+            <a href="#how" className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-6 py-3.5 text-[16px] font-semibold text-ink transition-colors hover:border-ink/30">
               See how it works
             </a>
-          </Reveal>
-          <Reveal delay={320} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-5 font-mono text-[12px] tracking-wide text-graphite">
-            <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-brand" /> 12,000+ bags delivered</span>
-            <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-brand" /> 2–3 day delivery</span>
-            <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-brand" /> Fully insured</span>
           </Reveal>
         </div>
 
@@ -81,7 +76,7 @@ export default function Hero() {
           </div>
 
           <div className="absolute inset-x-4 -bottom-6 overflow-hidden rounded-2xl border border-line bg-white shadow-card-lg sm:inset-x-6 sm:-bottom-8">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 font-mono text-[10px] tracking-[0.14em] text-faint">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 font-mono text-[11px] tracking-[0.14em] text-faint">
               <span>YOUR DOOR</span>
               <span className="text-brand">{active.tag}</span>
               <span>DESTINATION</span>

@@ -18,7 +18,7 @@ export default function FAQSection() {
             key={c.cat}
             type="button"
             onClick={() => { setCat(i); setOpen(0); }}
-            className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${i === cat ? "bg-ink text-white" : "bg-paper text-graphite hover:bg-line"}`}
+            className={`rounded-full px-4 py-2 text-[14px] font-semibold transition-colors ${i === cat ? "bg-ink text-white" : "bg-paper text-graphite hover:bg-line"}`}
           >
             {c.cat}
           </button>
@@ -36,12 +36,12 @@ export default function FAQSection() {
                 aria-expanded={isOpen}
                 className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
               >
-                <span className="text-[15px] font-semibold text-ink">{f.q}</span>
+                <span className="text-[16px] font-semibold text-ink">{f.q}</span>
                 <span className={`flex size-7 shrink-0 items-center justify-center rounded-full transition-colors ${isOpen ? "bg-brand text-white" : "bg-paper text-graphite"}`}>
                   <Icon name="chevronDown" size={14} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
                 </span>
               </button>
-              {isOpen && <p className="px-5 pb-4 text-[14px] leading-relaxed text-graphite">{f.a}</p>}
+              {isOpen && <p className="px-5 pb-4 text-[15px] leading-relaxed text-graphite">{f.a}</p>}
             </div>
           );
         })}

@@ -10,9 +10,9 @@ export default function PainPoints() {
       <div className={GRID}>
         {PAINS.map((p, i) => (
           <Reveal key={p.pain} delay={i * 80} className={`${GRID_CARD} flex flex-col gap-3 rounded-2xl bg-white p-6 shadow-card`}>
-            <span className="font-display text-3xl font-extrabold tracking-tight text-ink">{p.big}</span>
-            <span className="text-[14px] leading-snug text-graphite">{p.pain}</span>
-            <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[14px] font-semibold text-brand">
+            <span className="font-display text-4xl font-extrabold tracking-tight text-ink">{p.big}</span>
+            <span className="text-[15px] leading-snug text-graphite">{p.pain}</span>
+            <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[15px] font-semibold text-brand">
               <Icon name="check" size={15} /> {p.fix}
             </span>
           </Reveal>

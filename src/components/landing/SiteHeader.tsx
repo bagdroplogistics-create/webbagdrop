@@ -13,14 +13,14 @@ export default function SiteHeader() {
         <a href="#top" className="flex items-center gap-2.5">
           <Image src="/images/logo-icon.png" alt="" width={28} height={28} className="h-7 w-7" priority />
           <span className="flex flex-col leading-none">
-            <span className="font-display text-base font-extrabold tracking-tight text-ink">
+            <span className="font-display text-lg font-extrabold tracking-tight text-ink">
               BAG<span className="text-brand">DROP</span>
             </span>
-            <span className="font-mono text-[9px] tracking-[0.2em] text-faint">BAG. BOX. DELIVERED.</span>
+            <span className="font-mono text-[10px] tracking-[0.2em] text-faint">BAG. BOX. DELIVERED.</span>
           </span>
         </a>
 
-        <nav className="ml-auto hidden items-center gap-6 text-sm font-medium text-graphite md:flex">
+        <nav className="ml-auto hidden items-center gap-6 text-base font-medium text-graphite md:flex">
           {NAV.map((n) => (
             <a key={n.href} href={n.href} className="transition-colors hover:text-brand">{n.label}</a>
           ))}
@@ -28,7 +28,7 @@ export default function SiteHeader() {
 
         <a
           href="#book"
-          className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark sm:inline-flex"
+          className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark sm:inline-flex"
         >
           Book Now <Icon name="arrow" size={15} />
         </a>
@@ -52,11 +52,11 @@ export default function SiteHeader() {
         <div className="border-t border-line bg-canvas px-4 pb-5 pt-2 md:hidden">
           <nav className="flex flex-col gap-1">
             {NAV.map((n) => (
-              <a key={n.href} href={n.href} onClick={() => setOpen(false)} className="rounded-lg px-2 py-2.5 text-[15px] font-medium text-graphite hover:bg-paper hover:text-ink">
+              <a key={n.href} href={n.href} onClick={() => setOpen(false)} className="rounded-lg px-2 py-2.5 text-[16px] font-medium text-graphite hover:bg-paper hover:text-ink">
                 {n.label}
               </a>
             ))}
-            <a href="#book" onClick={() => setOpen(false)} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white">
+            <a href="#book" onClick={() => setOpen(false)} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white">
               Book Now <Icon name="arrow" size={15} />
             </a>
           </nav>

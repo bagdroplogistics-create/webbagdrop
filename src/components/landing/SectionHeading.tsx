@@ -6,22 +6,22 @@ export function SectionHeading({
 }: { kicker: string; title: string; accent: string; id?: string }) {
   return (
     <Reveal className="mb-10 flex flex-col gap-3 sm:mb-14" as="div">
-      <span id={id} className="flex scroll-mt-24 items-center gap-2.5 font-mono text-[11px] font-semibold tracking-[0.22em] text-brand">
+      <span id={id} className="flex scroll-mt-24 items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.22em] text-brand">
         <span className="h-[3px] w-10 bg-brand" /> {kicker.toUpperCase()}
       </span>
-      <h2 className="font-display text-[clamp(1.9rem,3.8vw,2.9rem)] font-extrabold leading-[1.02] tracking-tight text-ink text-balance">
+      <h2 className="font-display text-[clamp(2.1rem,4.2vw,3.2rem)] font-extrabold leading-[1.02] tracking-tight text-ink text-balance">
         {title} <span className="text-brand">{accent}</span>
       </h2>
     </Reveal>
   );
 }
 
-/** Industry-standard responsive container: 1140–1200px max width (we use
- *  1152px / max-w-6xl), with side margins scaled to the breakpoint —
- *  16px mobile, 32–40px tablet (36px), 80–120px desktop (64px→96px) — per
- *  the standard 12/8/4-column grid breakdown (see GridSection for the
- *  column/gutter half of that same system). */
-export const CONTAINER = "mx-auto max-w-6xl px-4 md:px-9 lg:px-16 xl:px-24";
+/** Wide content container — 1440px max width, with modest side margins
+ *  scaled to the breakpoint (16px mobile, 24px tablet, 40px → 56px
+ *  desktop) so the page reads as a broad, confident layout rather than a
+ *  narrow centered column, while still leaving a little breathing room
+ *  at the very edge. */
+export const CONTAINER = "mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 xl:px-14";
 
 const TONES = { canvas: "bg-canvas", paper: "bg-paper/60", white: "bg-white" } as const;
 
