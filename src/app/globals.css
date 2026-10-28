@@ -13,6 +13,12 @@
   --color-line: #e5e7eb;
   --color-paper: #f5f5f3;
   --color-canvas: #fafaf8;
+  /* Landing page only — a visibly darker step than --color-paper, used
+   * for the alternating section backgrounds so the separation actually
+   * reads at a glance instead of blending into --color-canvas. Kept
+   * separate from --color-paper, which the booking Wizard and other
+   * pages already rely on, so this never changes their look. */
+  --color-section: #ebe9e4;
   --color-cream: #f4eee4;
   --color-navy: #0a1628;
   --font-display: var(--font-geist-sans);

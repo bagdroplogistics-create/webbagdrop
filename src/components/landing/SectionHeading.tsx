@@ -23,7 +23,7 @@ export function SectionHeading({
  *  at the very edge. */
 export const CONTAINER = "mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 xl:px-14";
 
-const TONES = { canvas: "bg-canvas", paper: "bg-paper/60", white: "bg-white" } as const;
+const TONES = { canvas: "bg-canvas", paper: "bg-section", white: "bg-white" } as const;
 
 export function Section({
   id, className, bleedClassName, tone, children,

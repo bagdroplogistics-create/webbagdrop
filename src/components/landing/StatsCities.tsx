@@ -34,7 +34,7 @@ export default function StatsCities() {
   }, []);
 
   return (
-    <section className="bg-paper/60 py-12 sm:py-16">
+    <section className="bg-section py-12 sm:py-16">
       <div className={CONTAINER}>
         <div ref={ref} className="grid grid-cols-2 gap-x-6 divide-y divide-line border-y border-line sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
           {NUMERIC_STATS.map((s) => <div key={s.label} className="sm:px-6 sm:first:pl-0"><Stat {...s} active={active} /></div>)}
