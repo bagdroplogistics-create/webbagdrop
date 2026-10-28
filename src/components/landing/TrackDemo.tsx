@@ -4,11 +4,16 @@ import { TRACK_DEMO_STEPS } from "./data";
 import { Icon } from "./Icon";
 import { Section, SectionHeading } from "./SectionHeading";
 
-const PROOFS = ["Sealed", "Photographed", "Delivered"];
+const PROOFS: { label: string; icon: string }[] = [
+  { label: "Sealed", icon: "lock" },
+  { label: "Photographed", icon: "camera" },
+  { label: "Delivered", icon: "box" },
+];
 
 export default function TrackDemo() {
   const [step, setStep] = useState(2);
   const total = TRACK_DEMO_STEPS.length;
+  const pct = (step / (total - 1)) * 100;
 
   return (
     <Section id="track" tone="canvas">
@@ -24,33 +29,39 @@ export default function TrackDemo() {
             <span className="font-mono text-[11px] tracking-[0.18em] text-faint">ROUTE</span>
             <span className="text-[16px] font-semibold text-ink">Goa doorstep → Mumbai home</span>
           </div>
+          <div className="flex flex-col gap-1 border-l border-line pl-4">
+            <span className="font-mono text-[11px] tracking-[0.18em] text-faint">BAGS</span>
+            <span className="text-[16px] font-semibold text-ink">3 · Sealed</span>
+          </div>
           <button
             type="button"
             onClick={() => setStep((s) => (s + 1) % total)}
             className="ml-auto inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-brand-dark"
           >
-            Replay demo <Icon name="arrow" size={14} />
+            Track Bags <Icon name="arrow" size={14} />
           </button>
         </div>
 
-        <div className="px-6 py-8">
-          <div className="relative">
-            <div className="absolute left-0 right-0 top-[11px] h-px bg-line" aria-hidden="true" />
-            <div
-              className="absolute left-0 top-[11px] h-[2px] bg-brand transition-all duration-700"
-              style={{ width: `${(step / (total - 1)) * 100}%` }}
-              aria-hidden="true"
-            />
-            <div className="relative grid grid-cols-5 gap-2">
-              {TRACK_DEMO_STEPS.map((s, i) => (
-                <div key={s.l} className="flex flex-col gap-2">
-                  <span className={`size-[11px] rounded-full ${i < step ? "bg-ink" : i === step ? "bg-brand ring-4 ring-brand-soft" : "bg-line"}`} />
-                  <span className={`font-mono text-[11px] tracking-wider ${i <= step ? "text-brand" : "text-faint"}`}>{s.tag}</span>
-                  <span className={`text-[14px] font-semibold leading-tight ${i <= step ? "text-ink" : "text-faint"}`}>{s.l}</span>
-                  <span className="font-mono text-[12px] text-faint">{i <= step ? s.time : "--:--"}</span>
-                </div>
-              ))}
-            </div>
+        <div className="px-6 pb-8 pt-10">
+          <div className="relative mb-6 h-7">
+            <div className="absolute inset-x-0 top-[13px] h-0.5 bg-[repeating-linear-gradient(90deg,var(--color-line)_0_8px,transparent_8px_14px)]" />
+            <div className="absolute left-0 top-[12px] h-[3px] bg-brand transition-all duration-[1400ms] ease-out" style={{ width: `${pct}%` }} />
+            <span
+              className="absolute top-0 flex size-7 items-center justify-center rounded-full bg-navy text-white shadow-card transition-all duration-[1400ms] ease-out"
+              style={{ left: `calc(${pct}% - ${(pct / 100) * 28}px)` }}
+            >
+              <Icon name="landing" size={15} />
+            </span>
+          </div>
+          <div className="relative grid grid-cols-5 gap-2">
+            {TRACK_DEMO_STEPS.map((s, i) => (
+              <div key={s.l} className="flex flex-col gap-2">
+                <span className={`size-[11px] rounded-full ${i < step ? "bg-ink" : i === step ? "bg-brand ring-4 ring-brand-soft" : "bg-line"}`} />
+                <span className={`font-mono text-[11px] tracking-wider ${i <= step ? "text-brand" : "text-faint"}`}>{s.tag}</span>
+                <span className={`text-[14px] font-semibold leading-tight ${i <= step ? "text-ink" : "text-faint"}`}>{s.l}</span>
+                <span className="font-mono text-[12px] text-faint">{i <= step ? s.time : "--:--"}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -70,13 +81,13 @@ export default function TrackDemo() {
           <div className="flex flex-col gap-3 bg-paper/50 px-6 py-6">
             <span className="font-mono text-[11px] tracking-[0.18em] text-faint">CUSTODY RECORD</span>
             <div className="grid grid-cols-3 gap-2">
-              {PROOFS.map((label, i) => {
+              {PROOFS.map(({ label, icon }, i) => {
                 const thresholds = [1, 1, 4];
                 const met = step >= thresholds[i];
                 return (
                   <div key={label} className={`flex flex-col gap-2 rounded-xl p-3 ${met ? "bg-ink text-white" : "bg-white text-faint"}`}>
-                    <span className={`flex size-6 items-center justify-center rounded-full border-2 ${met ? "border-white" : "border-line"}`}>
-                      {met && <Icon name="check" size={12} />}
+                    <span className={`flex size-7 items-center justify-center rounded-full border-2 ${met ? "border-white/30 bg-white/10" : "border-line"}`}>
+                      <Icon name={icon} size={14} />
                     </span>
                     <span className="text-[14px] font-semibold">{label}</span>
                   </div>
