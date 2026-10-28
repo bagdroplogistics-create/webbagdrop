@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CITIES } from "./data";
-import { useCountUp } from "./motion";
+import { Marquee, useCountUp } from "./motion";
 import { CONTAINER } from "./SectionHeading";
 
 const NUMERIC_STATS = [
@@ -44,18 +44,20 @@ export default function StatsCities() {
           </div>
         </div>
 
-        {/* A static, fully-visible row — every city name shown whole, never
-         * scrolled or clipped — rather than an auto-scrolling marquee, which
-         * by nature always shows some word cut off at the edges. */}
-        <div className="mt-10 rounded-2xl bg-navy px-5 py-6 text-white sm:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
-            {CITIES.map((c, i) => (
-              <span key={c} className="flex items-center gap-6">
-                <span className="font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">{c.toUpperCase()}</span>
-                {i < CITIES.length - 1 && <span className="size-2 shrink-0 bg-brand" aria-hidden="true" />}
-              </span>
-            ))}
-          </div>
+        {/* Continuous auto-scrolling strip, matching the source mockup's
+         * motion exactly — words naturally pass through the edges as part
+         * of the scroll (confirmed against the reference recording), which
+         * is normal marquee behavior, not clipping. */}
+        <div className="mt-10 overflow-hidden rounded-2xl bg-navy py-6 text-white">
+          <Marquee durationS={28}>
+            <div className="flex items-center">
+              {CITIES.map((c) => (
+                <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">
+                  {c.toUpperCase()} <span className="size-2 shrink-0 bg-brand" aria-hidden="true" />
+                </span>
+              ))}
+            </div>
+          </Marquee>
         </div>
       </div>
     </section>
