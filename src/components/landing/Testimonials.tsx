@@ -23,7 +23,7 @@ export default function Testimonials() {
             </div>
             <div className="flex flex-col gap-0.5 border-t border-line p-3.5">
               <span className="truncate font-display text-[15px] font-bold text-ink">{c.name}</span>
-              <span className="font-mono text-[11px] tracking-wider text-brand">{c.bags.toUpperCase()}</span>
+              <span className="font-mono text-[11px] tracking-wider text-steel">{c.bags.toUpperCase()}</span>
               <span className="truncate text-[13px] text-steel">{c.route}</span>
             </div>
           </Reveal>

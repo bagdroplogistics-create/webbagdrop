@@ -57,7 +57,7 @@ export default function TrackDemo() {
             {TRACK_DEMO_STEPS.map((s, i) => (
               <div key={s.l} className="flex flex-col gap-2">
                 <span className={`size-[11px] rounded-full ${i < step ? "bg-ink" : i === step ? "bg-brand ring-4 ring-brand-soft" : "bg-line"}`} />
-                <span className={`font-mono text-[11px] tracking-wider ${i <= step ? "text-brand" : "text-faint"}`}>{s.tag}</span>
+                <span className={`font-mono text-[11px] tracking-wider ${i === step ? "text-brand" : i < step ? "text-steel" : "text-faint"}`}>{s.tag}</span>
                 <span className={`text-[14px] font-semibold leading-tight ${i <= step ? "text-ink" : "text-faint"}`}>{s.l}</span>
                 <span className="font-mono text-[12px] text-faint">{i <= step ? s.time : "--:--"}</span>
               </div>
@@ -70,7 +70,7 @@ export default function TrackDemo() {
             <span className="font-mono text-[11px] tracking-[0.18em] text-faint">UPDATES SENT</span>
             {TRACK_DEMO_STEPS.slice(0, step + 1).reverse().map((e) => (
               <div key={e.l} className="flex gap-4 border-t border-line pt-3 first:border-t-0 first:pt-0">
-                <span className="w-12 shrink-0 font-mono text-[13px] font-semibold text-brand">{e.time}</span>
+                <span className="w-12 shrink-0 font-mono text-[13px] font-semibold text-navy">{e.time}</span>
                 <div className="flex flex-col">
                   <span className="text-[15px] font-semibold text-ink">{e.l}</span>
                   <span className="text-[14px] text-steel">{e.d}</span>

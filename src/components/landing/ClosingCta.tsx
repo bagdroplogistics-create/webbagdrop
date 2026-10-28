@@ -7,7 +7,7 @@ export default function ClosingCta() {
     <section className={`${CONTAINER} bg-canvas py-16 sm:py-20`}>
       <Reveal className="overflow-hidden rounded-3xl bg-navy px-8 py-14 sm:px-14 sm:py-16">
         <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-14">
-          <h2 className="font-display text-[clamp(2.4rem,5.4vw,4.1rem)] font-extrabold leading-[0.95] tracking-tight text-white text-balance">
+          <h2 className="font-display text-[clamp(2.6rem,5.8vw,4.4rem)] font-extrabold leading-[0.95] tracking-tight text-white text-balance">
             Ready to travel <span className="text-brand">light?</span>
           </h2>
           <div className="flex flex-col gap-5">

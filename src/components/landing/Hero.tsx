@@ -47,11 +47,11 @@ export default function Hero() {
             ))}
           </div>
 
-          <div key={step} className="bd-step-in flex items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.25em] text-brand">
+          <div key={step} className="bd-step-in flex items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.25em] text-steel">
             <span className="h-[3px] w-10 bg-brand" /> {active.n} · {active.tag}
           </div>
 
-          <h1 key={`h-${step}`} className="bd-step-in font-display text-[clamp(2.6rem,5.6vw,4.1rem)] font-extrabold leading-[0.98] tracking-tight text-ink text-balance">
+          <h1 key={`h-${step}`} className="bd-step-in font-display text-[clamp(2.8rem,6vw,4.4rem)] font-extrabold leading-[0.98] tracking-tight text-ink text-balance">
             {active.a}<br />
             <span className="text-brand">{active.b}</span>
           </h1>
@@ -81,7 +81,7 @@ export default function Hero() {
           <div className="absolute inset-x-4 -bottom-6 overflow-hidden rounded-2xl border border-line bg-white shadow-card-lg sm:inset-x-6 sm:-bottom-8">
             <div className="flex items-center justify-between gap-3 px-4 py-3 font-mono text-[11px] tracking-[0.14em] text-faint">
               <span>YOUR DOOR</span>
-              <span className="text-brand">{active.tag}</span>
+              <span className="text-navy">{active.tag}</span>
               <span>DESTINATION</span>
             </div>
             <div className="relative mx-4 mb-4 h-[6px] rounded-full bg-line">

@@ -6,10 +6,10 @@ export function SectionHeading({
 }: { kicker: string; title: string; accent: string; id?: string }) {
   return (
     <Reveal className="mb-10 flex flex-col gap-3 sm:mb-14" as="div">
-      <span id={id} className="flex scroll-mt-24 items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.22em] text-brand">
+      <span id={id} className="flex scroll-mt-24 items-center gap-2.5 font-mono text-[12px] font-semibold tracking-[0.22em] text-steel">
         <span className="h-[3px] w-10 bg-brand" /> {kicker.toUpperCase()}
       </span>
-      <h2 className="font-display text-[clamp(2.1rem,4.2vw,3.2rem)] font-extrabold leading-[1.02] tracking-tight text-ink text-balance">
+      <h2 className="font-display text-[clamp(2.3rem,4.6vw,3.5rem)] font-extrabold leading-[1.02] tracking-tight text-ink text-balance">
         {title} <span className="text-brand">{accent}</span>
       </h2>
     </Reveal>

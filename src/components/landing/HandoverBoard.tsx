@@ -101,7 +101,7 @@ export default function HandoverBoard() {
 
         <div className="grid grid-cols-1 bg-white text-ink lg:grid-cols-2">
           <div className="flex flex-col gap-4 border-b border-line p-6 lg:border-b-0 lg:border-r lg:p-8">
-            <span className="font-mono text-[11px] font-semibold tracking-[0.18em] text-brand">LAYOUT · {v.kicker}</span>
+            <span className="font-mono text-[11px] font-semibold tracking-[0.18em] text-steel">LAYOUT · {v.kicker}</span>
             <h3 className="font-display text-[clamp(1.4rem,2.2vw,1.9rem)] font-extrabold leading-tight tracking-tight text-balance">{v.title}</h3>
             <p className="text-[14px] leading-relaxed text-graphite">{v.body}</p>
             <div className="mt-1 flex flex-wrap gap-4 font-mono text-[10px] tracking-[0.14em] text-steel">

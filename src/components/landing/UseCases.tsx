@@ -14,7 +14,7 @@ export default function UseCases() {
             <a href="#book" className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-white transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
               <div className="relative aspect-[4/3] overflow-hidden">
                 <Image src={u.image} alt="" fill sizes="(min-width:1024px) 25vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                <span className="absolute left-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-brand shadow-card backdrop-blur">
+                <span className="absolute left-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-navy shadow-card backdrop-blur">
                   <Icon name={u.icon} size={18} />
                 </span>
               </div>

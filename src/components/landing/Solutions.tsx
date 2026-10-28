@@ -19,7 +19,7 @@ export default function Solutions() {
                     {s.tag.toUpperCase()}
                   </span>
                 )}
-                <span className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-brand shadow-card backdrop-blur">
+                <span className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-navy shadow-card backdrop-blur">
                   <Icon name={s.icon} size={18} />
                 </span>
               </div>

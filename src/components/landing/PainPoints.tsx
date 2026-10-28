@@ -17,8 +17,8 @@ export default function PainPoints() {
             <div className="flex flex-1 flex-col gap-3 p-5">
               <span className="font-display text-4xl font-extrabold tracking-tight text-ink">{p.big}</span>
               <span className="text-[15px] leading-snug text-graphite">{p.pain}</span>
-              <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[15px] font-semibold text-brand">
-                <Icon name="check" size={15} /> {p.fix}
+              <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[15px] font-semibold text-ink">
+                <Icon name="check" size={15} className="shrink-0 text-brand" /> {p.fix}
               </span>
             </div>
           </Reveal>

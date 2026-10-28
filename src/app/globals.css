@@ -15,10 +15,12 @@
   --color-canvas: #fafaf8;
   /* Landing page only — a visibly darker step than --color-paper, used
    * for the alternating section backgrounds so the separation actually
-   * reads at a glance instead of blending into --color-canvas. Kept
-   * separate from --color-paper, which the booking Wizard and other
-   * pages already rely on, so this never changes their look. */
-  --color-section: #ebe9e4;
+   * reads at a glance instead of blending into --color-canvas. A cool
+   * blue-grey (not another warm beige) to read as logistics/aviation
+   * rather than lifestyle, and to echo --color-navy elsewhere on the
+   * page. Kept separate from --color-paper, which the booking Wizard
+   * and other pages already rely on, so this never changes their look. */
+  --color-section: #e9edf1;
   --color-cream: #f4eee4;
   --color-navy: #0a1628;
   --font-display: var(--font-geist-sans);
