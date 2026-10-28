@@ -1,18 +1,16 @@
-import { Reveal } from "./motion";
+import { Fill, Reveal } from "./motion";
 
 export type ProcessStep = { n: string; t: string; d: string };
 
 /** A clean numbered process timeline — a thin connecting line sits BEHIND
  *  circular step markers (never crossing text or passing through cards),
- *  horizontal on desktop and a left-rail vertical line on mobile. */
+ *  horizontal on desktop and a left-rail vertical line on mobile. The
+ *  brand-colored line animates in (left→right) once scrolled into view. */
 export function ProcessTimeline({ steps, markerBg = "bg-canvas" }: { steps: ProcessStep[]; markerBg?: string }) {
   return (
     <div className="relative">
-      <div
-        className="absolute top-5 left-5 w-px bg-line sm:top-5 sm:left-0 sm:h-px sm:w-full"
-        style={{ bottom: "0" }}
-        aria-hidden="true"
-      />
+      <div className="absolute top-5 left-5 w-px bg-line sm:top-5 sm:left-0 sm:h-px sm:w-full" style={{ bottom: "0" }} aria-hidden="true" />
+      <Fill className="absolute top-5 left-5 w-px bg-brand sm:top-5 sm:left-0 sm:h-px sm:w-full" aria-hidden="true" />
       <ol className="relative grid grid-cols-1 gap-8 sm:grid-cols-4 sm:gap-6">
         {steps.map((s, i) => (
           <Reveal key={s.n} delay={i * 110} as="li" className="relative flex gap-4 sm:flex-col sm:gap-4">

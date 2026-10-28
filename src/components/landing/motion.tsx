@@ -60,6 +60,29 @@ export function useCountUp(target: number, active: boolean, duration = 1400) {
   return value;
 }
 
+/** Ref-based IntersectionObserver flag — the imperative building block
+ *  behind Reveal/Fill, exposed for components that need the boolean
+ *  (count-up targets, step indicators) rather than a CSS data-attribute. */
+export function useInView<T extends HTMLElement>(threshold = 0.2) {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setInView(true); io.disconnect(); } }, { threshold });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [threshold]);
+  return [ref, inView] as const;
+}
+
+/** A progress line that fills left-to-right once scrolled into view —
+ *  the motion-base "data-fill" treatment, e.g. behind a step timeline. */
+export function Fill({ className, "aria-hidden": ariaHidden }: { className?: string; "aria-hidden"?: boolean | "true" | "false" }) {
+  const [ref, inView] = useInView<HTMLDivElement>(0.4);
+  return <div ref={ref} data-fill="" data-in={inView ? "" : undefined} className={className} aria-hidden={ariaHidden} />;
+}
+
 export function Marquee({ children, durationS = 36 }: { children: ReactNode; durationS?: number }) {
   return (
     <div className="overflow-hidden">

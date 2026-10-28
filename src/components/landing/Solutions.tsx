@@ -2,15 +2,15 @@ import Image from "next/image";
 import { SOLUTIONS } from "./data";
 import { Icon } from "./Icon";
 import { Reveal } from "./motion";
-import { Section, SectionHeading } from "./SectionHeading";
+import { GRID, GRID_CARD, Section, SectionHeading } from "./SectionHeading";
 
 export default function Solutions() {
   return (
-    <Section id="solutions">
+    <Section id="solutions" tone="canvas">
       <SectionHeading kicker="Solutions" title="Twelve ways" accent="to travel light." />
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className={GRID}>
         {SOLUTIONS.map((s, i) => (
-          <Reveal key={s.title} delay={(i % 4) * 60}>
+          <Reveal key={s.title} delay={(i % 4) * 60} className={GRID_CARD}>
             <a href="#book" className="group relative flex h-full flex-col justify-end overflow-hidden rounded-2xl border border-line bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
               {s.image ? (
                 <>

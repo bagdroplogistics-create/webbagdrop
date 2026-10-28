@@ -14,7 +14,7 @@ function Stars({ size = 16 }: { size?: number }) {
 
 export default function ReviewsMarquee() {
   return (
-    <Section bleedClassName="bg-paper/50" className="!py-16 sm:!py-20">
+    <Section tone="canvas" className="!py-16 sm:!py-20">
       <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <SectionHeading kicker="Google reviews" title="What our" accent="customers say." />
         <Reveal delay={120} className="flex items-center gap-5">

@@ -10,7 +10,7 @@ export default function FAQSection() {
   const items = FAQ[cat].items;
 
   return (
-    <Section id="faq">
+    <Section id="faq" tone="paper">
       <SectionHeading kicker="FAQ" title="Questions," accent="answered." />
       <div className="mb-6 flex flex-wrap gap-2">
         {FAQ.map((c, i) => (

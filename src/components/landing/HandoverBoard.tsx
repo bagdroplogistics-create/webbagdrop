@@ -8,7 +8,7 @@ export default function HandoverBoard() {
   const [open, setOpen] = useState(0);
 
   return (
-    <Section id="handovers">
+    <Section id="handovers" tone="paper">
       <SectionHeading kicker="Live board" title="Every terminal." accent="One handover." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-white">

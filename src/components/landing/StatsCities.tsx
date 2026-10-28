@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CITIES } from "./data";
 import { Marquee, useCountUp } from "./motion";
+import { CONTAINER } from "./SectionHeading";
 
 const NUMERIC_STATS = [
   { target: 12000, suffix: "+", label: "Bags delivered" },
@@ -33,25 +34,27 @@ export default function StatsCities() {
   }, []);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 sm:px-6">
-      <div ref={ref} className="grid grid-cols-2 gap-x-6 divide-y divide-line border-y border-line sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
-        {NUMERIC_STATS.map((s) => <div key={s.label} className="sm:px-6 sm:first:pl-0"><Stat {...s} active={active} /></div>)}
-        <div className="py-6 sm:px-6">
-          <span className="font-display text-[clamp(2rem,4vw,2.75rem)] font-extrabold tracking-tight text-brand">4.9 / 5</span>
-          <span className="block font-mono text-[11px] tracking-[0.14em] text-steel uppercase">Customer rating</span>
-        </div>
-      </div>
-
-      <div className="mt-10 overflow-hidden rounded-2xl bg-navy py-5 text-white">
-        <Marquee durationS={32}>
-          <div className="flex items-center">
-            {CITIES.map((c) => (
-              <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">
-                {c.toUpperCase()} <span className="size-1.5 rounded-full bg-brand" />
-              </span>
-            ))}
+    <section className="bg-paper/60 py-12 sm:py-16">
+      <div className={CONTAINER}>
+        <div ref={ref} className="grid grid-cols-2 gap-x-6 divide-y divide-line border-y border-line sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
+          {NUMERIC_STATS.map((s) => <div key={s.label} className="sm:px-6 sm:first:pl-0"><Stat {...s} active={active} /></div>)}
+          <div className="py-6 sm:px-6">
+            <span className="font-display text-[clamp(2rem,4vw,2.75rem)] font-extrabold tracking-tight text-brand">4.9 / 5</span>
+            <span className="block font-mono text-[11px] tracking-[0.14em] text-steel uppercase">Customer rating</span>
           </div>
-        </Marquee>
+        </div>
+
+        <div className="mt-10 overflow-hidden rounded-2xl bg-navy py-5 text-white">
+          <Marquee durationS={32}>
+            <div className="flex items-center">
+              {CITIES.map((c) => (
+                <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">
+                  {c.toUpperCase()} <span className="size-1.5 rounded-full bg-brand" />
+                </span>
+              ))}
+            </div>
+          </Marquee>
+        </div>
       </div>
     </section>
   );

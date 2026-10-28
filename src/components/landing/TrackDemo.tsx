@@ -11,7 +11,7 @@ export default function TrackDemo() {
   const total = TRACK_DEMO_STEPS.length;
 
   return (
-    <Section id="track">
+    <Section id="track" tone="canvas">
       <SectionHeading kicker="Track your bags" title="From your door" accent="to delivered." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-white">

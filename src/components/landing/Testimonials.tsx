@@ -9,7 +9,7 @@ function initials(name: string) {
 
 export default function Testimonials() {
   return (
-    <Section>
+    <Section tone="paper">
       <SectionHeading kicker="Happy clients" title="Real customers." accent="Real deliveries." />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {CLIENTS.map((c, i) => (

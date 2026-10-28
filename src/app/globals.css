@@ -32,13 +32,26 @@
  * slow, fails, or is disabled, and only animates in when it can. */
 html[data-motion] [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
 html[data-motion] [data-reveal][data-in] { opacity: 1; transform: none; }
+html[data-motion] [data-fill] { transform: scaleX(0); transform-origin: left center; transition: transform 1.6s cubic-bezier(.65,0,.2,1); }
+html[data-motion] [data-fill][data-in] { transform: scaleX(1); }
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
+  [data-fill] { transform: none !important; transition: none !important; }
   .bd-marquee-track { animation: none !important; }
 }
 @keyframes bd-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .bd-marquee-track { animation: bd-marquee linear infinite; }
 .bd-marquee-track:hover { animation-play-state: paused; }
+
+/* Hero story slider (4-step, auto-advancing) */
+@keyframes bd-step-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes bd-seg-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+html[data-motion] .bd-step-in { animation: bd-step-in .5s cubic-bezier(.2,.7,.2,1) both; }
+.bd-seg-fill { transform-origin: left center; animation: bd-seg-fill linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .bd-step-in { animation: none !important; }
+  .bd-seg-fill { animation: none !important; transform: scaleX(1) !important; }
+}
 
 body {
   background: var(--color-canvas);

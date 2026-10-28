@@ -1,15 +1,15 @@
 import { USE_CASES } from "./data";
 import { Icon } from "./Icon";
 import { Reveal } from "./motion";
-import { Section, SectionHeading } from "./SectionHeading";
+import { GRID, GRID_CARD, Section, SectionHeading } from "./SectionHeading";
 
 export default function UseCases() {
   return (
-    <Section id="usecases">
+    <Section id="usecases" tone="canvas">
       <SectionHeading kicker="What's your trip?" title="One team." accent="Every journey." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+      <div className={GRID}>
         {USE_CASES.map((u, i) => (
-          <Reveal key={u.solution} delay={(i % 4) * 60} className="group flex flex-col gap-4 rounded-2xl border border-line bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
+          <Reveal key={u.solution} delay={(i % 4) * 60} className={`${GRID_CARD} group flex flex-col gap-4 rounded-2xl border border-line bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-card-lg`}>
             <span className="flex size-11 items-center justify-center rounded-xl bg-brand-soft text-brand">
               <Icon name={u.icon} size={20} />
             </span>

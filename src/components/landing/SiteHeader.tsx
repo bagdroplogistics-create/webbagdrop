@@ -3,12 +3,13 @@ import { useState } from "react";
 import Image from "next/image";
 import { NAV } from "./data";
 import { Icon } from "./Icon";
+import { CONTAINER } from "./SectionHeading";
 
 export default function SiteHeader() {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-canvas/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
+      <div className={`flex h-16 items-center gap-6 ${CONTAINER}`}>
         <a href="#top" className="flex items-center gap-2.5">
           <Image src="/images/logo-icon.png" alt="" width={28} height={28} className="h-7 w-7" priority />
           <span className="flex flex-col leading-none">

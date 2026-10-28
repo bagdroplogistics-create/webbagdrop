@@ -4,7 +4,7 @@ import { Section, SectionHeading } from "./SectionHeading";
 
 export default function HowItWorks() {
   return (
-    <Section id="how">
+    <Section id="how" tone="paper">
       <SectionHeading kicker="How it works" title="Four steps to" accent="travel free." />
       <ProcessTimeline steps={PROCESS_STEPS} />
     </Section>

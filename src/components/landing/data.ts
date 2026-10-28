@@ -57,6 +57,18 @@ export const SOLUTIONS: Solution[] = [
   { title: "Baggage Pickup", icon: "box" },
 ];
 
+/** The hero's 4-step motion slider — same four steps as the Motion Base
+ *  mockup's scroll-story hero (Book / Pickup / Transit / Delivered), run
+ *  as an in-place auto-advancing slider rather than a full-page
+ *  scroll-jack (which fails badly on mobile and fights the page's own
+ *  scroll). */
+export const STORY_STEPS = [
+  { n: "01", tag: "BOOK", a: "Book in", b: "two minutes.", d: "Choose your route, bags and pickup slot." },
+  { n: "02", tag: "PICKUP", a: "We come", b: "to your door.", d: "Sealed, photographed and insured at pickup." },
+  { n: "03", tag: "TRANSIT", a: "Your bags", b: "travel first.", d: "WhatsApp and email updates at every stage." },
+  { n: "04", tag: "DELIVERED", a: "You arrive", b: "empty-handed.", d: "Bags waiting at your hotel, home or terminal." },
+];
+
 export const PROCESS_STEPS = [
   { n: "01", t: "Book", d: "Choose your route, bag count and pickup slot. Takes under 2 minutes." },
   { n: "02", t: "Pickup", d: "Our team arrives at your door in the confirmed slot — sealed and photographed." },

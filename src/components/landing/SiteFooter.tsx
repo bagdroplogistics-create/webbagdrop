@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { FOOTER_COLS } from "./data";
+import { CONTAINER } from "./SectionHeading";
 
 const SOCIALS = [
   { href: "https://www.instagram.com/bagdropofficial", label: "Instagram", path: "M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm10 2H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3zm-5 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM17.5 6.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" },
@@ -10,7 +11,7 @@ const SOCIALS = [
 export default function SiteFooter() {
   return (
     <footer className="bg-navy text-white/70">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+      <div className={`py-16 ${CONTAINER}`}>
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 border-b border-white/10 pb-12 sm:grid-cols-3 lg:grid-cols-6">
           <div className="col-span-2 flex flex-col gap-4 lg:col-span-2">
             <Image src="/images/logo-horizontal.png" alt="Bagdrop" width={150} height={34} className="h-8 w-auto" />

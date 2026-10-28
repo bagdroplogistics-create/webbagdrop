@@ -22,7 +22,6 @@ export default function Home() {
       <MotionGate />
       <SiteHeader />
       <Hero />
-      <div className="h-14 sm:h-16" />
       <StatsCities />
       <UseCases />
       <PainPoints />
