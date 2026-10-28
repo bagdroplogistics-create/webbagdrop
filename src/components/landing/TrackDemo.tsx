@@ -78,7 +78,7 @@ export default function TrackDemo() {
               </div>
             ))}
           </div>
-          <div className="flex flex-col gap-3 bg-paper/50 px-6 py-6">
+          <div className="flex flex-col gap-3 bg-section px-6 py-6">
             <span className="font-mono text-[11px] tracking-[0.18em] text-faint">CUSTODY RECORD</span>
             <div className="grid grid-cols-3 gap-2">
               {PROOFS.map(({ label, icon }, i) => {

@@ -111,7 +111,7 @@ export default function HandoverBoard() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-5 bg-paper/60 p-6 lg:p-8">
+          <div className="flex flex-col gap-5 bg-section p-6 lg:p-8">
             <div className="relative h-4">
               <div className="absolute inset-x-0 top-[7px] h-0.5 bg-[repeating-linear-gradient(90deg,var(--color-ink)_0_8px,transparent_8px_14px)]" />
               <span key={venue} className="bd-walk-dot absolute top-0 size-4 rounded-full border-2 border-ink bg-brand" />
