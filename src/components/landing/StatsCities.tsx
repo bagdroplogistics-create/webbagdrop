@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CITIES } from "./data";
-import { Marquee, useCountUp } from "./motion";
+import { useCountUp } from "./motion";
 import { CONTAINER } from "./SectionHeading";
 
 const NUMERIC_STATS = [
@@ -44,19 +44,18 @@ export default function StatsCities() {
           </div>
         </div>
 
-        <div
-          className="mt-10 overflow-hidden rounded-2xl bg-navy py-5 text-white"
-          style={{ maskImage: "linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)" }}
-        >
-          <Marquee durationS={32}>
-            <div className="flex items-center">
-              {CITIES.map((c) => (
-                <span key={c} className="flex items-center gap-5 px-5 font-display text-2xl font-extrabold tracking-tight whitespace-nowrap sm:text-3xl">
-                  {c.toUpperCase()} <span className="size-1.5 rounded-full bg-brand" />
-                </span>
-              ))}
-            </div>
-          </Marquee>
+        {/* A static, fully-visible row — every city name shown whole, never
+         * scrolled or clipped — rather than an auto-scrolling marquee, which
+         * by nature always shows some word cut off at the edges. */}
+        <div className="mt-10 rounded-2xl bg-navy px-5 py-6 text-white sm:px-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+            {CITIES.map((c, i) => (
+              <span key={c} className="flex items-center gap-6">
+                <span className="font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">{c.toUpperCase()}</span>
+                {i < CITIES.length - 1 && <span className="size-2 shrink-0 bg-brand" aria-hidden="true" />}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </section>
