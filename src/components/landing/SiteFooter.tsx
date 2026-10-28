@@ -14,7 +14,9 @@ export default function SiteFooter() {
       <div className={`py-16 ${CONTAINER}`}>
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 border-b border-white/10 pb-12 sm:grid-cols-3 lg:grid-cols-6">
           <div className="col-span-2 flex flex-col gap-4 lg:col-span-2">
-            <Image src="/images/logo-horizontal.png" alt="Bagdrop" width={150} height={34} className="h-8 w-auto" />
+            {/* Source is 400×100 (4:1 ratio) — width/height set to match exactly so
+             * the browser's aspect-ratio box doesn't stretch it when sized via CSS. */}
+            <Image src="/images/logo-horizontal.png" alt="Bagdrop" width={200} height={50} className="h-12 w-auto" />
             <p className="max-w-[260px] text-[15px] text-white/60">The baggage infrastructure layer for modern travel.</p>
             <div className="flex gap-2.5">
               {SOCIALS.map((s) => (

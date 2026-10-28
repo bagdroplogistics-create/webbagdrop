@@ -10,10 +10,12 @@ export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-canvas/90 backdrop-blur">
       <div className={`flex h-16 items-center gap-6 ${CONTAINER}`}>
-        <a href="#top" className="flex items-center gap-2.5">
-          <Image src="/images/logo-icon.png" alt="" width={28} height={28} className="h-7 w-7" priority />
+        <a href="#top" className="flex items-center gap-3">
+          {/* Source is 200×260 (0.77 ratio) — width/height set to match exactly so
+           * the browser's aspect-ratio box doesn't stretch it when sized via CSS. */}
+          <Image src="/images/logo-icon.png" alt="" width={31} height={40} className="h-10 w-auto" priority />
           <span className="flex flex-col leading-none">
-            <span className="font-display text-lg font-extrabold tracking-tight text-ink">
+            <span className="font-display text-xl font-extrabold tracking-tight text-ink">
               BAG<span className="text-brand">DROP</span>
             </span>
             <span className="font-mono text-[10px] tracking-[0.2em] text-faint">BAG. BOX. DELIVERED.</span>
