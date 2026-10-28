@@ -44,7 +44,10 @@ export default function StatsCities() {
           </div>
         </div>
 
-        <div className="mt-10 overflow-hidden rounded-2xl bg-navy py-5 text-white">
+        <div
+          className="mt-10 overflow-hidden rounded-2xl bg-navy py-5 text-white"
+          style={{ maskImage: "linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)" }}
+        >
           <Marquee durationS={32}>
             <div className="flex items-center">
               {CITIES.map((c) => (

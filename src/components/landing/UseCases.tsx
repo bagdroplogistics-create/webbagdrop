@@ -20,7 +20,7 @@ export default function UseCases() {
               </div>
               <div className="flex flex-1 flex-col gap-1 p-4">
                 <span className="text-[14px] text-steel">{u.problem}</span>
-                <span className="font-display text-[16px] font-bold leading-tight text-ink">{u.solution}</span>
+                <span className="font-display text-[19px] font-bold leading-tight text-ink">{u.solution}</span>
                 <span className="mt-auto flex items-center gap-1.5 pt-1 text-[14px] font-semibold text-brand opacity-0 transition-opacity group-hover:opacity-100">
                   Book this <Icon name="arrow" size={13} />
                 </span>
