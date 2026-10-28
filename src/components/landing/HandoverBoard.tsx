@@ -33,9 +33,14 @@ function FlipStatus({ status, tone }: { status: string; tone: string }) {
   );
 }
 
+function boardClock() {
+  return new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
+}
+
 export default function HandoverBoard() {
   const [stage, setStage] = useState(0);
   const [venue, setVenue] = useState(0);
+  const [clock, setClock] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
@@ -43,6 +48,12 @@ export default function HandoverBoard() {
     if (reduce) return;
     timer.current = setInterval(() => setStage((s) => (s + 1) % BOARD_STATUSES.length), 2600);
     return () => clearInterval(timer.current);
+  }, []);
+
+  useEffect(() => {
+    setClock(boardClock());
+    const id = setInterval(() => setClock(boardClock()), 30_000);
+    return () => clearInterval(id);
   }, []);
 
   const v = HANDOVERS[venue];
@@ -56,7 +67,7 @@ export default function HandoverBoard() {
           <span className="flex items-center gap-2 font-mono text-[11px] font-semibold tracking-[0.18em]">
             <span className="bd-blink-dot size-1.5 rounded-full bg-brand" /> BAGDROP · HANDOVERS
           </span>
-          <span className="rounded-full bg-white/10 px-2.5 py-0.5 font-mono text-[10px] tracking-wider text-white/70">ILLUSTRATIVE EXAMPLE</span>
+          <span className="font-mono text-[11px] tracking-[0.14em] text-white/60">{clock ?? "--:--"} IST</span>
         </div>
 
         <div className="overflow-x-auto">
