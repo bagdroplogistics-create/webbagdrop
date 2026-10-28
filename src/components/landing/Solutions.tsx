@@ -11,27 +11,22 @@ export default function Solutions() {
       <div className={GRID}>
         {SOLUTIONS.map((s, i) => (
           <Reveal key={s.title} delay={(i % 4) * 60} className={GRID_CARD}>
-            <a href="#book" className="group relative flex h-full flex-col justify-end overflow-hidden rounded-2xl border border-line bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
-              {s.image ? (
-                <>
-                  <Image src={s.image} alt="" fill sizes="25vw" className="absolute inset-0 object-cover opacity-20 transition-opacity group-hover:opacity-30" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-white via-white/70 to-white/10" />
-                </>
-              ) : null}
-              <div className="relative flex flex-col gap-3">
+            <a href="#book" className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-white transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
+              <div className="relative aspect-[4/3] overflow-hidden">
+                <Image src={s.image} alt="" fill sizes="(min-width:1024px) 25vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
                 {s.tag && (
-                  <span className="w-fit rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.1em] text-white">
+                  <span className="absolute left-3 top-3 rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.1em] text-white">
                     {s.tag.toUpperCase()}
                   </span>
                 )}
-                <span className="flex size-10 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <span className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-brand shadow-card backdrop-blur">
                   <Icon name={s.icon} size={18} />
                 </span>
-                <span className="flex items-center justify-between gap-2 font-display text-[16px] font-bold leading-tight text-ink">
-                  {s.title}
-                  <Icon name="arrow" size={15} className="shrink-0 text-faint transition-colors group-hover:text-brand" />
-                </span>
               </div>
+              <span className="flex items-center justify-between gap-2 p-4 font-display text-[16px] font-bold leading-tight text-ink">
+                {s.title}
+                <Icon name="arrow" size={15} className="shrink-0 text-faint transition-colors group-hover:text-brand" />
+              </span>
             </a>
           </Reveal>
         ))}

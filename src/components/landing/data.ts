@@ -21,40 +21,40 @@ export const STATS = [
 
 export const CITIES = ["Mumbai", "Delhi", "Ahmedabad", "Vadodara", "Goa", "Gujarat", "Rajasthan", "Hyderabad", "Bangalore"];
 
-export type UseCase = { problem: string; solution: string; icon: string };
+export type UseCase = { problem: string; solution: string; icon: string; image: string };
 export const USE_CASES: UseCase[] = [
-  { problem: "Over your airline allowance", solution: "Excess baggage", icon: "plane" },
-  { problem: "Landing in a new city", solution: "Airport delivery", icon: "landing" },
-  { problem: "Need an early hotel check-in", solution: "Hotel delivery", icon: "hotel" },
-  { problem: "Long train journey ahead", solution: "Railway station drop", icon: "train" },
-  { problem: "Family cruise departure", solution: "Cruise baggage", icon: "cruise" },
-  { problem: "Moving city to city", solution: "Door-to-door", icon: "home" },
-  { problem: "Destination wedding", solution: "Wedding logistics", icon: "wedding" },
-  { problem: "Moving abroad for study", solution: "Student relocation", icon: "graduate" },
+  { problem: "Over your airline allowance", solution: "Excess baggage", icon: "plane", image: "/images/landing/excess.jpg" },
+  { problem: "Landing in a new city", solution: "Airport delivery", icon: "landing", image: "/images/landing/airport.jpg" },
+  { problem: "Need an early hotel check-in", solution: "Hotel delivery", icon: "hotel", image: "/images/landing/hotel.jpg" },
+  { problem: "Long train journey ahead", solution: "Railway station drop", icon: "train", image: "/images/landing/railway.jpg" },
+  { problem: "Family cruise departure", solution: "Cruise baggage", icon: "cruise", image: "/images/landing/cruise.jpg" },
+  { problem: "Moving city to city", solution: "Door-to-door", icon: "home", image: "/images/landing/door.jpg" },
+  { problem: "Destination wedding", solution: "Wedding logistics", icon: "wedding", image: "/images/wedding-slide.jpg" },
+  { problem: "Moving abroad for study", solution: "Student relocation", icon: "graduate", image: "/images/student-slide.jpg" },
 ];
 
-export type Pain = { big: string; pain: string; fix: string };
+export type Pain = { big: string; pain: string; fix: string; image: string };
 export const PAINS: Pain[] = [
-  { big: "₹3,000–8,000", pain: "Airline excess-baggage fees, every trip", fix: "Save 40–60% with Bagdrop" },
-  { big: "Queues", pain: "Trolleys and queues at every terminal", fix: "Walk out empty-handed" },
-  { big: "Stairs", pain: "Platforms, stairs and coach racks", fix: "Board with just a day bag" },
-  { big: "Hands full", pain: "Kids, parents and wedding trunks to manage", fix: "We carry, you travel" },
+  { big: "₹3,000–8,000", pain: "Airline excess-baggage fees, every trip", fix: "Save 40–60% with Bagdrop", image: "/images/landing/excess.jpg" },
+  { big: "Queues", pain: "Trolleys and queues at every terminal", fix: "Walk out empty-handed", image: "/images/landing/queue.jpg" },
+  { big: "Stairs", pain: "Platforms, stairs and coach racks", fix: "Board with just a day bag", image: "/images/landing/railway.jpg" },
+  { big: "Hands full", pain: "Kids, parents and wedding trunks to manage", fix: "We carry, you travel", image: "/images/landing/family.jpg" },
 ];
 
-export type Solution = { title: string; icon: string; tag?: string; image?: string };
+export type Solution = { title: string; icon: string; tag?: string; image: string };
 export const SOLUTIONS: Solution[] = [
-  { title: "Airport Delivery", icon: "plane", tag: "Most popular" },
-  { title: "Door-to-Door", icon: "home" },
-  { title: "Hotel Delivery", icon: "hotel" },
-  { title: "Railway Station", icon: "train" },
-  { title: "Cruise Baggage", icon: "cruise" },
-  { title: "Excess Baggage", icon: "landing", tag: "Save 40–60%" },
+  { title: "Airport Delivery", icon: "plane", tag: "Most popular", image: "/images/landing/airport.jpg" },
+  { title: "Door-to-Door", icon: "home", image: "/images/landing/door.jpg" },
+  { title: "Hotel Delivery", icon: "hotel", image: "/images/landing/hotel.jpg" },
+  { title: "Railway Station", icon: "train", image: "/images/landing/railway.jpg" },
+  { title: "Cruise Baggage", icon: "cruise", image: "/images/landing/cruise.jpg" },
+  { title: "Excess Baggage", icon: "landing", tag: "Save 40–60%", image: "/images/landing/excess.jpg" },
   { title: "Destination Weddings", icon: "wedding", tag: "White-glove", image: "/images/wedding-slide.jpg" },
   { title: "Student Relocation", icon: "graduate", image: "/images/student-slide.jpg" },
-  { title: "Corporate Travel", icon: "briefcase", tag: "GST invoices" },
-  { title: "Group Bookings", icon: "group", tag: "Up to 30 bags" },
-  { title: "Sports & Oversized", icon: "globe" },
-  { title: "Baggage Pickup", icon: "box" },
+  { title: "Corporate Travel", icon: "briefcase", tag: "GST invoices", image: "/images/landing/corporate.jpg" },
+  { title: "Group Bookings", icon: "group", tag: "Up to 30 bags", image: "/images/landing/group.jpg" },
+  { title: "Sports & Oversized", icon: "globe", image: "/images/landing/sports.jpg" },
+  { title: "Baggage Pickup", icon: "box", image: "/images/landing/pickup.jpg" },
 ];
 
 /** The hero's 4-step motion slider — same four steps as the Motion Base
