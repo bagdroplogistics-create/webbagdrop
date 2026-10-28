@@ -73,6 +73,9 @@ export default function Hero() {
           <div className="relative aspect-[4/5] overflow-hidden rounded-3xl bg-navy sm:aspect-[5/6] lg:aspect-[4/5]">
             <Image src="/images/web-slider.jpg" alt="Traveler walking through an airport terminal without luggage" fill sizes="(min-width:1024px) 40vw, 90vw" className="object-cover opacity-90" priority />
             <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-navy/5 to-transparent" />
+            <span className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-full bg-navy px-3 py-1.5 font-mono text-[10px] font-semibold tracking-[0.18em] text-white">
+              <span className="bd-blink-dot size-[7px] rounded-full bg-brand" /> LIVE MOVE
+            </span>
           </div>
 
           <div className="absolute inset-x-4 -bottom-6 overflow-hidden rounded-2xl border border-line bg-white shadow-card-lg sm:inset-x-6 sm:-bottom-8">

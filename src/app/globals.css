@@ -40,6 +40,9 @@ html[data-motion] [data-fill][data-in] { transform: scaleX(1); }
   .bd-marquee-track { animation: none !important; }
 }
 @keyframes bd-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes bd-blink { 50% { opacity: .25; } }
+.bd-blink-dot { animation: bd-blink 1.2s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .bd-blink-dot { animation: none; } }
 .bd-marquee-track { animation: bd-marquee linear infinite; }
 .bd-marquee-track:hover { animation-play-state: paused; }
 
