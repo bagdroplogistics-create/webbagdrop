@@ -89,6 +89,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
 
   const [prodBusy, setProdBusy] = useState(false);
   const [prodErr, setProdErr] = useState<string | null>(null);
+  const [prodLoaded, setProdLoaded] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
@@ -99,7 +100,11 @@ export default function Inbox({ search = "" }: { search?: string }) {
     if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
     setLeads(j.leads as ProductionLead[]);
   }
-  useEffect(() => { refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))); }, []);
+  // Both sources are fetched together, and the table waits for both before
+  // showing anything — otherwise this app's own (mostly old test) bookings
+  // flash alone for the second or two it takes bagdrop.co's leads to load,
+  // then jump around once they join and the list re-sorts by date.
+  useEffect(() => { refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))).finally(() => setProdLoaded(true)); }, []);
 
   /** Writes a status/price change to production via bagdrop-web's own admin
    *  API (see src/app/api/admin/production-leads/[id]/route.ts) and refetches. */
@@ -177,10 +182,13 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </tr>
             </thead>
             <tbody>
-              {pageRows.length === 0 && (
+              {!prodLoaded && (
+                <tr><td colSpan={6} className="py-6 text-center text-muted">Loading…</td></tr>
+              )}
+              {prodLoaded && pageRows.length === 0 && (
                 <tr><td colSpan={6} className="py-6 text-center text-muted">No bookings{filter !== "all" ? " in this filter" : " yet — make one on the booking page"}.</td></tr>
               )}
-              {pageRows.map((r) => {
+              {prodLoaded && pageRows.map((r) => {
                 const rowId = r.key.slice(r.key.indexOf(":") + 1);
                 const isSel = !!sel && sel.source === r.source && sel.id === rowId;
                 return (
