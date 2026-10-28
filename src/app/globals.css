@@ -42,7 +42,16 @@ html[data-motion] [data-fill][data-in] { transform: scaleX(1); }
 @keyframes bd-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes bd-blink { 50% { opacity: .25; } }
 .bd-blink-dot { animation: bd-blink 1.2s steps(1) infinite; }
-@media (prefers-reduced-motion: reduce) { .bd-blink-dot { animation: none; } }
+
+/* Live board — status flip-letters and the zone-diagram walking dot */
+@keyframes bd-flip { 0% { transform: rotateX(90deg); } 100% { transform: none; } }
+.bd-flip-char { animation: bd-flip .35s both; }
+@keyframes bd-walk { 0% { left: 0%; } 90%, 100% { left: calc(100% - 14px); } }
+.bd-walk-dot { animation: bd-walk 4s cubic-bezier(.65,0,.35,1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-blink-dot, .bd-flip-char, .bd-walk-dot { animation: none; }
+}
 .bd-marquee-track { animation: bd-marquee linear infinite; }
 .bd-marquee-track:hover { animation-play-state: paused; }
 
