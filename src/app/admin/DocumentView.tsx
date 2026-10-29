@@ -29,7 +29,7 @@ const TERMS: Partial<Record<DocType, string[]>> = {
   PI: ["This is a proforma invoice — not a tax invoice. A Tax Invoice follows on payment confirmation."],
 };
 
-import { CHARGE_HEADS, lrTotals, type LrDetails as LrD } from "@/lib/lrModel";
+import { buildOpsNote, CHARGE_HEADS, lrTotals, type LrDetails as LrD } from "@/lib/lrModel";
 
 /** The official Bagdrop LR / Consignment Note — pixel layout pulled from the
  *  company's issued format (BDLR series PDF): orange masthead, GC block,
@@ -42,6 +42,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
   const paid = b.pay?.status === "captured";
   const gcDate = new Date(doc.at).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
   const CHARGES: [string, number][] = CHARGE_HEADS.map(([k, name]) => [name, Math.round(Number(totals.heads[k]) || 0)]);
+  const opsNote = buildOpsNote(b, lr);
   const cell = "border border-stone-300 px-2 py-1";
   const lbl = "block text-[8.5px] font-semibold uppercase tracking-wide text-stone-500";
   const bar = "bg-[#0B1426] px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white";
@@ -52,6 +53,18 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
         <div className="flex items-center justify-between p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
+        </div>
+
+        {/* Operations note — for the pickup/delivery team, screen-only; the
+         * printed consignment note below stays exactly the official format. */}
+        <div className="mx-5 mb-3 rounded-lg border border-line bg-paper/70 p-3 text-[11px] print:hidden">
+          <p className="mb-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-ink">Operations note</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+            <p><span className="text-faint">Customer:</span> <b>{opsNote.customerName}</b></p>
+            <p><span className="text-faint">Bags:</span> <b>{opsNote.bags}</b></p>
+            <p className="sm:col-span-3"><span className="text-faint">Pickup:</span> <b>{opsNote.pickupAddress}</b> — {opsNote.pickupWhen}</p>
+            <p className="sm:col-span-3"><span className="text-faint">Delivery:</span> <b>{opsNote.deliveryAddress}</b> — {opsNote.deliveryWhen}</p>
+          </div>
         </div>
 
         {/* masthead */}

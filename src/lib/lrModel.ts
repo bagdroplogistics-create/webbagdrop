@@ -1,6 +1,7 @@
 /** The complete LR / Consignment Note field model — every field of the
  *  official Bagdrop format (BDLR series). Shared by the Make-LR form, the
  *  printed document, the auto-draft pass and the issue API. */
+import type { Booking } from "./types";
 
 export const CHARGE_HEADS = [
   ["freight", "Freight"],
@@ -61,4 +62,47 @@ export function lrTotals(d: LrDetails | undefined, fallbackTotalInclGst: number)
   const cgst = Math.round(subTotal * 0.025);
   const sgst = Math.round(subTotal * 0.025);
   return { heads: ch, subTotal, cgst, sgst, total: subTotal + cgst + sgst };
+}
+
+const MISSING = "Missing";
+
+function fmtDate(raw?: string | null): string {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export interface OpsNote {
+  customerName: string;
+  pickupAddress: string;
+  pickupWhen: string;
+  deliveryAddress: string;
+  deliveryWhen: string;
+  bags: string;
+}
+
+/** The basic operations note — just the six essentials a pickup/delivery
+ *  team needs, pulled straight off the booking (and the LR's own edited
+ *  fields, when a field was overridden on the LR form) at the moment the
+ *  LR exists. Nothing here is invented: an absent field prints "Missing"
+ *  (or "Not specified" for delivery date/time, since that one is only
+ *  "if applicable"). Purely derived — not stored, so it can't go stale
+ *  and issuing an LR doesn't need to change at all. */
+export function buildOpsNote(b: Booking, lr?: LrDetails): OpsNote {
+  const name = (lr?.consignee ?? b.traveller?.name ?? "").trim() || MISSING;
+  const pickupAddress = (lr?.fromAddr ?? b.pickAddr ?? "").trim() || MISSING;
+  const deliveryAddress = (lr?.toAddr ?? b.dropAddr ?? "").trim() || MISSING;
+
+  const pickupDate = fmtDate(b.pickupDate || b.date);
+  const pickupTime = (b.slot ?? "").trim();
+  const pickupWhen = pickupDate ? `${pickupDate}${pickupTime ? `, ${pickupTime}` : " (time missing)"}` : MISSING;
+
+  const deliveryDate = fmtDate(b.deliveryDate);
+  const deliveryWhen = deliveryDate || "Not specified";
+
+  const bagCount = lr?.pieces ?? (b.bags ?? 0) + (b.oversize ?? 0);
+  const bags = bagCount > 0 ? String(bagCount) : MISSING;
+
+  return { customerName: name, pickupAddress, pickupWhen, deliveryAddress, deliveryWhen, bags };
 }
