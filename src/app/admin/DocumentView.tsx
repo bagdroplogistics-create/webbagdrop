@@ -5,6 +5,7 @@
  *  amount) but had nothing to show for it. Not a port of the static
  *  build's print-window HTML verbatim, but the same information: company
  *  letterhead, customer/consignment details, GST breakup, doc-type terms. */
+import { useEffect, useState } from "react";
 import { gstSplit, SAC } from "@/lib/docs";
 import { COMPANY, inrWords } from "@/lib/company";
 import { inr } from "@/lib/pricing";
@@ -42,7 +43,6 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
   const paid = b.pay?.status === "captured";
   const gcDate = new Date(doc.at).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
   const CHARGES: [string, number][] = CHARGE_HEADS.map(([k, name]) => [name, Math.round(Number(totals.heads[k]) || 0)]);
-  const opsNote = buildOpsNote(b, lr);
   const cell = "border border-stone-300 px-2 py-1";
   const lbl = "block text-[8.5px] font-semibold uppercase tracking-wide text-stone-500";
   const bar = "bg-[#0B1426] px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white";
@@ -53,18 +53,6 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
         <div className="flex items-center justify-between p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
-        </div>
-
-        {/* Operations note — for the pickup/delivery team, screen-only; the
-         * printed consignment note below stays exactly the official format. */}
-        <div className="mx-5 mb-3 rounded-lg border border-line bg-paper/70 p-3 text-[11px] print:hidden">
-          <p className="mb-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-ink">Operations note</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
-            <p><span className="text-faint">Customer:</span> <b>{opsNote.customerName}</b></p>
-            <p><span className="text-faint">Bags:</span> <b>{opsNote.bags}</b></p>
-            <p className="sm:col-span-3"><span className="text-faint">Pickup:</span> <b>{opsNote.pickupAddress}</b> — {opsNote.pickupWhen}</p>
-            <p className="sm:col-span-3"><span className="text-faint">Delivery:</span> <b>{opsNote.deliveryAddress}</b> — {opsNote.deliveryWhen}</p>
-          </div>
         </div>
 
         {/* masthead */}
@@ -213,6 +201,75 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
           <p className="mt-2 text-[7.5px] leading-relaxed text-stone-400 print:block">
             {TERMS.LR!.join(" · ")}
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Standalone operations note — a short, large-type dispatch slip for the
+ *  pickup/delivery team, separate from the official consignment note so
+ *  that document stays pixel-exact to the issued BDLR format. Own view +
+ *  print button; portrait, since it's one short page, not a wide form. */
+export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose: () => void }) {
+  const lr = ((b.admin as { lrDetails?: LrD }).lrDetails ?? {}) as LrD;
+  const note = buildOpsNote(b, lr);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  useEffect(() => {
+    setGeneratedAt(new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-xl bg-white shadow-2xl print:max-w-none print:shadow-none">
+        <div className="flex items-center justify-between p-3 print:hidden">
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={() => window.print()}>Print</Button>
+        </div>
+
+        {/* masthead */}
+        <div className="flex items-center justify-between bg-[#0B1426] px-6 py-4 text-white">
+          <div className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/logo-icon.png" alt="" className="h-8 w-auto" />
+            <span className="font-display text-base font-extrabold tracking-tight">BAGDROP</span>
+          </div>
+          <div className="text-right text-[11px]">
+            <span className="block uppercase tracking-wide opacity-70">Booking · LR</span>
+            <b className="font-mono text-sm">{b.id} · {b.lr?.no ?? "—"}</b>
+          </div>
+        </div>
+
+        <div className="px-6 py-6">
+          <p className="text-center font-display text-[26px] font-extrabold uppercase tracking-wide text-ink">Operations Note</p>
+          <p className="mb-5 text-center text-xs text-faint">For the pickup &amp; delivery team — the essentials only</p>
+
+          {/* customer — the single biggest, boldest line on the slip */}
+          <div className="mb-4 rounded-2xl border-2 border-ink bg-paper/60 px-4 py-3 text-center">
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-faint">Customer</span>
+            <span className="block font-display text-3xl font-extrabold leading-tight text-ink">{note.customerName}</span>
+          </div>
+
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border-2 border-brand bg-brand-soft px-4 py-3">
+              <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-dark">Pickup</span>
+              <span className="mt-1 block text-lg font-extrabold leading-snug text-ink">{note.pickupAddress}</span>
+              <span className="mt-2 inline-block rounded-full bg-brand px-3 py-1 text-[13px] font-bold text-white">{note.pickupWhen}</span>
+            </div>
+            <div className="rounded-2xl border-2 border-navy bg-[#eef1f6] px-4 py-3">
+              <span className="block text-[11px] font-bold uppercase tracking-wide text-navy">Delivery</span>
+              <span className="mt-1 block text-lg font-extrabold leading-snug text-ink">{note.deliveryAddress}</span>
+              <span className="mt-2 inline-block rounded-full bg-navy px-3 py-1 text-[13px] font-bold text-white">{note.deliveryWhen}</span>
+            </div>
+          </div>
+
+          {/* bags — the other number the team must not get wrong */}
+          <div className="rounded-2xl border-2 border-ink px-4 py-4 text-center">
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-faint">Total Bags</span>
+            <span className="block font-display text-[48px] font-extrabold leading-none text-ink">{note.bags}</span>
+          </div>
+
+          <p className="mt-5 text-center text-[10px] text-faint">Generated automatically from booking {b.id}{generatedAt ? ` · ${generatedAt}` : ""}</p>
         </div>
       </div>
     </div>
