@@ -23,7 +23,7 @@ export default function Solutions() {
                   <Icon name={s.icon} size={18} />
                 </span>
               </div>
-              <span className="flex items-center justify-between gap-2 p-4 font-display text-[16px] font-bold leading-tight text-ink">
+              <span className="flex items-center justify-between gap-2 p-4 font-display text-[19px] font-bold leading-tight text-ink">
                 {s.title}
                 <Icon name="arrow" size={15} className="shrink-0 text-faint transition-colors group-hover:text-brand" />
               </span>
