@@ -55,7 +55,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
         </div>
 
         {/* masthead */}
-        <div className="flex items-center justify-between bg-[#EA580C] px-5 py-3 text-white">
+        <div className="flex items-center justify-between bg-[#EA580C] px-5 py-2.5 text-white">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/logo-icon.png" alt="" className="h-9 w-auto" />
@@ -80,9 +80,9 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
           </div>
         </div>
 
-        <div className="px-5 pb-6 pt-3 text-[11px] text-stone-900">
+        <div className="px-5 pb-3 pt-2 text-[11px] text-stone-900">
           {/* company strip */}
-          <div className="mb-2 flex flex-wrap items-start justify-between gap-2 border-b border-stone-300 pb-2">
+          <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2 border-b border-stone-300 pb-1.5">
             <div>
               <b className="text-[12px]">{COMPANY.name}</b>
               <p className="text-[10px] text-stone-600">{COMPANY.address}</p>
@@ -107,7 +107,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
           <div className="grid grid-cols-[1.1fr_1.1fr_0.9fr]">
             <div className="border border-t-0 border-stone-300">
               <div className={bar}>Consignor&apos;s name &amp; address</div>
-              <div className="px-2 py-1.5">
+              <div className="px-2 py-1">
                 <b>{lr.consignor ?? COMPANY.name}</b>
                 <p className="text-[10px]">{lr.fromAddr ?? b.pickAddr ?? b.from}</p>
                 <p className="text-[10px] text-stone-600">Mobile: {lr.consignorMobile ?? COMPANY.phone}</p>
@@ -116,7 +116,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
             </div>
             <div className="border border-l-0 border-t-0 border-stone-300">
               <div className={bar}>Consignee&apos;s name &amp; address</div>
-              <div className="px-2 py-1.5">
+              <div className="px-2 py-1">
                 <b>{lr.consignee ?? b.traveller.name}</b>
                 <p className="text-[10px]">{lr.toAddr ?? b.dropAddr ?? b.to}</p>
                 <p className="text-[10px] text-stone-600">Mobile: {lr.consigneeMobile ?? b.traveller.mobile}</p>
@@ -141,11 +141,11 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
           <div className="grid grid-cols-2">
             <div className="border border-t-0 border-stone-300">
               <div className={bar}>Billed to (service receiver)</div>
-              <div className="px-2 py-1.5"><b>{lr.billedTo ?? lr.consignee ?? b.traveller.name}</b><p className="text-[10px] text-stone-600">GSTIN: {lr.billedToGstin ?? "—"}</p></div>
+              <div className="px-2 py-1"><b>{lr.billedTo ?? lr.consignee ?? b.traveller.name}</b><p className="text-[10px] text-stone-600">GSTIN: {lr.billedToGstin ?? "—"}</p></div>
             </div>
             <div className="border border-l-0 border-t-0 border-stone-300">
               <div className={bar}>Delivery address</div>
-              <div className="px-2 py-1.5 text-[10px]">{lr.toAddr ?? b.dropAddr ?? b.to}</div>
+              <div className="px-2 py-1 text-[10px]">{lr.toAddr ?? b.dropAddr ?? b.to}</div>
             </div>
           </div>
 
@@ -183,28 +183,23 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
             <div className={`${cell} border-l-0 border-t-0`}><span className={lbl}>LR type</span><b>{lr.lrType ?? "At Branch"}</b></div>
           </div>
 
-          {/* signatory */}
-          <div className="mt-6 flex items-end justify-between">
-            <div>
-              <b className="text-[11px]">For {COMPANY.name}</b>
-              <p className="text-[10px] text-stone-600">Prepared by: admin · Booking {b.id}</p>
+          {/* delivery / remarks / signatory — one combined row, same as the issued PDF */}
+          <div className="grid min-h-[84px] grid-cols-[0.55fr_0.85fr_1fr_0.8fr]">
+            <div className={`${cell} border-t-0`}><span className={lbl}>Delivery at</span><b>{lr.deliveryAt ?? "Door Dly"}</b></div>
+            <div className={`${cell} border-l-0 border-t-0`}><span className={lbl}>Remarks</span><b>{lr.note ?? "—"}</b></div>
+            <div className={`${cell} border-l-0 border-t-0 flex flex-col justify-end`}>
+              <b className="text-[11px]">For {(b.from || "Origin").toUpperCase()} Branch</b>
+              <p className="text-[10px] text-stone-600">Prepared by: admin</p>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-1 h-10 w-36 border-b border-stone-400" />
+            <div className={`${cell} border-l-0 border-t-0 flex flex-col items-center justify-end text-center`}>
               <b className="text-[10px]">Authorised Signatory</b>
               <p className="text-[9px] text-stone-500">For Bagdrop</p>
             </div>
           </div>
 
-          {/* delivery / remarks */}
-          <div className="mt-3 grid grid-cols-[0.6fr_1.4fr]">
-            <div className={cell}><span className={lbl}>Delivery at</span><b>{lr.deliveryAt ?? "Door Dly"}</b></div>
-            <div className={`${cell} border-l-0`}><span className={lbl}>Remarks</span><b>{lr.note ?? "—"}</b></div>
-          </div>
-
-          <div className="mt-3 rounded bg-stone-100 p-2 text-[8.5px] leading-relaxed text-stone-500">
+          <p className="mt-2 text-[7.5px] leading-relaxed text-stone-400 print:block">
             {TERMS.LR!.join(" · ")}
-          </div>
+          </p>
         </div>
       </div>
     </div>
