@@ -47,12 +47,69 @@ interface Computed {
   pickupsNext24h: number; cutoffsToday: number; exceptionsOpen: number;
 }
 
-export default function CommandCentre() {
+/* ---------- the all-departments board ---------- */
+interface DeptCard {
+  key: string; module?: string; name: string; sev: "ok" | "warn" | "bad";
+  kpis: [string, string][]; note: string;
+}
+
+function useDepartments(all: Booking[]) {
+  const [ext, setExt] = useState<{ flags?: { severity: string; dept: string }[]; counts?: { queued: number; dead: number }; agents?: { ledger: { outstanding: number; walletBalance: number; commissionDue: number; billingMode: string } }[]; cn?: number } | null>(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [insp, auto, ag, cn] = await Promise.all([
+          fetch("/api/admin/inspector").then((r) => r.json()),
+          fetch("/api/admin/automation").then((r) => r.json()),
+          fetch("/api/admin/agents").then((r) => r.json()),
+          fetch("/api/admin/finance/credit-notes").then((r) => r.json()),
+        ]);
+        setExt({ flags: insp.flags, counts: auto.counts, agents: ag.agents, cn: (cn.notes ?? []).filter((n: { status: string }) => n.status === "active").length });
+      } catch { /* next tick */ }
+    };
+    void load();
+    const t = setInterval(() => void load(), 45000);
+    return () => clearInterval(t);
+  }, []);
+
+  const [cards, setCards] = useState<DeptCard[] | null>(null);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const flags = ext?.flags ?? [];
+    const red = (d?: string) => flags.filter((f) => f.severity === "red" && (!d || f.dept === d)).length;
+    const amber = (d?: string) => flags.filter((f) => f.severity === "amber" && (!d || f.dept === d)).length;
+    const needsDecision = all.filter((b) => b.status === "submitted").length;
+    const paidToday = all.filter((b) => b.pay && b.pay.at.slice(0, 10) === today).reduce((a, b) => a + b.pay!.amount, 0);
+    const receivable = all.filter((b) => b.pay && b.pay.amount < b.quote.total && !["rejected", "cancelled"].includes(b.status)).reduce((a, b) => a + (b.quote.total - b.pay!.amount), 0);
+    const missingInv = all.filter((b) => b.pay?.status === "captured" && !(b.docs ?? []).some((d) => d.type === "INV")).length;
+    const aadhaarPending = all.filter((b) => b.pay?.status === "captured" && !b.identity?.ok && !["delivered", "cancelled", "rejected"].includes(b.status)).length;
+    const inCustody = all.filter((b) => ["picked_up", "in_transit"].includes(b.status)).length;
+    const noLr = all.filter((b) => ["accepted", "assigned"].includes(b.status) && !b.lr).length;
+    const agents = ext?.agents ?? [];
+    const b2bOut = agents.reduce((s, a) => s + a.ledger.outstanding, 0);
+    const commDue = agents.reduce((s, a) => s + a.ledger.commissionDue, 0);
+    const sev = (bad: boolean, warn: boolean): DeptCard["sev"] => (bad ? "bad" : warn ? "warn" : "ok");
+    setCards([
+      { key: "bookings", module: "ship", name: "Bookings desk", sev: sev(red("bookings") > 0, needsDecision > 0), kpis: [["needs decision", String(needsDecision)], ["red flags", String(red("bookings"))]], note: "accept within 2h — the CTO chases breaches" },
+      { key: "finance", module: "fin", name: "Finance", sev: sev(false, receivable > 0 || missingInv > 0), kpis: [["paid today", inr(paidToday)], ["receivable", inr(receivable)]], note: missingInv ? `${missingInv} invoice(s) auto-issuing` : `${ext?.cn ?? 0} credit notes live · invoices auto-issued` },
+      { key: "ops", module: "opsx", name: "Operations", sev: sev(red("ops") > 0, amber("ops") > 0), kpis: [["in custody", String(inCustody)], ["red flags", String(red("ops"))]], note: "pickup window & captain SLAs" },
+      { key: "lr", module: "lr", name: "LR & dispatch", sev: sev(false, noLr > 0), kpis: [["awaiting LR", String(noLr)], ["auto-drafts", "00:01 daily"]], note: "confirmed consignments queue on the LR page" },
+      { key: "compliance", module: "id", name: "Compliance · KYC", sev: sev(red("compliance") > 0, aadhaarPending > 0), kpis: [["Aadhaar pending", String(aadhaarPending)], ["pickups locked", String(aadhaarPending)]], note: "pickup is server-locked until UIDAI verifies" },
+      { key: "partners", module: "part", name: "Partners · B2B", sev: sev(false, b2bOut > 0), kpis: [["to collect", inr(b2bOut)], ["comm. due", inr(commDue)]], note: `${agents.length} agents · wallet & credit live` },
+      { key: "inspector", module: "insp", name: "Tracking Inspector", sev: sev(red() > 0, amber() > 0), kpis: [["SLA breached", String(red())], ["at risk", String(amber())]], note: "CTO on duty 24×7 — red auto-dispatched" },
+      { key: "automation", module: "opsx", name: "Automation", sev: sev((ext?.counts?.dead ?? 0) > 0, (ext?.counts?.queued ?? 0) > 10), kpis: [["queued", String(ext?.counts?.queued ?? 0)], ["dead letters", String(ext?.counts?.dead ?? 0)]], note: "WhatsApp + email pairs, idempotent outbox" },
+    ]);
+  }, [all, ext]);
+  return cards;
+}
+
+export default function CommandCentre({ openModule }: { openModule?: (k: string) => void }) {
   const [all, setAll] = useState<Booking[]>([]);
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
   useEffect(() => watchEvents(setEvents, () => {}), []);
+  const deptCards = useDepartments(all);
   const { leads: prodLeads } = useProductionLeads();
   const prodNeedsDecision = prodLeads.filter((l) => PROD_PRE_CONVERT.includes(l.status));
 
@@ -116,6 +173,38 @@ export default function CommandCentre() {
         <Kpi card label="Pickups next 24 h" value={String(pickupsNext24h)} hint="scheduled today, not yet picked up" />
         <Kpi card label="Flight/train/sailing bookings today" value={String(cutoffsToday)} hint="cutoff-aware pickups" />
         <Kpi card label="Open exceptions" value={String(exceptionsOpen)} hint="from the exceptions module" />
+      </div>
+
+      {/* every department, one glance — live findings with severity stripes */}
+      <div className="a-card">
+        <H3 r="refreshed every 45 s · click a card to open the department">All departments now</H3>
+        {!deptCards && <p className="text-sm" style={{ color: "var(--a-muted)" }}>Reading every department…</p>}
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          {(deptCards ?? []).map((d, i) => (
+            <button key={d.key} onClick={() => d.module && openModule?.(d.module)}
+              className="anim-in cursor-pointer rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5"
+              style={{
+                animationDelay: `${i * 55}ms`,
+                borderColor: "var(--a-line)",
+                background: "var(--a-surface)",
+                borderLeft: `4px solid ${d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)"}`,
+              }}>
+              <div className="flex items-center justify-between gap-1">
+                <b className="text-[12.5px]" style={{ fontFamily: "var(--a-display)" }}>{d.name}</b>
+                <span className={d.sev !== "ok" ? "a-dot a-dot-anim" : "a-dot"} style={{ background: d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)", width: 8, height: 8, borderRadius: 99, display: "inline-block", animation: d.sev !== "ok" ? "a-pulse 1.8s ease-in-out infinite" : undefined }} />
+              </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-1">
+                {d.kpis.map(([k, v]) => (
+                  <span key={k}>
+                    <span className="block text-[9px] uppercase tracking-wide" style={{ fontFamily: "var(--a-mono)", color: "var(--a-muted)" }}>{k}</span>
+                    <b className="text-[15px] tabular-nums" style={{ fontFamily: "var(--a-display)" }}>{v}</b>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] leading-snug" style={{ color: "var(--a-muted)" }}>{d.note}</p>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">

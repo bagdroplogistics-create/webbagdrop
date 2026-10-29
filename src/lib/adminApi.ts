@@ -37,7 +37,10 @@ export async function adminSaveBooking(doc: Booking): Promise<void> {
   const r = await fetch("/api/admin/bookings", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc }),
   });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP_${r.status}`);
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({} as { error?: string; detail?: string }));
+    throw new Error(j?.detail ?? j?.error ?? `HTTP_${r.status}`);
+  }
 }
 
 /** Admin's own "with an appended event" convenience, mirroring the old

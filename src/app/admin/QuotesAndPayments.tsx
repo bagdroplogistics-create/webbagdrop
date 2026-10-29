@@ -9,7 +9,7 @@ import { CITIES, inr, quote } from "@/lib/pricing";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, Mode, UseCase } from "@/lib/types";
-import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { Button, Card, Field, Input, Select } from "@/components/ui";
 
 const SERVICES: { uc: UseCase; mode: Mode; title: string }[] = [
   { uc: "d2a", mode: "air", title: "Home → Airport" },
@@ -207,31 +207,14 @@ export default function QuotesAndPayments() {
         )}
       </div>
 
+      {/* no quote list here — open quotes live in the Shipments inbox
+        * beside everything else; this desk only MAKES and SHARES quotes */}
       <Card>
-        <h3 className="mb-3 font-display text-sm font-bold">Open quotes <Badge tone="ok">live</Badge></h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
-                <th className="py-2 pr-2">Quote</th><th className="pr-2">Customer</th><th className="pr-2">Route</th><th className="pr-2 text-right">Total</th><th>Expires</th>
-              </tr>
-            </thead>
-            <tbody>
-              {openQuotes.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-muted">No open quotes.</td></tr>
-              )}
-              {openQuotes.map((b) => (
-                <tr key={b.id} className="border-b border-line last:border-0">
-                  <td className="py-2 pr-2 font-mono text-xs">{b.quote.qid ?? b.id}</td>
-                  <td className="pr-2">{b.traveller.name}<br /><span className="text-xs text-faint">{b.traveller.mobile}</span></td>
-                  <td className="pr-2 text-xs">{b.from} → {b.to}</td>
-                  <td className="pr-2 text-right">{inr(b.quote.total)}</td>
-                  <td className="text-xs text-faint">{b.quote.validUntil ? new Date(b.quote.validUntil).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <h3 className="mb-1 font-display text-sm font-bold">Where quotes live</h3>
+        <p className="text-[13px] text-muted">
+          {openQuotes.length === 0 ? "No open quotes right now." : <><b>{openQuotes.length} open quote{openQuotes.length === 1 ? "" : "s"}</b> (worth {inr(openQuotes.reduce((s, b) => s + b.quote.total, 0))}) are in the <b>Shipments inbox</b> sub-tab beside this one — decide, revise and track them there.</>}
+          {" "}The cadence engine nudges unpaid quotes automatically (1 h nudge, expiry warning, one fresh re-quote).
+        </p>
       </Card>
     </div>
   );

@@ -49,7 +49,11 @@ export default function QuotePay({ id }: { id: string }) {
     if (!res.ok || j.error) { setErr(j.detail ?? j.error ?? "Payment failed"); return; }
     const updated = await updateBooking(
       bk.id,
-      { status: "submitted", pay: { mode: "full", amount: j.amount, status: "captured", gateway: j.gateway, at: j.capturedAt } },
+      {
+        status: "submitted",
+        pay: { mode: "full", amount: j.amount, status: "captured", gateway: j.gateway, at: j.capturedAt },
+        ...(bk.identity?.ok ? {} : { identity: { ok: false, at: "", method: "UIDAI Aadhaar OTP · pending (required before pickup)", score: 0 } }),
+      },
       `Paid ${inr(j.amount)} via quote link · signature verified server-side · ${j.reference}`
     );
     setB(updated);
@@ -86,9 +90,17 @@ export default function QuotePay({ id }: { id: string }) {
       )}
 
       {paid ? (
-        <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
-          <b>Paid</b> · {inr(b.pay!.amount)} via {b.pay!.gateway}. Booking is with operations.
-        </p>
+        <>
+          <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
+            <b>Paid</b> · {inr(b.pay!.amount)} via {b.pay!.gateway}. Booking is with operations.
+          </p>
+          {!b.identity?.ok && (
+            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <b>One step before pickup:</b> Aadhaar verification via UIDAI OTP — about a minute.{" "}
+              <a className="font-semibold underline" href={`/verify/${b.id}`}>Verify now →</a>
+            </p>
+          )}
+        </>
       ) : expired ? (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">This price lock has expired — message the team and a fresh quote arrives in a minute.</p>
       ) : (

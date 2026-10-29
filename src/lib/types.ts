@@ -200,6 +200,43 @@ export interface BagdropEvent {
   page?: string;
 }
 
+/** The wedding desk's own record, carried on the booking under .wedding. */
+export interface WeddingDeskRecord {
+  bookingId: string;
+  state: unknown; // the wizard's full form state — owned by the desk page
+  bagStatus: Record<string, string>; // tag id -> Y2K stage label
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+
+export interface EventSector { city: string; rate: number; pickDay: string; retDay: string }
+
+/** A wedding/event record — the `events` table (same jsonb-doc shape the
+ *  static platform wrote, so both builds read one another's events). */
+export interface BagdropEvent {
+  id: string;
+  created: string;
+  status: "open" | "closed";
+  name: string;
+  type: string;
+  venueCity: string;
+  venue: string;
+  dates: { in: string; out: string };
+  direction: "both" | "out";
+  billing: "host" | "family";
+  expected?: { families?: number; bags?: number };
+  rates?: { oversize?: number; minBags?: number; slabPct?: number; depositPct?: number };
+  sectors: EventSector[];
+  contacts?: { host?: string; hostMobile?: string; planner?: string; onsite?: string };
+  landing?: {
+    names?: string; hashtag?: string; datesText?: string; sides?: string;
+    celebration?: string; destination?: string;
+  };
+  page?: string;
+}
+
 /** Document types that go through the same race-safe numbering as LR
  *  (Postgres next_doc_no(type, fy) — see supabase/schema.sql). */
 export type DocType = "LR" | "INV" | "PI" | "RCT" | "CSH" | "CV" | "CN" | "TR" | "MF";
@@ -228,7 +265,12 @@ export interface Inquiry {
   pickupCities?: string[];
 }
 
-/** One CRM activity-log entry (a note, a nudge, a win-back draft). */
+/** Pipeline stages for a CRM lead — Zoho-style deal flow. */
+export type LeadStage = "new" | "contacted" | "quoted" | "negotiation" | "won" | "lost";
+
+/** One CRM record: an activity-log entry (a note, a nudge, a task) or —
+ *  when kind is "lead" and `stage` is set — a pipeline lead/deal. One
+ *  table (`crm`), one shape, same as the rest of the document model. */
 export interface CrmActivity {
   id: string;
   created: string;
@@ -241,6 +283,18 @@ export interface CrmActivity {
   doneAt?: string | null;
   refId?: string;
   followKey?: string;
+  /* lead/deal fields */
+  stage?: LeadStage;
+  value?: number;
+  owner?: string;
+  mobile?: string;
+  email?: string;
+  source?: string;
+  /* ads-import fields */
+  campaign?: string;
+  route?: { from: string; to: string; bags: number; date?: string };
+  ratePending?: boolean;
+  quoteInfo?: { qid: string | null; total: number; validUntil?: string; link?: string };
 }
 
 export type TripStatus = "planned" | "running" | "completed";

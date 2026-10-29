@@ -19,6 +19,8 @@ export const logActivity = (entry: Omit<CrmActivity, "id" | "created">) =>
   fetch("/api/admin/crm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) }).then((r) => unwrap<CrmActivity>(r, "activity"));
 export const markActivityDone = (id: string) =>
   fetch("/api/admin/crm", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }).then((r) => unwrap<CrmActivity>(r, "activity"));
+export const patchActivity = (id: string, patch: Partial<CrmActivity>) =>
+  fetch("/api/admin/crm", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, patch }) }).then((r) => unwrap<CrmActivity>(r, "activity"));
 
 export function watchInquiries(cb: (list: Inquiry[]) => void, onError?: (e: unknown) => void): () => void {
   let dead = false;
