@@ -227,16 +227,16 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
           <Button size="sm" onClick={() => window.print()}>Print</Button>
         </div>
 
-        {/* masthead */}
-        <div className="flex items-center justify-between bg-[#0B1426] px-6 py-4 text-white">
+        {/* masthead — light, not a heavy dark block */}
+        <div className="flex items-center justify-between border-b border-line bg-paper/50 px-6 py-4">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/logo-icon.png" alt="" className="h-8 w-auto" />
-            <span className="font-display text-base font-extrabold tracking-tight">BAGDROP</span>
+            <span className="font-display text-base font-extrabold tracking-tight text-ink">BAGDROP</span>
           </div>
-          <div className="text-right text-[11px]">
-            <span className="block uppercase tracking-wide opacity-70">Booking · LR</span>
-            <b className="font-mono text-sm">{b.id} · {b.lr?.no ?? "—"}</b>
+          <div className="text-right text-[11px] text-stone-500">
+            <span className="block uppercase tracking-wide">Booking · LR</span>
+            <b className="font-mono text-sm text-ink">{b.id} · {b.lr?.no ?? "—"}</b>
           </div>
         </div>
 
@@ -245,26 +245,26 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
           <p className="mb-5 text-center text-xs text-faint">For the pickup &amp; delivery team — the essentials only</p>
 
           {/* customer — the single biggest, boldest line on the slip */}
-          <div className="mb-4 rounded-2xl border-2 border-ink bg-paper/60 px-4 py-3 text-center">
+          <div className="mb-4 rounded-2xl border border-line bg-paper/40 px-4 py-3 text-center">
             <span className="block text-[11px] font-bold uppercase tracking-wide text-faint">Customer</span>
             <span className="block font-display text-3xl font-extrabold leading-tight text-ink">{note.customerName}</span>
           </div>
 
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border-2 border-brand bg-brand-soft px-4 py-3">
+            <div className="rounded-2xl border border-brand/20 bg-brand-soft px-4 py-3">
               <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-dark">Pickup</span>
               <span className="mt-1 block text-lg font-extrabold leading-snug text-ink">{note.pickupAddress}</span>
               <span className="mt-2 inline-block rounded-full bg-brand px-3 py-1 text-[13px] font-bold text-white">{note.pickupWhen}</span>
             </div>
-            <div className="rounded-2xl border-2 border-navy bg-[#eef1f6] px-4 py-3">
-              <span className="block text-[11px] font-bold uppercase tracking-wide text-navy">Delivery</span>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <span className="block text-[11px] font-bold uppercase tracking-wide text-blue-700">Delivery</span>
               <span className="mt-1 block text-lg font-extrabold leading-snug text-ink">{note.deliveryAddress}</span>
-              <span className="mt-2 inline-block rounded-full bg-navy px-3 py-1 text-[13px] font-bold text-white">{note.deliveryWhen}</span>
+              <span className="mt-2 inline-block rounded-full bg-blue-600 px-3 py-1 text-[13px] font-bold text-white">{note.deliveryWhen}</span>
             </div>
           </div>
 
           {/* bags — the other number the team must not get wrong */}
-          <div className="rounded-2xl border-2 border-ink px-4 py-4 text-center">
+          <div className="rounded-2xl border border-line bg-paper/40 px-4 py-4 text-center">
             <span className="block text-[11px] font-bold uppercase tracking-wide text-faint">Total Bags</span>
             <span className="block font-display text-[48px] font-extrabold leading-none text-ink">{note.bags}</span>
           </div>
