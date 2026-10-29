@@ -61,6 +61,17 @@ export default function Wizard() {
   }, []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
+  /** Same-day pickup isn't operationally possible — a captain needs to be
+   *  assigned and routed. Earliest bookable date is 24h after "now", i.e.
+   *  tomorrow relative to `today`. */
+  const minDate = useMemo(() => {
+    if (!today) return "";
+    const d2 = new Date(`${today}T00:00:00`);
+    d2.setDate(d2.getDate() + 1);
+    return d2.toISOString().slice(0, 10);
+  }, [today]);
+  const minDateLabel = minDate ? new Date(`${minDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "";
+
   /** Flight/train/sailing-aware pickup planning — auto-fills the suggested
    *  date/slot, same "keep tracking until the customer types their own
    *  value" pattern as the admin team-quote form. */
@@ -214,7 +225,7 @@ export default function Wizard() {
   const canNext = [
     true,
     (!!d.pickAddr.trim() || d.uc === "a2d") && (!isOther || (d.from !== "other" || !!d.fromOther.trim()) && (d.to !== "other" || !!d.toOther.trim())),
-    !!d.slot && !!d.date && d.date >= today,
+    !!d.slot && !!d.date && d.date >= minDate,
     d.bags + d.oversize > 0,
     d.name.trim().length > 1 && mobileOk,
     !!otp.verifiedAt,
@@ -325,10 +336,15 @@ export default function Wizard() {
                 <Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" />
               </Field>
               <Field label="Pickup Date">
-                <Input type="date" value={d.date} min={today} onChange={(e) => set("date", e.target.value)} />
+                <Input
+                  type="date" value={d.date} min={minDate}
+                  title="Pickup needs at least 24 hours' notice from booking time"
+                  onChange={(e) => set("date", e.target.value)}
+                />
+                <p className="mt-1 text-[11px] text-muted">Needs 24 hours&apos; notice — earliest pickup is {minDateLabel || "tomorrow"}.</p>
               </Field>
               <Field label="Delivery Date (optional)">
-                <Input type="date" value={d.deliveryDate} min={d.date || today} onChange={(e) => set("deliveryDate", e.target.value)} />
+                <Input type="date" value={d.deliveryDate} min={d.date || minDate} onChange={(e) => set("deliveryDate", e.target.value)} />
               </Field>
             </div>
             {plan.usesFlightTime && (
