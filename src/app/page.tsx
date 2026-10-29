@@ -1,4 +1,5 @@
 import BookingSection from "@/components/landing/BookingSection";
+import CitiesStrip from "@/components/landing/CitiesStrip";
 import ClosingCta from "@/components/landing/ClosingCta";
 import FAQSection from "@/components/landing/FAQSection";
 import HandoverBoard from "@/components/landing/HandoverBoard";
@@ -23,6 +24,7 @@ export default function Home() {
       <SiteHeader />
       <Hero />
       <StatsCities />
+      <CitiesStrip />
       <UseCases />
       <PainPoints />
       <Solutions />

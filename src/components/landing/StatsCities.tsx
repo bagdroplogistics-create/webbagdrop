@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { CITIES } from "./data";
-import { Marquee, useCountUp } from "./motion";
+import { useCountUp } from "./motion";
 import { CONTAINER } from "./SectionHeading";
 
 const NUMERIC_STATS = [
@@ -42,22 +41,6 @@ export default function StatsCities() {
             <span className="font-display text-[clamp(2.2rem,4.4vw,3rem)] font-extrabold tracking-tight text-brand">4.9 / 5</span>
             <span className="block font-mono text-[12px] tracking-[0.14em] text-steel uppercase">Customer rating</span>
           </div>
-        </div>
-
-        {/* Continuous auto-scrolling strip, matching the source mockup's
-         * motion exactly — words naturally pass through the edges as part
-         * of the scroll (confirmed against the reference recording), which
-         * is normal marquee behavior, not clipping. */}
-        <div className="mt-10 overflow-hidden rounded-2xl bg-navy py-6 text-white">
-          <Marquee durationS={28}>
-            <div className="flex items-center">
-              {CITIES.map((c) => (
-                <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">
-                  {c.toUpperCase()} <span className="size-2 shrink-0 bg-brand" aria-hidden="true" />
-                </span>
-              ))}
-            </div>
-          </Marquee>
         </div>
       </div>
     </section>
