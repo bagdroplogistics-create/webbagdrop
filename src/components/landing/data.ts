@@ -141,7 +141,6 @@ export const TRACK_DEMO_STEPS = [
 
 export type Client = { name: string; img?: string; bags: string; route: string };
 export const CLIENTS: Client[] = [
-  { name: "Hiral Shah Ratnani", bags: "5 bags delivered", route: "Vadodara → Mumbai" },
   { name: "Brijesh Patel", img: "/images/testimonials/brijesh-patel.jpg", bags: "6 bags delivered", route: "Vadodara → Mumbai" },
   { name: "Suyash Vaishnav", img: "/images/testimonials/suyash-vaishnav.jpg", bags: "3 bags delivered", route: "Vadodara → Mumbai" },
   { name: "Shimoli Joshi", img: "/images/testimonials/shimoli-joshi.jpg", bags: "2 bags delivered", route: "Vadodara → Mumbai" },
