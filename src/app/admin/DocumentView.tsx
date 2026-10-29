@@ -47,8 +47,8 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
   const bar = "bg-[#0B1426] px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
-      <div className="w-full max-w-3xl bg-white shadow-2xl print:max-w-none print:shadow-none">
+    <div className="print-landscape fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-5xl bg-white shadow-2xl print:max-w-none print:shadow-none">
         <div className="flex items-center justify-between p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>

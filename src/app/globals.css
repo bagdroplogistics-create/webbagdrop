@@ -81,8 +81,13 @@ body {
 
 @media print {
   @page { margin: 8mm; }
+  @page lr-landscape { size: landscape; margin: 8mm; }
   body { background: #fff; }
 }
+/* LR / Consignment Note prints landscape — it's laid out wide
+ * (masthead + 3-column consignor/consignee/charges block), same as the
+ * official issued PDF, not portrait like an invoice/receipt. */
+.print-landscape { page: lr-landscape; }
 
 /* Admin OS — scoped to .admin-os only, so the booking site's own brand
  * tokens above (customer wizard, weddings, Y2K) are never touched. Matches
