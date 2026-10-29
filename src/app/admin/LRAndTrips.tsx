@@ -30,8 +30,20 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [viewingIssued, setViewingIssued] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   useEffect(() => watchTrips(setTrips, (e) => setErr(String(e))), []);
+
+  /* Every booking with an issued LR, regardless of whether its trip row
+   * still exists or admin.trip happens to be set — the view/print link
+   * elsewhere (inside a trip's consignment list) depends on both, so this
+   * is the one place an issued LR is always findable. */
+  const issuedBookings = useMemo(() => bookings.filter((b) => b.lr), [bookings]);
+  function openIssued(b: Booking) {
+    if (!b.lr) return;
+    const doc = b.docs?.find((d) => d.type === "LR" && d.no === b.lr!.no) ?? { type: "LR" as const, no: b.lr.no, at: b.lr.at, amount: b.quote.total };
+    setViewingIssued({ booking: b, doc });
+  }
 
   const q = search.trim().toLowerCase();
   const visibleTrips = useMemo(() => !q ? trips : trips.filter((t) =>
@@ -77,6 +89,23 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
         <Kpi label="Open trips" value={String(kpis.open)} />
         <Kpi label="Trip revenue · expenses" value={`${inr(kpis.rev)} · ${inr(kpis.exp)}`} hint={`${kpis.margin}% margin`} />
       </div>
+
+      <Card>
+        <h3 className="mb-2 font-display text-sm font-bold">Issued LRs <span className="font-normal text-faint">view or print any consignment note already issued</span></h3>
+        {issuedBookings.length === 0 && <p className="py-2 text-center text-sm text-muted">No LRs issued yet.</p>}
+        <div className="grid gap-1.5">
+          {issuedBookings.map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-line pb-1.5 text-xs last:border-0">
+              <span className="min-w-0">
+                <b className="font-mono text-[11px]">{b.lr!.no}</b> · {b.id} · {b.traveller.name}
+                <span className="block text-muted">{b.from} → {b.to} · trip {trips.some((t) => t.id === b.lr!.trip) ? b.lr!.trip : `${b.lr!.trip} (removed)`}</span>
+              </span>
+              <Button size="sm" variant="outline" onClick={() => openIssued(b)}>View / Print</Button>
+            </div>
+          ))}
+        </div>
+        {viewingIssued && <DocumentView booking={viewingIssued.booking} doc={viewingIssued.doc} onClose={() => setViewingIssued(null)} />}
+      </Card>
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
         <div className="grid gap-5">
