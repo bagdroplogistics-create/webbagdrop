@@ -35,7 +35,7 @@ export const USE_CASES: UseCase[] = [
 
 export type Pain = { big: string; pain: string; fix: string; image: string };
 export const PAINS: Pain[] = [
-  { big: "₹3,000–8,000", pain: "Airline excess-baggage fees, every trip", fix: "Save 40–60% with Bagdrop", image: "/images/landing/excess.jpg" },
+  { big: "Save 40–60%", pain: "Airline excess-baggage fees, every trip", fix: "No more excess-baggage counter", image: "/images/landing/excess.jpg" },
   { big: "Queues", pain: "Trolleys and queues at every terminal", fix: "Walk out empty-handed", image: "/images/landing/queue.jpg" },
   { big: "Stairs", pain: "Platforms, stairs and coach racks", fix: "Board with just a day bag", image: "/images/landing/railway.jpg" },
   { big: "Hands full", pain: "Kids, parents and wedding trunks to manage", fix: "We carry, you travel", image: "/images/landing/family.jpg" },
