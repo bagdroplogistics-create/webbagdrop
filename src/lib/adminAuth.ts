@@ -52,6 +52,27 @@ export async function isAdminRequest(): Promise<boolean> {
   return !!token && verifySessionToken(token);
 }
 
+/* ---- read-only department board links ----------------------------------
+ * A board token grants exactly one thing: GET /api/board/metrics for ONE
+ * department view, until it expires. Same HMAC secret and scheme as the
+ * session cookie, but a different payload prefix so neither can stand in
+ * for the other. Dots instead of colons so it travels in a URL path. */
+
+export function makeBoardToken(view: string, days: number): string {
+  const expires = Date.now() + Math.min(365, Math.max(1, days)) * 86400_000;
+  return `${view}.${expires}.${sign(`board:${view}:${expires}`)}`;
+}
+
+/** Returns the view key the token grants, or null. */
+export function verifyBoardToken(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [view, expiresStr, sig] = parts;
+  if (sign(`board:${view}:${expiresStr}`) !== sig) return null;
+  const expires = Number(expiresStr);
+  return /^[a-z]{2,8}$/.test(view) && Number.isFinite(expires) && expires > Date.now() ? view : null;
+}
+
 /** For proxy.ts (Next 16's renamed middleware convention), which gets the
  *  request directly rather than via next/headers. Proxy runs on the Node.js
  *  runtime by default in Next 16, so this does the same real HMAC check as

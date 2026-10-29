@@ -144,8 +144,13 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const lead = sel?.source === "production" ? leads.find((l) => l.id === sel.id) ?? null : null;
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
-    await adminApplyPatch(b, patch, event);
-    setForm({ kind: null, captain: "", amount: "", reason: "" });
+    try {
+      await adminApplyPatch(b, patch, event);
+      setForm({ kind: null, captain: "", amount: "", reason: "" });
+    } catch (e) {
+      // e.g. the identity gate: pickup refused until Aadhaar UIDAI is verified
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   return (
@@ -317,11 +322,17 @@ export default function Inbox({ search = "" }: { search?: string }) {
               ["Pieces", `${booking.bags} bags${booking.oversize ? ` + ${booking.oversize} oversize` : ""}`],
               ["Quote", booking.quote.breakdown.ror ? "Rate on request" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
               ["Payment", booking.pay ? `${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
+              ["Identity", booking.identity?.ok ? `✓ verified · ${booking.identity.method}` : "⚠ Aadhaar pending — pickup locked"],
             ] as const).map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
                 <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
               </div>
             ))}
+            {!booking.identity?.ok && (
+              <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">
+                Client verifies at <button className="font-mono font-semibold underline" onClick={() => void navigator.clipboard?.writeText(`${location.origin}/verify/${booking.id}`)}>/verify/{booking.id}</button> (click to copy) — the link also went out on WhatsApp + email automatically.
+              </p>
+            )}
 
             <div className="mt-4 flex flex-wrap gap-2">
               {["submitted", "revised"].includes(booking.status) && (

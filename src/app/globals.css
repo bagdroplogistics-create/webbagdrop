@@ -160,3 +160,27 @@ body {
  * different padding/shadow classes, so it's untouched). */
 .admin-os .rounded-2xl.p-5.shadow-card { border-radius: 10px; padding: 14px; box-shadow: none; border-width: 1.5px; border-color: var(--a-line); }
 .admin-os .rounded-2xl.p-5.shadow-card:hover { box-shadow: none; }
+
+/* Tracking Inspector · live journey rails */
+@keyframes trk-flow { 0% { background-position: 0 0; } 100% { background-position: 28px 0; } }
+.trk-moving {
+  background-image: repeating-linear-gradient(90deg, currentColor 0 8px, transparent 8px 14px);
+  background-size: 28px 100%;
+  animation: trk-flow 1.1s linear infinite;
+}
+@keyframes trk-ping { 0% { box-shadow: 0 0 0 0 currentColor; opacity: .7; } 100% { box-shadow: 0 0 0 7px transparent; opacity: 1; } }
+.trk-here { animation: trk-ping 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .trk-moving, .trk-here { animation: none; }
+}
+
+/* Admin OS dashboards (Executive, CRM, Finance, etc.) — generic
+ * crossfade-in used across many newly added modules. */
+@keyframes dash-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.anim-in { animation: dash-in 0.35s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-in { animation: none; }
+}

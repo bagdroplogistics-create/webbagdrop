@@ -22,7 +22,7 @@ export default function AdminLogin() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
-        <h1 className="mb-1 font-display text-xl font-extrabold">BAGDROP <span className="text-brand">Admin</span></h1>
+        <h1 className="mb-1 font-display text-xl font-extrabold">BAGDROP <span className="text-brand">OS</span></h1>
         <p className="mb-5 text-sm text-muted">Enter the admin key to open the console.</p>
         <Field label="Admin key">
           <Input

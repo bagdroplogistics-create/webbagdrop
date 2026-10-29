@@ -32,7 +32,7 @@ export async function PATCH(req: Request) {
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
 
-  let b: { id?: string; doneAt?: string };
+  let b: { id?: string; doneAt?: string; patch?: Partial<CrmActivity> };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "BAD_JSON" }, { status: 400 }); }
   if (!b.id) return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
@@ -40,7 +40,14 @@ export async function PATCH(req: Request) {
   if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
   if (!cur) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  const doc: CrmActivity = { ...(cur.doc as CrmActivity), doneAt: b.doneAt ?? new Date().toISOString() };
+  /* Either a whitelisted partial patch (pipeline moves, task edits), or the
+   *  original "mark done" shape when no patch is sent. */
+  const ALLOWED = ["stage", "value", "owner", "mobile", "email", "source", "text", "msg", "contact", "dueAt", "doneAt", "dept"] as const;
+  const patch: Partial<CrmActivity> = {};
+  for (const k of ALLOWED) if (b.patch && k in b.patch) (patch as Record<string, unknown>)[k] = b.patch[k];
+  const doc: CrmActivity = b.patch
+    ? { ...(cur.doc as CrmActivity), ...patch }
+    : { ...(cur.doc as CrmActivity), doneAt: b.doneAt ?? new Date().toISOString() };
   const { error } = await sb.from("crm").upsert({ id: doc.id, doc, status: null, created: doc.created });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, activity: doc });

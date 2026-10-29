@@ -5,11 +5,12 @@
  *  the verified amount for the client to record. */
 import { NextResponse } from "next/server";
 import { quotePayload, verify } from "@/lib/sign";
+import { createOrder, razorpayConfigured } from "@/lib/razorpay";
 
 export async function POST(req: Request) {
   let b: {
     qid?: string; fromName?: string; toName?: string; bags?: number; oversize?: number;
-    total?: number; validUntil?: string; signature?: string;
+    total?: number; validUntil?: string; signature?: string; mode?: "full" | "hold";
   };
   try {
     b = await req.json();
@@ -31,10 +32,22 @@ export async function POST(req: Request) {
   if (new Date(String(b.validUntil)).getTime() < Date.now()) {
     return NextResponse.json({ error: "QUOTE_EXPIRED" }, { status: 410 });
   }
-  /* Razorpay/Stripe order creation goes here in production. */
+  const amount = b.mode === "hold" ? Math.round(Number(b.total) * 0.2) : Math.round(Number(b.total));
+
+  /* Live gateway: the moment RAZORPAY_* keys exist, this returns a real
+   * order for checkout, and capture is confirmed ONLY by the signature-
+   * verified webhook (/api/hooks/razorpay) — never by the browser. */
+  if (razorpayConfigured()) {
+    try {
+      const order = await createOrder(amount, String(b.qid));
+      return NextResponse.json({ ok: true, gateway: "razorpay", requiresCheckout: true, orderId: order.orderId, keyId: order.keyId, amount });
+    } catch (e) {
+      return NextResponse.json({ error: "GATEWAY_ERROR", detail: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    }
+  }
   return NextResponse.json({
     ok: true,
-    amount: Math.round(Number(b.total)),
+    amount,
     gateway: "Razorpay (demo)",
     capturedAt: new Date().toISOString(),
     reference: `pay_${Math.random().toString(36).slice(2, 12)}`,

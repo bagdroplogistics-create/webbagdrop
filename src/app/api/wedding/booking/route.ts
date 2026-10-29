@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
+import { kickSweep } from "@/lib/automation";
 
 /** Mirrors every new Y2K booking into a Google Sheet, alongside the Admin OS,
  *  via a Google Apps Script "Web App" (see the setup doc for the script and
@@ -108,5 +109,6 @@ export async function POST(req: Request) {
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (isNew) notifySheet(doc);
+  kickSweep();
   return NextResponse.json({ ok: true, booking: doc });
 }

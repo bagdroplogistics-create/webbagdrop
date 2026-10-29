@@ -24,10 +24,13 @@ export async function patchTrip(id: string, patch: Partial<Trip>): Promise<Trip>
   return j.trip as Trip;
 }
 
-export async function assignBookingToTrip(bookingId: string, tripId: string) {
-  const r = await fetch("/api/admin/trips/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, tripId }) });
+export type { LrDetails } from "./lrModel";
+import type { LrDetails } from "./lrModel";
+
+export async function assignBookingToTrip(bookingId: string, tripId: string, lr?: LrDetails, opts?: { autoTrip?: boolean; approveDraft?: boolean }) {
+  const r = await fetch("/api/admin/trips/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, tripId: tripId || undefined, lr, ...opts }) });
   const j = await r.json();
-  if (!r.ok || j.error) throw new Error(j.error ?? `HTTP_${r.status}`);
+  if (!r.ok || j.error) throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
   return j.booking;
 }
 
