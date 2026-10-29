@@ -276,6 +276,134 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
   );
 }
 
+/** Bag labels — one per piece, same layout as the issued Bagdrop label
+ *  (masthead, GC no. + barcode, From → To, Deliver To, Bag N/total,
+ *  contents/weight/booked-delivery, consignor + LR type, care strip).
+ *  Prints one label per page; on screen they stack with a divider. */
+export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClose: () => void }) {
+  const lr = ((b.admin as { lrDetails?: LrD }).lrDetails ?? {}) as LrD;
+  const gcNo = b.lr?.no ?? "—";
+  const gcDate = b.lr?.at ? new Date(b.lr.at).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+  const total = lr.pieces ?? b.bags + b.oversize;
+  const bagNumbers = Array.from({ length: Math.max(1, total) }, (_, i) => i + 1);
+
+  const consignor = lr.consignor ?? COMPANY.name;
+  const consignorAddr = lr.fromAddr ?? b.pickAddr ?? b.from;
+  const consignee = lr.consignee ?? b.traveller.name;
+  const consigneeAddr = lr.toAddr ?? b.dropAddr ?? b.to;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-[620px] print:max-w-none">
+        <div className="sticky top-0 z-10 flex items-center justify-between bg-white p-3 shadow print:hidden">
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+          <span className="text-xs text-muted">{bagNumbers.length} label{bagNumbers.length > 1 ? "s" : ""}</span>
+          <Button size="sm" onClick={() => window.print()}>Print all</Button>
+        </div>
+
+        {bagNumbers.map((n) => (
+          <div
+            key={n}
+            className="mb-4 bg-white shadow-2xl print:mb-0 print:shadow-none"
+            style={{ breakAfter: n < bagNumbers.length ? "page" : undefined }}
+          >
+            {/* masthead */}
+            <div className="flex items-start justify-between px-6 pt-5">
+              <div className="flex items-center gap-2.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/logo-icon.png" alt="" className="h-14 w-auto" />
+              </div>
+              <div className="text-right">
+                <b className="font-display text-[15px] font-extrabold text-ink">{COMPANY.name}</b>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-brand">{COMPANY.tagline}</p>
+                <p className="text-[11px] text-stone-600">WhatsApp {COMPANY.phone}</p>
+                <p className="text-[11px] text-stone-600">{COMPANY.email} · {COMPANY.web}</p>
+              </div>
+            </div>
+            <div className="mx-6 mt-3 h-[3px] bg-brand" />
+
+            {/* GC no. + barcode */}
+            <div className="flex items-start justify-between px-6 pt-4">
+              <div>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">GC No.</span>
+                <span className="block font-display text-3xl font-extrabold tracking-tight text-ink">{gcNo}</span>
+                <span className="mt-1 block text-[11px] text-stone-600">GC Date <b>{gcDate}</b></span>
+              </div>
+              <div className="text-right">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://barcodeapi.org/api/128/${encodeURIComponent(`${gcNo}-${String(n).padStart(2, "0")}`)}`}
+                  alt={`${gcNo}-${String(n).padStart(2, "0")}`}
+                  className="h-16 w-auto"
+                />
+              </div>
+            </div>
+
+            {/* from -> to */}
+            <div className="mx-6 mt-4 flex items-center justify-between rounded-2xl bg-brand-soft px-5 py-4">
+              <div>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">From</span>
+                <span className="font-display text-3xl font-extrabold uppercase text-ink">{b.from}</span>
+              </div>
+              <span className="font-display text-2xl text-brand">→</span>
+              <div className="text-right">
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">To</span>
+                <span className="font-display text-3xl font-extrabold uppercase text-brand">{b.to}</span>
+              </div>
+            </div>
+
+            {/* deliver to */}
+            <div className="mx-6 mt-4 border-l-4 border-brand pl-4">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-brand">Deliver to</span>
+              <span className="block font-display text-xl font-extrabold uppercase text-ink">{consignee}</span>
+              <p className="text-[13px] text-stone-700">{consigneeAddr}</p>
+            </div>
+
+            {/* bag no. / contents / booked-delivery */}
+            <div className="mx-6 mt-4 flex overflow-hidden rounded-xl border border-line">
+              <div className="flex flex-col justify-center bg-brand px-4 py-3 text-white">
+                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">Bag No.</span>
+                <span className="font-display text-4xl font-extrabold leading-none">{n}<span className="text-lg font-bold opacity-80">/{bagNumbers.length}</span></span>
+              </div>
+              <div className="grid flex-1 grid-cols-2 divide-x divide-line">
+                <div className="px-3 py-2">
+                  <span className="block text-[9.5px] font-semibold uppercase tracking-wide text-faint">Contents</span>
+                  <b className="text-[13px]">{lr.content ?? "Household Bags"}</b>
+                  <span className="mt-1 block text-[9.5px] font-semibold uppercase tracking-wide text-faint">Total weight</span>
+                  <b className="text-[13px]">{lr.weightKg ? `${lr.weightKg} kg` : "—"} <span className="font-normal text-faint">({bagNumbers.length} pkgs)</span></b>
+                </div>
+                <div className="px-3 py-2">
+                  <span className="block text-[9.5px] font-semibold uppercase tracking-wide text-faint">Booked at</span>
+                  <b className="text-[13px]">{b.from}</b>
+                  <span className="mt-1 block text-[9.5px] font-semibold uppercase tracking-wide text-faint">Delivery at</span>
+                  <b className="text-[13px]">{lr.deliveryAt ?? "Door Dly"}</b>
+                </div>
+              </div>
+            </div>
+
+            {/* consignor / LR type */}
+            <div className="mx-6 mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-600">
+              <span><span className="font-semibold uppercase tracking-wide text-faint">Consignor</span> <b className="text-ink">{consignor}</b> · {consignorAddr}</span>
+              <span><span className="font-semibold uppercase tracking-wide text-faint">LR type</span> <b className="text-ink">{lr.lrType ?? "At Branch"}</b></span>
+            </div>
+
+            {/* care strip */}
+            <div className="mx-6 mt-3 rounded-lg border border-dashed border-brand/50 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-brand">
+              Handle with care · Keep dry · Do not throw
+            </div>
+
+            {/* footer tagline */}
+            <div className="mt-4 bg-brand-soft py-2.5 text-center text-[10.5px] font-bold uppercase tracking-[0.15em] text-brand">
+              The Baggage Layer · Sealed · Tracked · Insured
+            </div>
+            <div className="h-2" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DocumentView({ booking, doc, onClose }: { booking: Booking; doc: DocRecord; onClose: () => void }) {
   const isInvoiceLike = doc.type !== "LR" && doc.type !== "TR" && doc.type !== "MF";
   const split = isInvoiceLike ? gstSplit(doc.amount) : null;

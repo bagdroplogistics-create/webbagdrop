@@ -12,7 +12,7 @@ import { CHARGE_HEADS, DELIVERY_AT, GST_PAYABLE, LR_TYPES, PAYMENT_TERMS, lrTota
 import { COMPANY } from "@/lib/company";
 import type { Booking, DocRecord, Trip, TripExpense } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
-import DocumentView, { OpsNoteDoc } from "./DocumentView";
+import DocumentView, { BagLabelsDoc, OpsNoteDoc } from "./DocumentView";
 
 const VEHICLE_TYPES = ["Tata Ace", "Bolero pickup", "Eicher 14ft", "Eicher 17ft", "Tempo traveller", "Container"];
 const EXP_HEADS = ["Fuel", "Toll / FASTag", "Driver bhatta", "Loading / unloading", "Parking", "Airport charges", "Vehicle hire", "Misc"];
@@ -32,6 +32,7 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [viewingIssued, setViewingIssued] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
   const [opsNoteFor, setOpsNoteFor] = useState<Booking | null>(null);
+  const [labelsFor, setLabelsFor] = useState<Booking | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   useEffect(() => watchTrips(setTrips, (e) => setErr(String(e))), []);
 
@@ -104,12 +105,14 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
               <span className="flex gap-1.5">
                 <Button size="sm" variant="outline" onClick={() => openIssued(b)}>View / Print LR</Button>
                 <Button size="sm" variant="outline" onClick={() => setOpsNoteFor(b)}>Ops Note</Button>
+                <Button size="sm" variant="outline" onClick={() => setLabelsFor(b)}>Bag Labels</Button>
               </span>
             </div>
           ))}
         </div>
         {viewingIssued && <DocumentView booking={viewingIssued.booking} doc={viewingIssued.doc} onClose={() => setViewingIssued(null)} />}
         {opsNoteFor && <OpsNoteDoc booking={opsNoteFor} onClose={() => setOpsNoteFor(null)} />}
+        {labelsFor && <BagLabelsDoc booking={labelsFor} onClose={() => setLabelsFor(null)} />}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
@@ -432,6 +435,7 @@ function TripDetail({
   const [err, setErr] = useState("");
   const [viewing, setViewing] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
   const [opsNoteFor, setOpsNoteFor] = useState<Booking | null>(null);
+  const [labelsFor, setLabelsFor] = useState<Booking | null>(null);
 
   function openLr(b: Booking) {
     if (!b.lr) return;
@@ -496,6 +500,8 @@ function TripDetail({
                     <button className="text-brand hover:underline" onClick={() => openLr(b)}>LR {b.lr.no}</button>
                     {" · "}
                     <button className="text-brand hover:underline" onClick={() => setOpsNoteFor(b)}>Ops Note</button>
+                    {" · "}
+                    <button className="text-brand hover:underline" onClick={() => setLabelsFor(b)}>Labels</button>
                   </span>
                 ) : "—"}</td>
                 <td className="pr-2 text-right">{inr(b.quote.total)}</td>
@@ -546,6 +552,7 @@ function TripDetail({
       </p>
       {viewing && <DocumentView booking={viewing.booking} doc={viewing.doc} onClose={() => setViewing(null)} />}
       {opsNoteFor && <OpsNoteDoc booking={opsNoteFor} onClose={() => setOpsNoteFor(null)} />}
+      {labelsFor && <BagLabelsDoc booking={labelsFor} onClose={() => setLabelsFor(null)} />}
     </Card>
   );
 }
