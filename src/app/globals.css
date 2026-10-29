@@ -79,6 +79,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@media print {
+  @page { margin: 8mm; }
+  body { background: #fff; }
+}
+
 /* Admin OS — scoped to .admin-os only, so the booking site's own brand
  * tokens above (customer wizard, weddings, Y2K) are never touched. Matches
  * the team's reference design: warm paper background, navy rail, mono

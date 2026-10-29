@@ -56,15 +56,27 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
 
         {/* masthead */}
         <div className="flex items-center justify-between bg-[#EA580C] px-5 py-3 text-white">
-          <div className="font-display text-xl font-extrabold leading-tight">BAGDROP<span className="block text-[8px] font-semibold tracking-[0.2em]">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</span></div>
+          <div className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/logo-icon.png" alt="" className="h-9 w-auto" />
+            <div className="font-display text-xl font-extrabold leading-tight">BAGDROP<span className="block text-[8px] font-semibold tracking-[0.2em]">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</span></div>
+          </div>
           <div className="text-center">
             <div className="font-display text-lg font-extrabold tracking-wide">CONSIGNMENT NOTE</div>
             <div className="text-[10px] opacity-90">At Owner&apos;s Risk</div>
           </div>
-          <div className="text-right text-[11px]">
-            <span className="block text-[8.5px] uppercase opacity-80">GC No.</span>
-            <b className="font-mono">{doc.no}</b>
-            <span className="block font-semibold">Date: {gcDate}</span>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=0&data=${encodeURIComponent(doc.no)}`}
+              alt={`QR ${doc.no}`}
+              className="size-[60px] rounded bg-white p-1"
+            />
+            <div className="text-right text-[11px]">
+              <span className="block text-[8.5px] uppercase opacity-80">GC No.</span>
+              <b className="font-mono">{doc.no}</b>
+              <span className="block font-semibold">Date: {gcDate}</span>
+            </div>
           </div>
         </div>
 
