@@ -48,6 +48,11 @@ const INDEMNITY_PARAGRAPHS = [
   "I agree to indemnify and hold Bagdrop Logistics Solutions harmless from any and all claims, losses, damages, liabilities, costs and expenses arising out of or in connection with the transportation of my household goods.",
   "I further confirm that I have read and understood the terms and conditions of this undertaking and agree to be bound by them.",
 ];
+const PROHIBITED_ITEMS = [
+  "Lighters, matchsticks", "Flammable liquids", "Toxic substances", "Corrosives", "Alcohol", "Lithium batteries",
+  "Flammable gas", "E-cigarettes", "Infectious substances", "Radioactive materials", "Explosives / ammunition", "Power banks",
+];
+const ID_LABELS: Record<"aadhaar" | "passport" | "licence", string> = { aadhaar: "Aadhar Card", passport: "Passport", licence: "Licence" };
 
 interface Draft {
   uc: UseCase; mode: Mode;
@@ -91,6 +96,7 @@ export default function Wizard() {
     return d2.toISOString().slice(0, 10);
   }, [today]);
   const minDateLabel = minDate ? new Date(`${minDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "";
+  const todayLabel = today ? new Date(`${today}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
   /** Flight/train/sailing-aware pickup planning — auto-fills the suggested
    *  date/slot, same "keep tracking until the customer types their own
@@ -273,7 +279,19 @@ export default function Wizard() {
   }
 
   /* ---------- indemnity undertaking (verbatim bond letter) ---------- */
-  const [ind, setInd] = useState<{ idType: "aadhaar" | "passport" | "licence"; idNumber: string; agree: boolean }>({ idType: "aadhaar", idNumber: "", agree: false });
+  const [ind, setInd] = useState<{ idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place: string; agree: boolean }>(
+    { idType: "aadhaar", idNumber: "", signature: "", place: "", agree: false }
+  );
+  /* the signature field defaults to the traveller's name, but stays
+   * editable, and tracks their name until they've typed their own */
+  const sigAutoRef = useRef("");
+  useEffect(() => {
+    if (!ind.signature || ind.signature === sigAutoRef.current) {
+      sigAutoRef.current = d.name;
+      if (ind.signature !== d.name) setInd((p) => ({ ...p, signature: d.name }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.name]);
   const [indBusy, setIndBusy] = useState(false);
   const [indErr, setIndErr] = useState<string | null>(null);
   /** By this point the booking is usually "accepted" (payment verified),
@@ -281,21 +299,21 @@ export default function Wizard() {
    *  edit a confirmed booking through that RPC. /api/indemnity runs with
    *  the service role instead, same reasoning as /api/verify below. */
   async function acceptIndemnity() {
-    if (!booking || indBusy || !ind.agree || !ind.idNumber.trim()) return;
+    if (!booking || indBusy || !ind.agree || !ind.idNumber.trim() || !ind.signature.trim()) return;
     setIndBusy(true); setIndErr(null);
     try {
       if (backend === "local") {
         const next = await updateBooking(
           booking.id,
-          { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim() } },
-          `Indemnity undertaking signed · ${ind.idType} ${ind.idNumber.trim()}`
+          { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim(), signature: ind.signature.trim(), place: ind.place.trim() || undefined } },
+          `Indemnity undertaking signed by "${ind.signature.trim()}" · ${ind.idType} ${ind.idNumber.trim()}`
         );
         setLive(next);
         return;
       }
       const r = await fetch("/api/indemnity", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: booking.id, idType: ind.idType, idNumber: ind.idNumber.trim() }),
+        body: JSON.stringify({ id: booking.id, idType: ind.idType, idNumber: ind.idNumber.trim(), signature: ind.signature.trim(), place: ind.place.trim() }),
       });
       const j = await r.json();
       if (j.error) { setIndErr(j.detail ?? "Could not save that — try again."); return; }
@@ -405,31 +423,78 @@ export default function Wizard() {
           </div>
         )}
 
-        {/* STAGE 2 — indemnity undertaking (verbatim bond letter), after payment */}
+        {/* STAGE 2 — indemnity undertaking, shown as the actual bond letter, signed digitally */}
         {paymentDone && !indemnityDone && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm font-bold text-amber-900">One step left: sign the undertaking</p>
-            <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-white p-3 text-xs leading-relaxed text-stone-700">
-              <p className="mb-2 font-semibold text-ink">Undertaking for Moving Baggage Goods &amp; Household Goods</p>
-              <p className="mb-2">I, {d.name.trim() || "the undersigned"}, confirm that I have engaged Bagdrop Logistics Solutions for the purpose of moving my household goods.</p>
-              {INDEMNITY_PARAGRAPHS.map((p, i) => <p key={i} className="mb-2 last:mb-0">{p}</p>)}
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-bold text-amber-900">One step left: read and digitally sign the undertaking below</p>
+            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              {/* masthead — matches the issued bond letter */}
+              <div className="flex items-center justify-between bg-[#EA580C] px-5 py-3 text-white">
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/logo-icon.png" alt="" className="h-8 w-auto" />
+                  <span className="font-display text-base font-extrabold tracking-tight">BAGDROP</span>
+                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">Digital undertaking</span>
+              </div>
+
+              <div className="p-5">
+                <h3 className="mb-3 text-center font-display text-base font-bold text-ink underline underline-offset-4">
+                  Undertaking for Moving Baggage Goods &amp; Household Goods
+                </h3>
+
+                <div className="space-y-2.5 text-[13px] leading-relaxed text-stone-700">
+                  <p>
+                    I, <b className="text-ink">{ind.signature.trim() || d.name.trim() || "the undersigned"}</b>, hereby confirm that I hold{" "}
+                    {ID_LABELS[ind.idType]} no. <b className="text-ink">{ind.idNumber.trim() || "__________"}</b>, and have engaged Bagdrop Logistics
+                    Solutions for the purpose of moving my household goods.
+                  </p>
+                  {INDEMNITY_PARAGRAPHS.map((p, i) => <p key={i}>{p}</p>)}
+                </div>
+
+                <div className="mt-3 rounded-lg bg-paper/60 p-3">
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-faint">Items not allowed with Bagdrop</p>
+                  <p className="text-[11px] leading-relaxed text-stone-600">
+                    {PROHIBITED_ITEMS.join(" · ")}. <b className="text-red-700">Alcohol is strictly prohibited in your baggage.</b>
+                  </p>
+                </div>
+
+                <p className="mt-4 mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">Fill in any one of the IDs above</p>
+                <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
+                  <Field label="ID type">
+                    <Select value={ind.idType} onChange={(e) => setInd((p) => ({ ...p, idType: e.target.value as typeof ind.idType }))}>
+                      <option value="aadhaar">Aadhaar</option>
+                      <option value="passport">Passport</option>
+                      <option value="licence">Driving Licence</option>
+                    </Select>
+                  </Field>
+                  <Field label="ID number"><Input value={ind.idNumber} onChange={(e) => setInd((p) => ({ ...p, idNumber: e.target.value }))} /></Field>
+                </div>
+
+                <div className="mt-4 border-t border-dashed border-line pt-4">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">Sign digitally</p>
+                  <div className="grid gap-x-3 gap-y-3 sm:grid-cols-[1.3fr_0.7fr]">
+                    <Field label="Signature — type your full legal name">
+                      <Input value={ind.signature} onChange={(e) => setInd((p) => ({ ...p, signature: e.target.value }))} placeholder="Your full name" />
+                    </Field>
+                    <Field label="Place (optional)">
+                      <Input value={ind.place} onChange={(e) => setInd((p) => ({ ...p, place: e.target.value }))} placeholder={fromName} />
+                    </Field>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-faint">Date: {todayLabel || d.date}</p>
+                </div>
+
+                <label className="mt-3 flex items-start gap-2 text-xs text-stone-700">
+                  <input type="checkbox" className="mt-0.5" checked={ind.agree} onChange={(e) => setInd((p) => ({ ...p, agree: e.target.checked }))} />
+                  I have read and understood the terms and conditions of this undertaking, and agree to be bound by them.
+                </label>
+
+                <Button className="mt-3" disabled={indBusy || !ind.agree || !ind.idNumber.trim() || !ind.signature.trim()} onClick={() => void acceptIndemnity()}>
+                  {indBusy ? "Signing…" : "Sign & Continue"}
+                </Button>
+                {indErr && <p className="mt-2 text-sm text-red-700">{indErr}</p>}
+              </div>
             </div>
-            <div className="mt-3 grid gap-x-3 sm:grid-cols-2">
-              <Field label="ID type">
-                <Select value={ind.idType} onChange={(e) => setInd((p) => ({ ...p, idType: e.target.value as typeof ind.idType }))}>
-                  <option value="aadhaar">Aadhaar</option>
-                  <option value="passport">Passport</option>
-                  <option value="licence">Driving Licence</option>
-                </Select>
-              </Field>
-              <Field label="ID number"><Input value={ind.idNumber} onChange={(e) => setInd((p) => ({ ...p, idNumber: e.target.value }))} /></Field>
-            </div>
-            <label className="mt-2 flex items-start gap-2 text-xs text-amber-900">
-              <input type="checkbox" className="mt-0.5" checked={ind.agree} onChange={(e) => setInd((p) => ({ ...p, agree: e.target.checked }))} />
-              I have read and agree to this undertaking.
-            </label>
-            <Button className="mt-3" disabled={indBusy || !ind.agree || !ind.idNumber.trim()} onClick={() => void acceptIndemnity()}>{indBusy ? "Saving…" : "I Agree & Continue"}</Button>
-            {indErr && <p className="mt-2 text-sm text-red-700">{indErr}</p>}
           </div>
         )}
 

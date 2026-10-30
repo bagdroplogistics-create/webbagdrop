@@ -11,9 +11,9 @@ import type { Booking } from "@/lib/types";
  *  only the indemnity field, and only once payment is verified (or there
  *  was nothing to pay — a rate-on-request booking). */
 export async function POST(req: Request) {
-  let b: { id?: string; idType?: string; idNumber?: string };
+  let b: { id?: string; idType?: string; idNumber?: string; signature?: string; place?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "BAD_JSON" }, { status: 400 }); }
-  if (!b.id || !b.idType || !b.idNumber?.trim()) return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
+  if (!b.id || !b.idType || !b.idNumber?.trim() || !b.signature?.trim()) return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
   if (!["aadhaar", "passport", "licence"].includes(b.idType)) return NextResponse.json({ error: "BAD_ID_TYPE" }, { status: 400 });
 
   const sb = serviceClient();
@@ -32,10 +32,12 @@ export async function POST(req: Request) {
   const now = new Date().toISOString();
   const idType = b.idType as "aadhaar" | "passport" | "licence";
   const idNumber = b.idNumber.trim();
+  const signature = b.signature.trim();
+  const place = b.place?.trim() || undefined;
   const next: Booking = {
     ...doc,
-    indemnity: { acceptedAt: now, idType, idNumber },
-    events: [...doc.events, { at: now, by: "customer", text: `Indemnity undertaking signed · ${idType} ${idNumber}` }],
+    indemnity: { acceptedAt: now, idType, idNumber, signature, place },
+    events: [...doc.events, { at: now, by: "customer", text: `Indemnity undertaking signed by "${signature}" · ${idType} ${idNumber}${place ? ` · ${place}` : ""}` }],
   };
   const up = await sb.from("bookings").upsert({ id: next.id, doc: next, status: next.status, created: next.created });
   if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });

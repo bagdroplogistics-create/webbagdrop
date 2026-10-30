@@ -130,7 +130,7 @@ export interface Booking {
   pay: Payment | null;
   /** The signed "Undertaking for Moving Baggage Goods & Household Goods" —
    *  captured right before Aadhaar verification, after payment is verified. */
-  indemnity?: { acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string } | null;
+  indemnity?: { acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place?: string } | null;
   admin: Record<string, unknown>;
   events: BookingEvent[];
   lr?: { no: string; at: string; trip: string } | null;
