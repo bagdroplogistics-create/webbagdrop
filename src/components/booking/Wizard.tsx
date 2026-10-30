@@ -28,6 +28,26 @@ const SERVICES: { uc: UseCase; mode: Mode; title: string; sub: string }[] = [
 ];
 const STEPS = ["Service", "Route", "When", "Bags", "You", "Confirm", "Price", "Pay"];
 const AAD_DEMO = "112233";
+const MAX_AADHAAR_ATTEMPTS = 2;
+
+/** Static UPI QR payment — no payment gateway. The customer scans, pays in
+ *  their own UPI app, then self-reports; an admin verifies before the
+ *  booking is confirmed. See src/app/admin/PaymentVerification.tsx. */
+const UPI_ID = "BAGDROP1717@iob";
+const UPI_PAYEE = "Bagdrop Logistics Solutions Pvt Ltd";
+function upiQrUrl(amount: number, bookingId: string): string {
+  const upi = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE)}&am=${amount}&cu=INR&tn=${encodeURIComponent(bookingId)}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=0&data=${encodeURIComponent(upi)}`;
+}
+
+/** Verbatim from the signed "Undertaking for Moving Baggage Goods &
+ *  Household Goods" bond letter — do not reword. */
+const INDEMNITY_PARAGRAPHS = [
+  "I declare that the goods being moved are used and not new, they are being shifted from one location to another as a part of relocation and are not for sale. I also confirm that the goods do not contain any valuables, cash, jewelry or any other expensive items and that there is nothing which is illegal or any item that is listed as hazardous or banned by the government.",
+  "I understand and acknowledge that Bagdrop Logistics Solutions will take utmost care and handle the goods with care during transportation. However, I also acknowledge that any loss or breakage during transportation will not be the responsibility of Bagdrop Logistics Solutions, though they will make every effort to minimize any potential damage.",
+  "I agree to indemnify and hold Bagdrop Logistics Solutions harmless from any and all claims, losses, damages, liabilities, costs and expenses arising out of or in connection with the transportation of my household goods.",
+  "I further confirm that I have read and understood the terms and conditions of this undertaking and agree to be bound by them.",
+];
 
 interface Draft {
   uc: UseCase; mode: Mode;
@@ -163,7 +183,13 @@ export default function Wizard() {
     return watchBooking(booking.id, setLive);
   }, [booking]);
 
-  async function payAndBook() {
+  /** Creates the booking the moment the customer reaches the final step —
+   *  there is no payment gateway, so "booking created" and "payment
+   *  captured" are no longer the same event. For a rate-on-request route
+   *  there's nothing to pay yet (team calls with the rate); otherwise the
+   *  booking is created with pay.status "pending" and the UPI QR appears
+   *  right away, against this booking's own reference and locked amount. */
+  async function createPendingBooking() {
     if (payBusy) return;
     setPayBusy(true); setPayErr(null);
     try {
@@ -184,40 +210,123 @@ export default function Wizard() {
         quote: ror
           ? { qid: null, total: 0, breakdown: { ror: true } }
           : { qid: signed!.qid, total, breakdown: signed!, validUntil: signed!.validUntil, signature: signed!.signature },
-        /* Aadhaar is NOT done yet — it follows payment and gates pickup */
+        /* Aadhaar is NOT done yet — it follows payment verification + the
+         * indemnity undertaking, and gates pickup */
         identity: { ok: false, at: "", method: "UIDAI Aadhaar OTP · pending (required before pickup)", score: 0 },
-        pay: ror ? null : { mode: "full", amount: total, status: "captured", gateway: "Razorpay (demo)", at: now },
+        indemnity: null,
+        pay: ror ? null : { mode: "full", amount: total, status: "pending", gateway: `UPI (manual) · ${UPI_ID}`, at: now },
         admin: {},
         events: [
           { at: now, by: "customer", text: `Booking confirmed with ${otp.channel} OTP (${otp.channel === "email" ? d.email.trim() : d.mobile.trim()})${otp.verifiedAt ? ` at ${otp.verifiedAt}` : ""}` },
-          { at: now, by: "customer", text: ror ? "Booking request · RATE ON REQUEST · Aadhaar verification pending" : `Paid ${inr(total)} against signed quote ${signed!.qid} · Aadhaar verification pending (required before pickup)` },
+          { at: now, by: "customer", text: ror ? "Booking request · RATE ON REQUEST · Aadhaar verification pending" : `Booking created · UPI QR shown for ${inr(total)} against signed quote ${signed!.qid} · awaiting payment` },
         ],
       };
       const saved = await createBooking(doc);
       setBooking(saved);
     } catch {
-      setPayErr("Something went wrong saving the booking — your card was not charged. Please try again.");
+      setPayErr("Something went wrong creating your booking. Please try again.");
     } finally { setPayBusy(false); }
+  }
+  useEffect(() => {
+    if (step === 7 && !booking && !payBusy) void createPendingBooking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  /* ---------- customer self-reports payment; admin still verifies ---------- */
+  const [utr, setUtr] = useState("");
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimErr, setClaimErr] = useState<string | null>(null);
+  async function submitPaymentClaim() {
+    if (!booking || claimBusy) return;
+    const cur = (live ?? booking).pay;
+    if (!cur) return;
+    setClaimBusy(true); setClaimErr(null);
+    try {
+      const now = nowIso();
+      const next = await updateBooking(
+        booking.id,
+        { pay: { ...cur, status: "submitted", utr: utr.trim() || undefined, submittedAt: now } },
+        `Customer marked payment as completed${utr.trim() ? ` · UTR ${utr.trim()}` : ""} — awaiting admin verification`
+      );
+      setLive(next);
+    } catch {
+      setClaimErr("Could not save that — check your connection and try again.");
+    } finally { setClaimBusy(false); }
+  }
+  /** After a rejection: show the QR again so the customer can retry. */
+  async function retryPayment() {
+    if (!booking || claimBusy) return;
+    const cur = (live ?? booking).pay;
+    if (!cur) return;
+    setClaimBusy(true); setClaimErr(null);
+    try {
+      const now = nowIso();
+      const next = await updateBooking(
+        booking.id,
+        { pay: { mode: cur.mode, amount: cur.amount, status: "pending", gateway: cur.gateway, at: now } },
+        "Customer is retrying payment after rejection"
+      );
+      setLive(next); setUtr("");
+    } catch {
+      setClaimErr("Could not save that — check your connection and try again.");
+    } finally { setClaimBusy(false); }
+  }
+
+  /* ---------- indemnity undertaking (verbatim bond letter) ---------- */
+  const [ind, setInd] = useState<{ idType: "aadhaar" | "passport" | "licence"; idNumber: string; agree: boolean }>({ idType: "aadhaar", idNumber: "", agree: false });
+  const [indBusy, setIndBusy] = useState(false);
+  const [indErr, setIndErr] = useState<string | null>(null);
+  async function acceptIndemnity() {
+    if (!booking || indBusy || !ind.agree || !ind.idNumber.trim()) return;
+    setIndBusy(true); setIndErr(null);
+    try {
+      const next = await updateBooking(
+        booking.id,
+        { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim() } },
+        `Indemnity undertaking signed · ${ind.idType} ${ind.idNumber.trim()}`
+      );
+      setLive(next);
+    } catch {
+      setIndErr("Could not save that — check your connection and try again.");
+    } finally { setIndBusy(false); }
   }
 
   /* ---------- post-payment Aadhaar (inline, same as /verify/<id>) ---------- */
-  const [aad, setAad] = useState({ code: "", busy: false, err: null as string | null });
-  async function verifyAadhaar() {
+  const [aad, setAad] = useState({ code: "", busy: false, err: null as string | null, attempts: 0, locked: false });
+  async function lockAadhaar() {
     if (!booking) return;
+    try {
+      const next = await updateBooking(
+        booking.id,
+        { admin: { ...(live ?? booking).admin, aadhaarLocked: true } },
+        `Aadhaar verification locked after ${MAX_AADHAAR_ATTEMPTS} failed attempts — flagged for manual review`
+      );
+      setLive(next);
+    } catch { /* non-fatal — the lock still applies locally for this session */ }
+  }
+  async function verifyAadhaar() {
+    if (!booking || aad.locked) return;
     setAad((p) => ({ ...p, busy: true, err: null }));
+    const fail = (msg: string) => {
+      const attempts = aad.attempts + 1;
+      const locked = attempts >= MAX_AADHAAR_ATTEMPTS;
+      setAad((p) => ({ ...p, busy: false, attempts, locked, err: locked ? "Too many incorrect attempts — paused for your security. Our team will reach out to verify you directly." : msg }));
+      if (locked) void lockAadhaar();
+    };
     try {
       if (backend === "local") {
-        if (aad.code.trim() !== AAD_DEMO) { setAad((p) => ({ ...p, busy: false, err: "That OTP didn't match — try again." })); return; }
+        if (aad.code.trim() !== AAD_DEMO) { fail("That OTP didn't match — try again."); return; }
         const next = await updateBooking(booking.id, { identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } },
           "Identity verified · UIDAI Aadhaar OTP (post-payment, pre-pickup)");
         setLive(next);
-        setAad({ code: "", busy: false, err: null });
+        setAad({ code: "", busy: false, err: null, attempts: 0, locked: false });
         return;
       }
       const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: booking.id, otp: aad.code }) });
       const j = await r.json();
-      if (j.error) setAad((p) => ({ ...p, busy: false, err: j.error === "WRONG_OTP" ? "That OTP didn't match — check the code UIDAI sent and try again." : j.error }));
-      else { setAad({ code: "", busy: false, err: null }); setLive((p) => (p ? { ...p, identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } } : p)); }
+      if (j.error) { fail(j.error === "WRONG_OTP" ? "That OTP didn't match — check the code UIDAI sent and try again." : j.error); return; }
+      setAad({ code: "", busy: false, err: null, attempts: 0, locked: false });
+      setLive((p) => (p ? { ...p, identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } } : p));
     } catch { setAad((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
   }
 
@@ -235,6 +344,9 @@ export default function Wizard() {
   if (booking) {
     const st = live ?? booking;
     const verified = !!st.identity?.ok;
+    const pay = st.pay;
+    const paymentDone = !pay || pay.status === "captured";
+    const indemnityDone = !!st.indemnity;
     const stages = ["submitted", "accepted", "assigned", "picked_up", "in_transit", "delivered"];
     const idx = stages.indexOf(st.status);
     return (
@@ -250,24 +362,94 @@ export default function Wizard() {
           ))}
         </div>
 
-        {/* THE Aadhaar gate — after payment, before pickup */}
-        {!verified ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm font-bold text-amber-900">One step left before pickup: Aadhaar verification</p>
-            <p className="mt-1 text-xs text-amber-900/80">UIDAI sends an OTP to your Aadhaar-linked mobile. Your bags are picked up only after this is done — do it now, or later at <span className="font-mono">bagdrop.co/verify/{booking.id}</span> (we&apos;ve sent you the link too). <span className="font-mono">(demo: {AAD_DEMO})</span></p>
-            <div className="mt-3 flex flex-wrap items-center gap-2.5">
-              <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={aad.code} onChange={(e) => setAad((p) => ({ ...p, code: e.target.value }))} placeholder="UIDAI OTP" />
-              <Button disabled={aad.busy || aad.code.trim().length !== 6} onClick={() => void verifyAadhaar()}>{aad.busy ? "Checking…" : "Verify now"}</Button>
-            </div>
-            {aad.err && <p className="mt-2 text-sm text-red-700">{aad.err}</p>}
+        {/* STAGE 1 — UPI QR payment (static QR, no gateway; admin verifies) */}
+        {!paymentDone && pay && (
+          <div className="mt-4 rounded-xl border border-line bg-paper/60 p-4">
+            {pay.status === "rejected" && (
+              <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-900">
+                <b>Payment not verified</b> — {pay.rejectedNote || "our team couldn't match this to a payment received."} Please try again below.
+                <Button size="sm" variant="outline" className="mt-2" disabled={claimBusy} onClick={() => void retryPayment()}>{claimBusy ? "Resetting…" : "Show QR again"}</Button>
+              </p>
+            )}
+            {pay.status === "pending" && (
+              <>
+                <p className="text-sm font-bold text-ink">Pay by UPI to confirm your booking</p>
+                <div className="mt-3 flex flex-col items-center gap-2 rounded-xl bg-white p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={upiQrUrl(pay.amount, booking.id)} alt="UPI QR code" className="size-[200px]" />
+                  <p className="font-display text-xl font-extrabold text-ink">{inr(pay.amount)}</p>
+                  <p className="text-center text-xs text-muted">{UPI_PAYEE}<br />UPI ID: <span className="font-mono">{UPI_ID}</span><br />Reference: <span className="font-mono">{booking.id}</span></p>
+                </div>
+                <p className="mt-3 text-xs text-muted">Scan this QR code using any UPI app to complete your payment. Please verify the company name before paying.</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                  <Input className="w-48" value={utr} onChange={(e) => setUtr(e.target.value)} placeholder="UPI transaction ref / UTR (optional)" />
+                  <Button disabled={claimBusy} onClick={() => void submitPaymentClaim()}>{claimBusy ? "Saving…" : "I Have Completed Payment"}</Button>
+                </div>
+                {claimErr && <p className="mt-2 text-sm text-red-700">{claimErr}</p>}
+              </>
+            )}
+            {pay.status === "submitted" && (
+              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                <b>Payment submitted — awaiting verification.</b> Our team checks this against what we received{pay.utr ? <> (ref <span className="font-mono">{pay.utr}</span>)</> : ""} and confirms your booking shortly.
+              </p>
+            )}
           </div>
-        ) : (
-          <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Identity verified</b> · UIDAI Aadhaar OTP · pickup is released.</p>
+        )}
+
+        {/* STAGE 2 — indemnity undertaking (verbatim bond letter), after payment */}
+        {paymentDone && !indemnityDone && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-bold text-amber-900">One step left: sign the undertaking</p>
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-white p-3 text-xs leading-relaxed text-stone-700">
+              <p className="mb-2 font-semibold text-ink">Undertaking for Moving Baggage Goods &amp; Household Goods</p>
+              <p className="mb-2">I, {d.name.trim() || "the undersigned"}, confirm that I have engaged Bagdrop Logistics Solutions for the purpose of moving my household goods.</p>
+              {INDEMNITY_PARAGRAPHS.map((p, i) => <p key={i} className="mb-2 last:mb-0">{p}</p>)}
+            </div>
+            <div className="mt-3 grid gap-x-3 sm:grid-cols-2">
+              <Field label="ID type">
+                <Select value={ind.idType} onChange={(e) => setInd((p) => ({ ...p, idType: e.target.value as typeof ind.idType }))}>
+                  <option value="aadhaar">Aadhaar</option>
+                  <option value="passport">Passport</option>
+                  <option value="licence">Driving Licence</option>
+                </Select>
+              </Field>
+              <Field label="ID number"><Input value={ind.idNumber} onChange={(e) => setInd((p) => ({ ...p, idNumber: e.target.value }))} /></Field>
+            </div>
+            <label className="mt-2 flex items-start gap-2 text-xs text-amber-900">
+              <input type="checkbox" className="mt-0.5" checked={ind.agree} onChange={(e) => setInd((p) => ({ ...p, agree: e.target.checked }))} />
+              I have read and agree to this undertaking.
+            </label>
+            <Button className="mt-3" disabled={indBusy || !ind.agree || !ind.idNumber.trim()} onClick={() => void acceptIndemnity()}>{indBusy ? "Saving…" : "I Agree & Continue"}</Button>
+            {indErr && <p className="mt-2 text-sm text-red-700">{indErr}</p>}
+          </div>
+        )}
+
+        {/* STAGE 3 — Aadhaar gate, after payment + indemnity, before pickup */}
+        {paymentDone && indemnityDone && (
+          !verified ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-bold text-amber-900">One step left before pickup: Aadhaar verification</p>
+              {aad.locked ? (
+                <p className="mt-1 text-xs text-amber-900/80">We&apos;ve paused further attempts after {MAX_AADHAAR_ATTEMPTS} incorrect codes, for your security — our team will verify you directly and be in touch shortly.</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-xs text-amber-900/80">UIDAI sends an OTP to your Aadhaar-linked mobile. Your bags are picked up only after this is done — do it now, or later at <span className="font-mono">bagdrop.co/verify/{booking.id}</span> (we&apos;ve sent you the link too). <span className="font-mono">(demo: {AAD_DEMO})</span></p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                    <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={aad.code} onChange={(e) => setAad((p) => ({ ...p, code: e.target.value }))} placeholder="UIDAI OTP" />
+                    <Button disabled={aad.busy || aad.code.trim().length !== 6} onClick={() => void verifyAadhaar()}>{aad.busy ? "Checking…" : "Verify now"}</Button>
+                  </div>
+                </>
+              )}
+              {aad.err && <p className="mt-2 text-sm text-red-700">{aad.err}</p>}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Identity verified</b> · UIDAI Aadhaar OTP · pickup is released.</p>
+          )
         )}
 
         <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
           {st.status === "accepted" && `Confirmed · captain ${String((st.admin as { captain?: string }).captain ?? "to be assigned")} · pickup ${st.slot} on ${st.date}.`}
-          {st.status === "submitted" && (st.quote.breakdown.ror ? "Request received — our team will call you with the rate for this route." : "With Bagdrop operations — you will hear from us within the hour.")}
+          {st.status === "submitted" && (st.quote.breakdown.ror ? "Request received — our team will call you with the rate for this route." : paymentDone ? "With Bagdrop operations — you will hear from us within the hour." : "Pay by UPI above to confirm this booking.")}
           {["assigned", "picked_up", "in_transit", "delivered"].includes(st.status) && `Status: ${st.status.replace("_", " ")}.`}
         </p>
       </Card>
@@ -445,16 +627,20 @@ export default function Wizard() {
 
         {step === 7 && (
           <>
-            <H>{ror ? "Submit your request" : "Payment"}</H>
+            <H>{ror ? "Submitting your request" : "Preparing your payment"}</H>
             <p className="mb-4 text-sm text-muted">
               {ror
                 ? "No payment now — the team calls with the rate for your route. Aadhaar verification follows before pickup."
-                : "UPI, card or net banking. The server verifies the quote signature before capture — the browser can never set its own price. Your booking is created the moment payment lands; Aadhaar UIDAI verification follows and must be done before pickup."}
+                : "Your booking reference is created now, then you'll see a UPI QR code for this exact amount — scan it, pay, and tell us. Our team verifies the payment before the booking is confirmed."}
             </p>
-            <Button size="lg" className="w-full" disabled={payBusy || (!ror && !signed)} onClick={() => void payAndBook()}>
-              {payBusy ? "Processing…" : ror ? "Submit booking request — no payment now" : `Pay ${signed ? inr(signed.total) : ""} securely (demo)`}
-            </Button>
-            {payErr && <p className="mt-2 text-sm text-red-700">{payErr}</p>}
+            {payErr ? (
+              <>
+                <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">{payErr}</p>
+                <Button size="lg" className="mt-3 w-full" disabled={payBusy} onClick={() => void createPendingBooking()}>{payBusy ? "Retrying…" : "Try again"}</Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted">{payBusy || !ror ? "One moment…" : ""}</p>
+            )}
           </>
         )}
 

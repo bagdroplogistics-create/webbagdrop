@@ -29,7 +29,7 @@ interface StatementRow {
 }
 interface LedgerEntry { id: string; kind: string; amount: number; date: string; label: string }
 
-type Tab = "overview" | "invoices" | "credit" | "bank";
+type Tab = "overview" | "payments" | "invoices" | "credit" | "bank";
 
 export default function Finance() {
   const [all, setAll] = useState<Booking[]>([]);
@@ -40,13 +40,14 @@ export default function Finance() {
   const prodCapturedAll = prodLeads
     .filter((l) => l.booking && PROD_CAPTURED_STATUSES.includes(l.booking.status ?? ""))
     .reduce((a, l) => a + (l.booking?.totalAmount ?? 0), 0);
+  const pendingVerification = all.filter((b) => b.pay?.status === "submitted").length;
 
   if (err) return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Finance:</b> {err}</p>;
 
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap gap-1.5">
-        {([["overview", "CFO overview"], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"]] as [Tab, string][]).map(([k, n]) => (
+        {([["overview", "CFO overview"], ["payments", `UPI Payments${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"]] as [Tab, string][]).map(([k, n]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "text-white" : "hover:opacity-80"}`}
             style={tab === k ? { background: "var(--a-navy)" } : { background: "var(--a-surface-2)", color: "var(--a-muted)" }}>{n}</button>
@@ -54,11 +55,78 @@ export default function Finance() {
       </div>
       <div key={tab} className="anim-in">
         {tab === "overview" && <Overview all={all} prodCapturedAll={prodCapturedAll} />}
+        {tab === "payments" && <PaymentVerification all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
         {tab === "invoices" && <Invoices all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
         {tab === "credit" && <CreditNotes bookings={all} />}
         {tab === "bank" && <BankRecon />}
       </div>
     </div>
+  );
+}
+
+/* ================= UPI payment verification (static QR, no gateway) =================
+ * The customer self-reports payment against the booking's QR (amount +
+ * reference baked in); nothing here is auto-trusted — a human verifies
+ * against what actually landed in the account before the booking confirms. */
+function PaymentVerification({ all, onChanged }: { all: Booking[]; onChanged: (b: Booking) => void }) {
+  const rows = useMemo(() => {
+    const order: Record<string, number> = { submitted: 0, pending: 1, rejected: 2, captured: 3 };
+    return all.filter((b) => b.pay).sort((a, b) => (order[a.pay!.status] ?? 9) - (order[b.pay!.status] ?? 9) || (b.pay!.submittedAt ?? b.pay!.at).localeCompare(a.pay!.submittedAt ?? a.pay!.at));
+  }, [all]);
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function verify(b: Booking) {
+    setBusyId(b.id);
+    try {
+      await adminApplyPatch(b, { pay: { ...b.pay!, status: "captured", verifiedAt: new Date().toISOString(), verifiedBy: "admin" }, status: "accepted" },
+        `Payment verified via UPI (admin)${note[b.id] ? ` · ${note[b.id]}` : ""}`);
+      onChanged({ ...b, pay: { ...b.pay!, status: "captured", verifiedAt: new Date().toISOString(), verifiedBy: "admin" }, status: "accepted" });
+    } finally { setBusyId(null); }
+  }
+  async function reject(b: Booking) {
+    setBusyId(b.id);
+    try {
+      const rejectedAt = new Date().toISOString();
+      await adminApplyPatch(b, { pay: { ...b.pay!, status: "rejected", rejectedAt, rejectedNote: note[b.id] || undefined } },
+        `Payment rejected via UPI (admin)${note[b.id] ? ` · ${note[b.id]}` : ""}`);
+      onChanged({ ...b, pay: { ...b.pay!, status: "rejected", rejectedAt, rejectedNote: note[b.id] || undefined } });
+    } finally { setBusyId(null); }
+  }
+
+  return (
+    <Card>
+      <h3 className="mb-1 font-display text-sm font-bold">UPI payment verification</h3>
+      <p className="mb-3 text-xs text-muted">Static QR, no gateway — a customer's &quot;I Have Completed Payment&quot; click only self-reports. Nothing is marked Payment Received until verified here against what actually landed in the account.</p>
+      {rows.length === 0 && <p className="py-4 text-center text-sm text-muted">No UPI payment submissions yet.</p>}
+      <div className="grid gap-2">
+        {rows.map((b) => {
+          const p = b.pay!;
+          const tone = p.status === "captured" ? "ok" : p.status === "rejected" ? "bad" : p.status === "submitted" ? "warn" : "muted";
+          return (
+            <div key={b.id} className="rounded-xl border border-line bg-white p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span><b className="font-mono text-[11px]">{b.id}</b> · {b.traveller.name}</span>
+                <Badge tone={tone}>{p.status}</Badge>
+              </div>
+              <div className="mt-1 text-muted">
+                Amount <b className="text-ink">{inr(p.amount)}</b>
+                {p.utr && <> · UTR <span className="font-mono">{p.utr}</span></>}
+                {p.submittedAt && <> · submitted {new Date(p.submittedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
+                {p.rejectedNote && <> · note: {p.rejectedNote}</>}
+              </div>
+              {p.status === "submitted" && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Input className="w-48" placeholder="Internal note (optional)" value={note[b.id] ?? ""} onChange={(e) => setNote((p2) => ({ ...p2, [b.id]: e.target.value }))} />
+                  <Button size="sm" disabled={busyId === b.id} onClick={() => void verify(b)}>{busyId === b.id ? "Saving…" : "Verify Payment"}</Button>
+                  <Button size="sm" variant="outline" disabled={busyId === b.id} onClick={() => void reject(b)}>Reject Payment</Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

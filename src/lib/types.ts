@@ -68,9 +68,19 @@ export interface Traveller {
 export interface Payment {
   mode: "full" | "cash";
   amount: number;
-  status: "captured";
+  /** pending: QR shown, nothing claimed yet. submitted: customer clicked
+   *  "I Have Completed Payment" (+ optional UTR) — awaiting admin review.
+   *  captured: admin verified. rejected: admin rejected — customer may
+   *  resubmit (goes back to "pending"). */
+  status: "pending" | "submitted" | "captured" | "rejected";
   gateway: string;
   at: string;
+  utr?: string;
+  submittedAt?: string | null;
+  verifiedAt?: string | null;
+  verifiedBy?: string;
+  rejectedAt?: string | null;
+  rejectedNote?: string;
   recon?: { at: string; ref: string };
 }
 
@@ -118,6 +128,9 @@ export interface Booking {
   };
   identity: { ok: boolean; at: string; method: string; score: number } | null;
   pay: Payment | null;
+  /** The signed "Undertaking for Moving Baggage Goods & Household Goods" —
+   *  captured right before Aadhaar verification, after payment is verified. */
+  indemnity?: { acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string } | null;
   admin: Record<string, unknown>;
   events: BookingEvent[];
   lr?: { no: string; at: string; trip: string } | null;

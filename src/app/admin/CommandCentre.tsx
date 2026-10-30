@@ -79,7 +79,7 @@ function useDepartments(all: Booking[]) {
     const red = (d?: string) => flags.filter((f) => f.severity === "red" && (!d || f.dept === d)).length;
     const amber = (d?: string) => flags.filter((f) => f.severity === "amber" && (!d || f.dept === d)).length;
     const needsDecision = all.filter((b) => b.status === "submitted").length;
-    const paidToday = all.filter((b) => b.pay && b.pay.at.slice(0, 10) === today).reduce((a, b) => a + b.pay!.amount, 0);
+    const paidToday = all.filter((b) => b.pay?.status === "captured" && (b.pay.verifiedAt ?? b.pay.at).slice(0, 10) === today).reduce((a, b) => a + b.pay!.amount, 0);
     const receivable = all.filter((b) => b.pay && b.pay.amount < b.quote.total && !["rejected", "cancelled"].includes(b.status)).reduce((a, b) => a + (b.quote.total - b.pay!.amount), 0);
     const missingInv = all.filter((b) => b.pay?.status === "captured" && !(b.docs ?? []).some((d) => d.type === "INV")).length;
     const aadhaarPending = all.filter((b) => b.pay?.status === "captured" && !b.identity?.ok && !["delivered", "cancelled", "rejected"].includes(b.status)).length;

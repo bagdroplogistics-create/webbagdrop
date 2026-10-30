@@ -197,10 +197,10 @@ function Cohort({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
 /* ---------- 5 · receivables aging ---------- */
 function Aging({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
   const now = Date.now();
-  const open = bookings.filter((b) => !b.pay && b.quote.total > 0 && !["rejected", "cancelled"].includes(b.status));
+  const open = bookings.filter((b) => b.pay?.status !== "captured" && b.quote.total > 0 && !["rejected", "cancelled"].includes(b.status));
   const buckets = [["0–24 h", 0, 1], ["1–3 d", 1, 3], ["3–7 d", 3, 7], ["7+ d", 7, 10000]] as const;
   const val = (lo: number, hi: number) => open.filter((b) => { const dd = (now - new Date(b.created).getTime()) / 86400000; return dd >= lo && dd < hi; }).reduce((s, b) => s + b.quote.total, 0);
-  const unrecon = bookings.filter((b) => b.pay && !b.pay.recon);
+  const unrecon = bookings.filter((b) => b.pay?.status === "captured" && !b.pay.recon);
   const d = digest("Receivables aging", buckets.map(([n, lo, hi]) => `${n}: ${inr(val(lo, hi))}`).concat([`Unreconciled captures: ${unrecon.length} (${inr(unrecon.reduce((s, b) => s + b.pay!.amount, 0))})`]));
   const max = Math.max(1, ...buckets.map(([, lo, hi]) => val(lo, hi)));
   return (

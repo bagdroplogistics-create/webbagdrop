@@ -64,9 +64,9 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
   const inPrev = (iso?: string | null) => { if (!iso) return false; const d = istDay(iso); return d >= prevStart && d < start; };
 
   const created = bookings.filter((b) => inP(b.created));
-  const paid = bookings.filter((b) => b.pay && inP(b.pay.at));
+  const paid = bookings.filter((b) => b.pay?.status === "captured" && inP(b.pay.verifiedAt ?? b.pay.at));
   const createdPrev = bookings.filter((b) => inPrev(b.created));
-  const paidPrev = bookings.filter((b) => b.pay && inPrev(b.pay!.at));
+  const paidPrev = bookings.filter((b) => b.pay?.status === "captured" && inPrev(b.pay.verifiedAt ?? b.pay.at));
 
   /* ---- money ---- */
   const payGst = (b: Booking) => num(b.quote.breakdown.gst) || Math.round(num(b.pay!.amount) * 5 / 105);
@@ -76,8 +76,8 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
   const gstPrev = paidPrev.reduce((s, b) => s + payGst(b), 0);
   const billedValue = created.reduce((s, b) => s + num(b.quote.total), 0);
   const billedValuePrev = createdPrev.reduce((s, b) => s + num(b.quote.total), 0);
-  const unrecon = bookings.filter((b) => b.pay && !b.pay.recon);
-  const receivable = bookings.filter((b) => !b.pay && num(b.quote.total) > 0 && ["accepted", "assigned", "picked_up", "in_transit", "delivered"].includes(b.status));
+  const unrecon = bookings.filter((b) => b.pay?.status === "captured" && !b.pay.recon);
+  const receivable = bookings.filter((b) => b.pay?.status !== "captured" && num(b.quote.total) > 0 && ["accepted", "assigned", "picked_up", "in_transit", "delivered"].includes(b.status));
   const ageBucket = (b: Booking) => { const d = Math.floor((now - new Date(b.created).getTime()) / dayMs); return d <= 7 ? "0–7 d" : d <= 30 ? "8–30 d" : "30+ d"; };
   const ageing = ["0–7 d", "8–30 d", "30+ d"].map((bucket) => ({
     bucket, amount: receivable.filter((b) => ageBucket(b) === bucket).reduce((s, b) => s + num(b.quote.total), 0),
@@ -107,9 +107,9 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
 
   /* ---- sales ---- */
   const rorPending = bookings.filter((b) => b.quote.breakdown.ror && ["submitted", "quoted"].includes(b.status));
-  const unpaidPipeline = bookings.filter((b) => !b.pay && ["quoted", "submitted", "revised"].includes(b.status));
+  const unpaidPipeline = bookings.filter((b) => b.pay?.status !== "captured" && ["quoted", "submitted", "revised"].includes(b.status));
   const overdue = activity.filter((a) => a.dueAt && !a.doneAt && new Date(a.dueAt).getTime() < now);
-  const conv = created.length > 0 ? Math.round((created.filter((b) => b.pay).length / created.length) * 100) : null;
+  const conv = created.length > 0 ? Math.round((created.filter((b) => b.pay?.status === "captured").length / created.length) * 100) : null;
   const inqInP = inquiries.filter((i) => inP(i.created)).length;
   const inqPrev = inquiries.filter((i) => inPrev(i.created)).length;
 
@@ -145,7 +145,7 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
   /* ---- series: last 14 IST days + 7-day forecast band ---- */
   const lastDays = Array.from({ length: 14 }, (_, i) => istDay(now - (13 - i) * dayMs));
   const days = lastDays.map((day) => {
-    const dayPaid = bookings.filter((b) => b.pay && istDay(b.pay.at) === day);
+    const dayPaid = bookings.filter((b) => b.pay?.status === "captured" && istDay(b.pay.verifiedAt ?? b.pay.at) === day);
     return {
       day,
       revenue: dayPaid.reduce((s, b) => s + num(b.pay!.amount), 0),
@@ -169,7 +169,7 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
     sales: { label: "Bookings created per day", days: byDay(bookings, (b) => istDay(b.created), (xs) => xs.length) },
     comm: {
       label: "Realization ₹/bag per day",
-      days: byDay(bookings.filter((b) => b.pay), (b) => istDay(b.pay!.at), (xs) => {
+      days: byDay(bookings.filter((b) => b.pay?.status === "captured"), (b) => istDay(b.pay!.verifiedAt ?? b.pay!.at), (xs) => {
         const p = pieces(xs); return p ? Math.round(xs.reduce((s, b) => s + num(b.pay!.amount), 0) / p) : 0;
       }),
     },
