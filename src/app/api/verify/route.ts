@@ -13,6 +13,7 @@ import type { Booking } from "@/lib/types";
  *  OTP accepted is AADHAAR_DEMO_OTP (default 112233), clearly labelled demo. */
 
 const DEMO_OTP = process.env.AADHAAR_DEMO_OTP ?? "112233";
+const MAX_ATTEMPTS = 2;
 
 const mask = (s?: string) => (s ? s.replace(/.(?=.{3})/g, "•") : "");
 
@@ -51,7 +52,21 @@ export async function POST(req: Request) {
   const doc = data.doc as Booking;
   if (doc.identity?.ok) return NextResponse.json({ ok: true, booking: summary(doc) }); // idempotent
 
-  if (b.otp.trim() !== DEMO_OTP) return NextResponse.json({ error: "WRONG_OTP" }, { status: 401 });
+  const admin = doc.admin as { aadhaarAttempts?: number; aadhaarLocked?: boolean };
+  if (admin.aadhaarLocked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
+
+  if (b.otp.trim() !== DEMO_OTP) {
+    const attempts = (admin.aadhaarAttempts ?? 0) + 1;
+    const locked = attempts >= MAX_ATTEMPTS;
+    const now = new Date().toISOString();
+    const failed: Booking = {
+      ...doc,
+      admin: { ...doc.admin, aadhaarAttempts: attempts, ...(locked ? { aadhaarLocked: true } : {}) },
+      events: locked ? [...doc.events, { at: now, by: "customer", text: `Aadhaar verification locked after ${MAX_ATTEMPTS} failed attempts — flagged for manual review` }] : doc.events,
+    };
+    await sb.from("bookings").upsert({ id: failed.id, doc: failed, status: failed.status, created: failed.created });
+    return NextResponse.json({ error: locked ? "LOCKED" : "WRONG_OTP" }, { status: locked ? 423 : 401 });
+  }
 
   const now = new Date().toISOString();
   const next: Booking = {

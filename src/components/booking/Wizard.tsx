@@ -276,56 +276,57 @@ export default function Wizard() {
   const [ind, setInd] = useState<{ idType: "aadhaar" | "passport" | "licence"; idNumber: string; agree: boolean }>({ idType: "aadhaar", idNumber: "", agree: false });
   const [indBusy, setIndBusy] = useState(false);
   const [indErr, setIndErr] = useState<string | null>(null);
+  /** By this point the booking is usually "accepted" (payment verified),
+   *  which update_booking_customer refuses by design — customers can't
+   *  edit a confirmed booking through that RPC. /api/indemnity runs with
+   *  the service role instead, same reasoning as /api/verify below. */
   async function acceptIndemnity() {
     if (!booking || indBusy || !ind.agree || !ind.idNumber.trim()) return;
     setIndBusy(true); setIndErr(null);
     try {
-      const next = await updateBooking(
-        booking.id,
-        { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim() } },
-        `Indemnity undertaking signed · ${ind.idType} ${ind.idNumber.trim()}`
-      );
-      setLive(next);
+      if (backend === "local") {
+        const next = await updateBooking(
+          booking.id,
+          { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim() } },
+          `Indemnity undertaking signed · ${ind.idType} ${ind.idNumber.trim()}`
+        );
+        setLive(next);
+        return;
+      }
+      const r = await fetch("/api/indemnity", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: booking.id, idType: ind.idType, idNumber: ind.idNumber.trim() }),
+      });
+      const j = await r.json();
+      if (j.error) { setIndErr(j.detail ?? "Could not save that — try again."); return; }
+      setLive((p) => (p ? { ...p, indemnity: j.indemnity } : p));
     } catch {
       setIndErr("Could not save that — check your connection and try again.");
     } finally { setIndBusy(false); }
   }
 
   /* ---------- post-payment Aadhaar (inline, same as /verify/<id>) ---------- */
-  const [aad, setAad] = useState({ code: "", busy: false, err: null as string | null, attempts: 0, locked: false });
-  async function lockAadhaar() {
-    if (!booking) return;
-    try {
-      const next = await updateBooking(
-        booking.id,
-        { admin: { ...(live ?? booking).admin, aadhaarLocked: true } },
-        `Aadhaar verification locked after ${MAX_AADHAAR_ATTEMPTS} failed attempts — flagged for manual review`
-      );
-      setLive(next);
-    } catch { /* non-fatal — the lock still applies locally for this session */ }
-  }
+  const [aad, setAad] = useState({ code: "", busy: false, err: null as string | null, locked: false });
   async function verifyAadhaar() {
     if (!booking || aad.locked) return;
     setAad((p) => ({ ...p, busy: true, err: null }));
-    const fail = (msg: string) => {
-      const attempts = aad.attempts + 1;
-      const locked = attempts >= MAX_AADHAAR_ATTEMPTS;
-      setAad((p) => ({ ...p, busy: false, attempts, locked, err: locked ? "Too many incorrect attempts — paused for your security. Our team will reach out to verify you directly." : msg }));
-      if (locked) void lockAadhaar();
-    };
     try {
       if (backend === "local") {
-        if (aad.code.trim() !== AAD_DEMO) { fail("That OTP didn't match — try again."); return; }
+        if (aad.code.trim() !== AAD_DEMO) { setAad((p) => ({ ...p, busy: false, err: "That OTP didn't match — try again." })); return; }
         const next = await updateBooking(booking.id, { identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } },
           "Identity verified · UIDAI Aadhaar OTP (post-payment, pre-pickup)");
         setLive(next);
-        setAad({ code: "", busy: false, err: null, attempts: 0, locked: false });
+        setAad({ code: "", busy: false, err: null, locked: false });
         return;
       }
+      /* Attempt counting + the 2-attempt lock both live server-side (see
+       * /api/verify) — persisted on the booking, not just this tab's
+       * state, so a refresh can't reset the count. */
       const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: booking.id, otp: aad.code }) });
       const j = await r.json();
-      if (j.error) { fail(j.error === "WRONG_OTP" ? "That OTP didn't match — check the code UIDAI sent and try again." : j.error); return; }
-      setAad({ code: "", busy: false, err: null, attempts: 0, locked: false });
+      if (j.error === "LOCKED") { setAad((p) => ({ ...p, busy: false, locked: true, err: "Too many incorrect attempts — paused for your security. Our team will reach out to verify you directly." })); return; }
+      if (j.error) { setAad((p) => ({ ...p, busy: false, err: j.error === "WRONG_OTP" ? "That OTP didn't match — check the code UIDAI sent and try again." : j.error })); return; }
+      setAad({ code: "", busy: false, err: null, locked: false });
       setLive((p) => (p ? { ...p, identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } } : p));
     } catch { setAad((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
   }
