@@ -75,27 +75,38 @@ export default function HandoverBoard() {
             <div className={`grid ${ROW_GRID} gap-3 border-b border-white/10 px-5 py-2.5 font-mono text-[10px] tracking-[0.16em] text-white/40 sm:gap-4`}>
               <span>TIME</span><span>CODE</span><span>SERVICE</span><span>FROM</span><span>TO</span><span>STATUS</span>
             </div>
-            {HANDOVERS.map((r, i) => {
-              const status = BOARD_STATUSES[(stage + i) % BOARD_STATUSES.length];
-              const isSel = venue === i;
-              return (
-                <button
-                  key={r.code}
-                  type="button"
-                  onClick={() => { setVenue(i); setStage((s) => (s + 1) % BOARD_STATUSES.length); }}
-                  className={`grid w-full ${ROW_GRID} items-center gap-3 border-b border-white/10 px-5 py-3.5 text-left transition-colors last:border-b-0 sm:gap-4 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
-                >
-                  <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
-                  <span className="font-mono text-[12px] tracking-wider text-white/50">{r.code}</span>
-                  <span className="flex items-center gap-2.5 truncate text-[14px] font-bold">
-                    <Icon name={r.icon} size={17} className="shrink-0 text-white/70" /> <span className="truncate">{r.service}</span>
-                  </span>
-                  <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.from}</span>
-                  <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.to}</span>
-                  <FlipStatus status={status} tone={STATUS_FG[status]} />
-                </button>
-              );
-            })}
+            {/* Fixed-height viewport showing exactly 6 rows (6 × 56px) —
+             * the track below is the row list rendered twice back to
+             * back, drifting up by exactly one copy's height so it loops
+             * forever, airport-board style. Hover pauses it; reduced
+             * motion disables it (CSS). */}
+            <div className="h-[336px] overflow-hidden">
+              <div className="bd-board-track" style={{ animationDuration: "24s" }}>
+                {[0, 1].map((copy) =>
+                  HANDOVERS.map((r, i) => {
+                    const status = BOARD_STATUSES[(stage + i) % BOARD_STATUSES.length];
+                    const isSel = venue === i;
+                    return (
+                      <button
+                        key={`${copy}-${r.code}`}
+                        type="button"
+                        onClick={() => { setVenue(i); setStage((s) => (s + 1) % BOARD_STATUSES.length); }}
+                        className={`grid h-14 w-full ${ROW_GRID} items-center gap-3 border-b border-white/10 px-5 text-left transition-colors sm:gap-4 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
+                      >
+                        <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
+                        <span className="font-mono text-[12px] tracking-wider text-white/50">{r.code}</span>
+                        <span className="flex items-center gap-2.5 truncate text-[14px] font-bold">
+                          <Icon name={r.icon} size={17} className="shrink-0 text-white/70" /> <span className="truncate">{r.service}</span>
+                        </span>
+                        <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.from}</span>
+                        <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.to}</span>
+                        <FlipStatus status={status} tone={STATUS_FG[status]} />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

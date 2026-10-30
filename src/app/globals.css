@@ -57,8 +57,15 @@ html[data-motion] [data-fill][data-in] { transform: scaleX(1); }
 @keyframes bd-walk { 0% { left: 0%; } 90%, 100% { left: calc(100% - 14px); } }
 .bd-walk-dot { animation: bd-walk 4s cubic-bezier(.65,0,.35,1) infinite; }
 
+/* Live board rows — airport-style vertical scroll: the row list is
+ * rendered twice back to back and drifts up by exactly one copy's
+ * height, looping seamlessly forever. */
+@keyframes bd-board-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+.bd-board-track { animation: bd-board-scroll linear infinite; }
+.bd-board-track:hover { animation-play-state: paused; }
+
 @media (prefers-reduced-motion: reduce) {
-  .bd-blink-dot, .bd-flip-char, .bd-walk-dot { animation: none; }
+  .bd-blink-dot, .bd-flip-char, .bd-walk-dot, .bd-board-track { animation: none; }
 }
 .bd-marquee-track { animation: bd-marquee linear infinite; }
 .bd-marquee-track:hover { animation-play-state: paused; }
