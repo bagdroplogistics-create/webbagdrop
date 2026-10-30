@@ -229,6 +229,9 @@ export default function Wizard() {
       };
       const saved = await createBooking(doc);
       setBooking(saved);
+      /* Fire-and-forget — the internal team alert must never block the
+       * customer from seeing their QR / confirmation screen. */
+      void fetch("/api/inquiry-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: saved.id }) }).catch(() => {});
     } catch {
       setPayErr("Something went wrong creating your booking. Please try again.");
     } finally { setPayBusy(false); }
