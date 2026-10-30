@@ -7,11 +7,11 @@ import { Marquee } from "./motion";
  * container as the stats above it. */
 export default function CitiesStrip() {
   return (
-    <section className="overflow-hidden bg-navy py-5 text-white sm:py-6">
+    <section className="overflow-hidden border-y border-line bg-section/60 py-5 backdrop-blur-sm sm:py-6">
       <Marquee durationS={28}>
         <div className="flex items-center">
           {CITIES.map((c) => (
-            <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap sm:text-2xl">
+            <span key={c} className="flex items-center gap-5 px-5 font-display text-xl font-extrabold tracking-tight whitespace-nowrap text-ink sm:text-2xl">
               {c.toUpperCase()} <span className="size-2 shrink-0 bg-brand" aria-hidden="true" />
             </span>
           ))}
