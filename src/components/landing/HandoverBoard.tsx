@@ -19,6 +19,10 @@ const STATUS_FG: Record<string, string> = {
 };
 const ROW_GRID = "grid-cols-[56px_64px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_150px] sm:grid-cols-[64px_72px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_170px]";
 const MAX_LEN = Math.max(...BOARD_STATUSES.map((s) => s.length));
+/* Colored flight-code chips — the same cue a real airport departures
+ * screen uses (each row's number tagged in a different saturated color
+ * so the eye can track rows while they scroll), cycled by row index. */
+const CODE_TAGS = ["bg-sky-500 text-white", "bg-brand text-white", "bg-fuchsia-500 text-white", "bg-amber-400 text-ink", "bg-emerald-500 text-white", "bg-violet-500 text-white"];
 
 function FlipStatus({ status, tone }: { status: string; tone: string }) {
   const padded = status.padEnd(MAX_LEN, " ");
@@ -94,7 +98,7 @@ export default function HandoverBoard() {
                         className={`grid h-14 w-full ${ROW_GRID} items-center gap-3 border-b border-white/10 px-5 text-left transition-colors sm:gap-4 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
                       >
                         <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
-                        <span className="font-mono text-[12px] tracking-wider text-white/50">{r.code}</span>
+                        <span className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wider ${CODE_TAGS[i % CODE_TAGS.length]}`}>{r.code}</span>
                         <span className="flex items-center gap-2.5 truncate text-[14px] font-bold">
                           <Icon name={r.icon} size={17} className="shrink-0 text-white/70" /> <span className="truncate">{r.service}</span>
                         </span>
