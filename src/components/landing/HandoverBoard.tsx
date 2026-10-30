@@ -99,8 +99,8 @@ export default function HandoverBoard() {
                       >
                         <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
                         <span className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wider ${CODE_TAGS[i % CODE_TAGS.length]}`}>{r.code}</span>
-                        <span key={status} className="bd-row-flash flex items-center gap-2.5 truncate text-[14px] font-bold">
-                          <Icon name={r.icon} size={17} className="shrink-0 text-white/70" /> <span className="truncate">{r.service}</span>
+                        <span key={status} className={`bd-row-flash flex items-center gap-2.5 truncate text-[14px] font-bold ${STATUS_FG[status]}`}>
+                          <Icon name={r.icon} size={17} className="shrink-0" /> <span className="truncate">{r.service}</span>
                         </span>
                         <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.from}</span>
                         <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.to}</span>
