@@ -353,9 +353,17 @@ export default function Wizard() {
     return (
       <Card className="mx-auto max-w-2xl">
         <div className="text-center">
-          <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-green-50 text-2xl text-green-700">✓</div>
-          <h2 className="font-display text-2xl font-extrabold">Booking confirmed</h2>
-          <p className="mt-1 text-sm text-muted">Reference <b className="font-mono">{booking.id}</b> — live status below updates as our team progresses your booking.</p>
+          {paymentDone ? (
+            <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-green-50 text-2xl text-green-700">✓</div>
+          ) : (
+            <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-amber-50 text-2xl text-amber-600">…</div>
+          )}
+          <h2 className="font-display text-2xl font-extrabold">{paymentDone ? "Booking confirmed" : "Almost there — pay to confirm"}</h2>
+          <p className="mt-1 text-sm text-muted">
+            Reference <b className="font-mono">{booking.id}</b>{paymentDone
+              ? " — live status below updates as our team progresses your booking."
+              : " — not confirmed yet. Pay using the QR below, then our team verifies it."}
+          </p>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
           {["Booked", "Accepted", "Captain", "Picked up", "In transit", "Delivered"].map((s, i) => (
