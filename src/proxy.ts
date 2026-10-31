@@ -23,6 +23,11 @@ export default function proxy(req: NextRequest) {
   if (!ok) {
     const url = req.nextUrl.clone();
     url.pathname = "/admin/login";
+    // Drop the original query string — bagdrop.co's reverse proxy (see
+    // bagdrop-web/next.config.ts rewrites()) appends a Vercel protection-
+    // bypass secret to every request, which `.clone()` would otherwise
+    // carry straight into this client-visible redirect URL.
+    url.search = "";
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
