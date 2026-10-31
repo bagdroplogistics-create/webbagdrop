@@ -8,7 +8,7 @@
  *  activity-log row, merged and sorted — same as the original, with the
  *  same caveat: it's free-text event lines, not field-level before/after
  *  diffs, IP, or device — the original's caption overpromised that. */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { watchAdminBookings } from "@/lib/adminApi";
 import { watchCrmActivity } from "@/lib/crmApi";
 import type { Booking, CrmActivity } from "@/lib/types";
@@ -34,13 +34,12 @@ export default function SecurityAndAudit() {
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   useEffect(() => watchCrmActivity(setActivity, (e) => setErr(String(e))), []);
 
-  const [rows, setRows] = useState<AuditRow[]>([]);
-  useEffect(() => {
+  const rows = useMemo<AuditRow[]>(() => {
     const fromBookings: AuditRow[] = bookings.flatMap((b) =>
       b.events.filter((e) => e.by === "admin").map((e) => ({ at: e.at, text: `${b.id} · ${e.text}` }))
     );
     const fromCrm: AuditRow[] = activity.map((a) => ({ at: a.created, text: a.text }));
-    setRows([...fromBookings, ...fromCrm].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40));
+    return [...fromBookings, ...fromCrm].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
   }, [bookings, activity]);
 
   return (

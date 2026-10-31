@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { FOOTER_COLS } from "./data";
 import { CONTAINER } from "./SectionHeading";
 
@@ -34,6 +35,14 @@ export default function SiteFooter() {
           <div className="col-span-2 flex flex-col gap-4 lg:col-span-2">
             <FooterLogo />
             <p className="max-w-[260px] text-[15px] text-white/60">The baggage infrastructure layer for modern travel.</p>
+            <p className="max-w-[280px] text-[14px] text-white/60">
+              Already booked?{" "}
+              <Link href="/account" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">My bookings →</Link>
+            </p>
+            <p className="max-w-[280px] text-[14px] text-white/60">
+              Travel agent, hotel or event company?{" "}
+              <Link href="/partner" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">Partner login →</Link>
+            </p>
             <div className="flex gap-2.5">
               {SOCIALS.map((s) => (
                 <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex size-9 items-center justify-center rounded-lg border border-white/15 text-white transition-colors hover:border-brand hover:bg-brand">

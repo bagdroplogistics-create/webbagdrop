@@ -4,7 +4,8 @@
  *  stuck or off-plan surfaces as a flag; each flag is assigned to a
  *  department and/or a specific number (vendor, captain, client) and goes
  *  out as a WhatsApp + email pair, stamped on the booking's event log. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 
 interface Dept { key: string; name: string; mobile?: string; email?: string }
@@ -98,7 +99,7 @@ export default function Inspector() {
     const j = await r.json();
     if (j.error) setErr(j.error); else { setD(j); setErr(null); }
   }, []);
-  useEffect(() => { void load(); const t = setInterval(() => void load(), 30000); return () => clearInterval(t); }, [load]);
+  useLoad(load, 30000);
 
   if (err) return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Inspector:</b> {err}</p>;
   if (!d) return <p className="text-sm text-muted">Inspecting every shipment against the SOP rulebook…</p>;

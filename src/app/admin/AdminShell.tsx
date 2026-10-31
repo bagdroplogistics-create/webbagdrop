@@ -4,20 +4,28 @@
  *  warm-paper #F7F5F2 canvas, Manrope/IBM Plex Mono type, orange #F25C05
  *  accent). Scoped entirely under the "admin-os" class (see globals.css)
  *  so none of this touches the booking site's own brand tokens. */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useLoad } from "@/lib/useLoad";
 
 /* ---------- notifications bell — every platform event, live ---------- */
 interface NotifRow { kind: string; key: string; to?: string; template?: string; text?: string; subject?: string; status: string; stub?: boolean; createdAt: string }
 
 const SEEN_LS = "bagdrop:notifSeen";
+/* the bell's "seen up to" mark lives in localStorage — read through a
+ * subscription so other tabs stay in step and the server render is empty */
+const subscribeSeen = (cb: () => void) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); };
+const readSeen = () => { try { return localStorage.getItem(SEEN_LS) ?? ""; } catch { return ""; } };
+/** Client payment proofs stand out in green so finance never misses one. */
+const isPaymentAlert = (r: NotifRow) => r.template === "ops_alert" && /PAYMENT PROOF|💳/.test(r.text ?? "");
 
 function NotificationsBell() {
   const [rows, setRows] = useState<NotifRow[]>([]);
   const [open, setOpen] = useState(false);
-  const [seenAt, setSeenAt] = useState<string>("");
+  const storedSeen = useSyncExternalStore(subscribeSeen, readSeen, () => "");
+  const [markedSeen, setSeenAt] = useState<string | null>(null);
+  const seenAt = markedSeen ?? storedSeen;
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { try { setSeenAt(localStorage.getItem(SEEN_LS) ?? ""); } catch { /* fine */ } }, []);
 
   const load = useCallback(async () => {
     try {
@@ -36,7 +44,7 @@ function NotificationsBell() {
       setRows(list.slice(0, 20));
     } catch { /* next poll */ }
   }, []);
-  useEffect(() => { void load(); const t = setInterval(() => void load(), 20000); return () => clearInterval(t); }, [load]);
+  useLoad(load, 20000);
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +54,7 @@ function NotificationsBell() {
   }, [open]);
 
   const unseen = rows.filter((r) => r.createdAt > seenAt).length;
+  const unseenPay = rows.filter((r) => r.createdAt > seenAt && isPaymentAlert(r)).length;
   function toggle() {
     setOpen((o) => {
       if (!o && rows[0]) {
@@ -72,7 +81,7 @@ function NotificationsBell() {
         🔔
         {unseen > 0 && (
           <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-            style={{ background: "var(--a-accent)", height: 18, animation: "a-pulse 2s ease-in-out infinite" }}>
+            style={{ background: unseenPay ? "#059669" : "var(--a-accent)", height: 18, animation: "a-pulse 2s ease-in-out infinite" }}>
             {unseen > 9 ? "9+" : unseen}
           </span>
         )}
@@ -86,15 +95,20 @@ function NotificationsBell() {
           </div>
           <div className="max-h-[380px] overflow-y-auto">
             {rows.length === 0 && <p className="p-4 text-center text-xs" style={{ color: "var(--a-muted)" }}>Nothing yet — events appear here the moment they happen.</p>}
-            {rows.map((r, i) => (
-              <div key={r.key} className="anim-in border-b px-3.5 py-2.5 text-xs last:border-0" style={{ borderColor: "var(--a-line)", animationDelay: `${i * 25}ms` }}>
-                <p className="leading-snug" style={{ color: "var(--a-fg)" }}>{label(r)}</p>
+            {rows.map((r, i) => {
+              const money = isPaymentAlert(r);
+              return (
+              <div key={r.key} className="anim-in border-b px-3.5 py-2.5 text-xs last:border-0"
+                style={{ borderColor: "var(--a-line)", animationDelay: `${i * 25}ms`, ...(money ? { background: "#ECFDF5", borderLeft: "4px solid #059669" } : {}) }}>
+                {money && <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: "#047857" }}>Payment · verify in Finance</p>}
+                <p className="leading-snug" style={{ color: money ? "#064E3B" : "var(--a-fg)" }}>{label(r)}</p>
                 <p className="mt-0.5 flex justify-between text-[10.5px]" style={{ color: "var(--a-muted)", fontFamily: "var(--a-mono)" }}>
                   <span>{new Date(r.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
                   <span>{r.kind === "send.wa" ? "WhatsApp" : r.kind === "send.email" ? "email" : "note"}{r.stub ? " · stub" : ""} · {r.status}</span>
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -107,7 +121,7 @@ export type ModuleKey =
   | "crm" | "price" | "id" | "fin" | "part"
   | "rules"
   | "integ" | "sec" | "data"
-  | "dash" | "opsx" | "wed" | "ads" | "rep" | "insp";
+  | "dash" | "opsx" | "wed" | "ads" | "rep" | "insp" | "cli";
 
 interface NavItem { key: ModuleKey; name: string; badge?: string; badgeTone?: "live" | "count"; noHighlight?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
@@ -132,6 +146,7 @@ const GROUPS: NavGroup[] = [
   {
     label: "Commerce",
     items: [
+      { key: "cli", name: "Clients · master", badge: "live", badgeTone: "live" },
       { key: "crm", name: "CRM & follow-ups", badge: "live", badgeTone: "live" },
       { key: "ads", name: "Lead import · Ads", badge: "live", badgeTone: "live" },
       { key: "price", name: "Pricing engine", badge: "live", badgeTone: "live" },

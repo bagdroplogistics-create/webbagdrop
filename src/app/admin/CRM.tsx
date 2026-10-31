@@ -14,6 +14,7 @@
  *  tables, same admin-cookie security. Outreach is wa.me / mailto links —
  *  every send is logged; nothing goes out silently. */
 import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
 import { inr } from "@/lib/pricing";
 import { crmSuggestions, followedKeySet, type Customer, crmCustomers } from "@/lib/intelligence";
 import { watchAdminBookings } from "@/lib/adminApi";
@@ -76,6 +77,35 @@ function score(l: CrmActivity): number {
 const waLink = (mobile: string | undefined, text: string) =>
   `https://wa.me/${(mobile ?? "").replace(/\D/g, "").replace(/^(?!91)/, "91")}?text=${encodeURIComponent(text)}`;
 
+/* ---------- client-master category chip ----------
+ * The CRM shows at a glance who a lead already is in the Client Master
+ * (VIP / Repeat / Wedding / B2B / Dormant), fetched once per page view. */
+let catCache: Map<string, string> | null = null;
+let catPromise: Promise<Map<string, string>> | null = null;
+const norm10 = (s?: string | null) => (s ?? "").replace(/\D/g, "").slice(-10);
+function loadCats(): Promise<Map<string, string>> {
+  if (catCache) return Promise.resolve(catCache);
+  catPromise ??= fetch("/api/admin/clients")
+    .then((r) => r.json())
+    .then((j) => {
+      catCache = new Map((j.clients ?? []).map((c: { mobile: string; effectiveCategory: string }) => [norm10(c.mobile), c.effectiveCategory]));
+      return catCache;
+    })
+    .catch(() => new Map());
+  return catPromise;
+}
+const CAT_TONE: Record<string, "ok" | "warn" | "info" | "muted"> = { VIP: "ok", Repeat: "info", Wedding: "warn", B2B: "info", Dormant: "muted" };
+function ClientChip({ mobile }: { mobile?: string | null }) {
+  const [cat, setCat] = useState<string | null>(catCache?.get(norm10(mobile)) ?? null);
+  useEffect(() => {
+    let dead = false;
+    void loadCats().then((m) => { if (!dead) setCat(m.get(norm10(mobile)) ?? null); });
+    return () => { dead = true; };
+  }, [mobile]);
+  if (!cat || cat === "New" || !norm10(mobile)) return null;
+  return <Badge tone={CAT_TONE[cat] ?? "muted"}>{cat} client</Badge>;
+}
+
 export default function CRM() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -94,8 +124,8 @@ export default function CRM() {
   const { leads: prodLeads } = useProductionLeads();
   const prodCust = useMemo(() => prodCustomers(prodLeads), [prodLeads]);
 
-  const [suggestions, setSuggestions] = useState<ReturnType<typeof crmSuggestions> | null>(null);
-  useEffect(() => { setSuggestions(crmSuggestions(bookings, inquiries, followedKeySet(activity))); }, [bookings, inquiries, activity]);
+  const now = useNow();
+  const suggestions = useMemo(() => (now ? crmSuggestions(bookings, inquiries, followedKeySet(activity)) : null), [now, bookings, inquiries, activity]);
 
   /* funnel + KPIs */
   const openLeads = leads.filter((l) => OPEN_STAGES.includes(l.stage!));
@@ -103,7 +133,7 @@ export default function CRM() {
   const won = leads.filter((l) => l.stage === "won").length;
   const winRate = leads.filter((l) => ["won", "lost"].includes(l.stage!)).length
     ? Math.round((100 * won) / leads.filter((l) => ["won", "lost"].includes(l.stage!)).length) : null;
-  const overdueTasks = tasks.filter((t) => !t.doneAt && t.dueAt && new Date(t.dueAt).getTime() < Date.now());
+  const overdueTasks = tasks.filter((t) => !t.doneAt && t.dueAt && now !== null && new Date(t.dueAt).getTime() < now);
 
   async function moveStage(l: CrmActivity, dir: 1 | -1) {
     const order: LeadStage[] = ["new", "contacted", "quoted", "negotiation", "won"];
@@ -276,7 +306,7 @@ function Pipeline({ leads, inquiries, onMove, onOutreach, onLose, onPullInquiry,
                         <b className="font-display text-[13px]">{name}</b>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sc >= 70 ? "bg-green-50 text-green-700" : sc >= 40 ? "bg-amber-50 text-amber-700" : "bg-paper text-muted"}`}>{sc}</span>
                       </div>
-                      <p className="mt-0.5 text-[11px] text-muted">{l.mobile ?? l.contact ?? "—"}{l.owner ? ` · ${l.owner}` : ""}{l.source ? ` · ${l.source}` : ""}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted">{l.mobile ?? l.contact ?? "—"}{l.owner ? ` · ${l.owner}` : ""}{l.source ? ` · ${l.source}` : ""} <ClientChip mobile={l.mobile ?? l.contact} /></p>
                       <p className="mt-1 text-xs font-semibold tabular-nums">{inr(l.value ?? 0)} <span className="font-normal text-faint">· {Math.floor((Date.now() - new Date(l.created).getTime()) / 86400000)}d old</span></p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {s.key !== "new" && s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="ghost" onClick={() => void onMove(l, -1)}>‹</Button>}
@@ -388,6 +418,7 @@ function Customers360({ customers, prodCustomers, activity, onOutreach, onNote }
 /* ================= tasks ================= */
 function Tasks({ tasks, onAdd, onDone }: { tasks: CrmActivity[]; onAdd: (text: string, dueAt: string, owner: string) => Promise<void>; onDone: (id: string) => Promise<void> }) {
   const [f, setF] = useState({ text: "", due: "", owner: "" });
+  const [now] = useState(() => Date.now());
   const open = tasks.filter((t) => !t.doneAt).sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)));
   const done = tasks.filter((t) => t.doneAt).slice(0, 8);
   return (
@@ -403,7 +434,7 @@ function Tasks({ tasks, onAdd, onDone }: { tasks: CrmActivity[]; onAdd: (text: s
         <ul className="space-y-2">
           {open.length === 0 && <li className="text-sm text-muted">Nothing open. 🎉</li>}
           {open.map((t) => {
-            const late = t.dueAt && new Date(t.dueAt).getTime() < Date.now();
+            const late = t.dueAt && new Date(t.dueAt).getTime() < now;
             return (
               <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-line pb-2 text-xs last:border-0">
                 <span>{t.text}{t.owner ? <span className="text-faint"> · {t.owner}</span> : null}</span>

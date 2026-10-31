@@ -139,7 +139,7 @@ begin
   return v_doc;
 end $$;
 revoke all on function create_booking(jsonb) from public;
-grant execute on function create_booking(jsonb) to anon, authenticated;
+-- anon grant removed in migration_003_lockdown.sql (server routes only)
 
 -- Fetches exactly one booking by id. Cannot be used to list/enumerate —
 -- there is no way to call this without already knowing the id.
@@ -148,7 +148,7 @@ language sql security definer stable as $$
   select doc from bookings where id = p_id;
 $$;
 revoke all on function get_booking(text) from public;
-grant execute on function get_booking(text) to anon, authenticated;
+-- anon grant removed in migration_003_lockdown.sql (server routes only)
 
 -- Merges a patch into one booking — only while it's still in a customer-
 -- editable status (mirrors the status machine in the admin + booking UI).
@@ -175,7 +175,7 @@ begin
   return v_doc;
 end $$;
 revoke all on function update_booking_customer(text, jsonb, text) from public;
-grant execute on function update_booking_customer(text, jsonb, text) to anon, authenticated;
+-- anon grant removed in migration_003_lockdown.sql (server routes only)
 
 -- ATOMIC DOCUMENT NUMBERING: one sequence per document type (LR, INV, PI,
 -- RCT, CSH, CV, CN, POD, TR, MF). Race-safe.
@@ -192,6 +192,21 @@ begin
   returning n into v;
   return p_type || '/' || p_fy || '/' || lpad(v::text, 4, '0');
 end $$;
+revoke execute on function next_doc_no(text, text) from public, anon, authenticated;
+alter table doc_seq enable row level security;
+
+-- WEDDING / EVENT PAGES (/weddings, /e/[code]) — no schema change needed.
+-- The guest pages reuse the model above: anon reads an OPEN event directly
+-- (anon_read_event); landing bookings and a guest's own booking go through
+-- /api/wedding/landing and /api/wedding/mine (no anon RPCs since
+-- migration_003_lockdown.sql). The two flows the static build did
+-- with direct anon table access — the wedding desk's create-or-update by its
+-- own family code, and track-by-mobile — now go through server-only routes
+-- (src/app/api/wedding/booking and /track) that run on the service role with
+-- their own guards (event must be open; updates need the same event + lead
+-- mobile; status/admin stay server-authoritative; track needs the full
+-- 10-digit mobile and returns a reduced projection). Either way the anon key
+-- itself still has no path to the bookings table.
 
 -- SEND WORKER (not yet deployed): an Edge Function on a schedule would read
 -- outbox rows with status='queued' and send via WhatsApp/Email provider

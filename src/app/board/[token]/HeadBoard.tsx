@@ -3,7 +3,8 @@
  *  components as the BAGDROP OS Dashboard, minus navigation (there is nothing
  *  to navigate to without an admin session). Polls every 60 s; period
  *  switcher and WhatsApp/email/PNG sharing included. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import type { Metrics, Period, ViewKey } from "@/lib/metricsTypes";
 import { PERIODS, VIEWS } from "@/lib/metricsTypes";
 import { Board } from "@/app/admin/boards";
@@ -15,15 +16,15 @@ export default function HeadBoard({ token }: { token: string }) {
   const [m, setM] = useState<Metrics | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async (p: Period) => {
+  const load = useCallback(async () => {
     try {
-      const r = await fetch(`/api/board/metrics?token=${encodeURIComponent(token)}&period=${p}`);
+      const r = await fetch(`/api/board/metrics?token=${encodeURIComponent(token)}&period=${period}`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
       setView(j.view as ViewKey); setM(j.metrics as Metrics); setErr(null);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-  }, [token]);
-  useEffect(() => { void load(period); const t = setInterval(() => void load(period), 60000); return () => clearInterval(t); }, [period, load]);
+  }, [token, period]);
+  useLoad(load, 60000);
 
   const name = view ? VIEWS.find((v) => v.key === view)?.name : null;
 

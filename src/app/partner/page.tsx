@@ -5,6 +5,7 @@
  *  tracking, retail rate chart, and bulk CSV upload that turns into a
  *  rate inquiry for the Bagdrop team. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
 
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -52,7 +53,7 @@ export default function PartnerPortal() {
     if (r.status === 401) { setAuthed(false); return; }
     setData(await r.json()); setAuthed(true);
   }, []);
-  useEffect(() => { void load(); const t = setInterval(() => void load(), 15000); return () => clearInterval(t); }, [load]);
+  useLoad(load, 15000);
 
   if (authed === null) return <Shell><p className="py-16 text-center text-sm text-muted">Opening the partner desk…</p></Shell>;
   if (!authed) return <Shell><Login onDone={load} /></Shell>;
@@ -271,13 +272,15 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
   });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [fetched, setPreview] = useState<Preview | null>(null);
+  const routeReady = !!(f.fromName.trim() && f.toName.trim());
+  const preview = routeReady ? fetched : null;
   const bm = data.agent.billing.mode;
   const mobileOk = /^\+?[\d\s-]{10,15}$/.test(f.mobile.trim());
 
   /* server-priced preview — the same quote() + live masters the booking uses */
   useEffect(() => {
-    if (!f.fromName.trim() || !f.toName.trim()) { setPreview(null); return; }
+    if (!routeReady) return;
     const t = setTimeout(async () => {
       try {
         const r = await fetch("/api/partner", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "preview", preview: { fromName: f.fromName.trim(), toName: f.toName.trim(), bags: f.bags, oversize: f.oversize, mode: f.mode, date: f.date || undefined } }) });
@@ -285,7 +288,7 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
       } catch { setPreview(null); }
     }, 350);
     return () => clearTimeout(t);
-  }, [f.fromName, f.toName, f.bags, f.oversize, f.mode, f.date]);
+  }, [routeReady, f.fromName, f.toName, f.bags, f.oversize, f.mode, f.date]);
 
   async function book() {
     setBusy(true); setMsg(null);

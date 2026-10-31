@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { BOARD_STATUSES, HANDOVERS } from "./data";
 import { Icon } from "./Icon";
 import { Section, SectionHeading } from "./SectionHeading";
+import { useNow } from "@/lib/useNow";
 
 const STATUS_FG: Record<string, string> = {
   BOOKED: "text-white/60",
@@ -37,27 +38,22 @@ function FlipStatus({ status, tone }: { status: string; tone: string }) {
   );
 }
 
-function boardClock() {
-  return new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
+function boardClock(t: number) {
+  return new Date(t).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
 }
 
 export default function HandoverBoard() {
   const [stage, setStage] = useState(0);
   const [venue, setVenue] = useState(0);
-  const [clock, setClock] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const now = useNow(); // browser clock, ticks each minute; null until hydrated
+  const clock = now ? boardClock(now) : null;
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) return;
     timer.current = setInterval(() => setStage((s) => (s + 1) % BOARD_STATUSES.length), 2600);
     return () => clearInterval(timer.current);
-  }, []);
-
-  useEffect(() => {
-    setClock(boardClock());
-    const id = setInterval(() => setClock(boardClock()), 30_000);
-    return () => clearInterval(id);
   }, []);
 
   const v = HANDOVERS[venue];

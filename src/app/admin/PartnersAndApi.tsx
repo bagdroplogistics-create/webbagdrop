@@ -7,7 +7,8 @@
  *  trial is OPTIONAL and off by default); hand them portal credentials for
  *  /partner; watch ledgers; record remittances, top-ups, settlements and
  *  commission payouts. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -28,6 +29,36 @@ interface AgentRow {
   };
 }
 
+/* ---------- partner invite: portal link + code + key, by WhatsApp / email / copy ---------- */
+function inviteText(a: AgentRow, origin: string): string {
+  const bm = a.billing?.mode ?? "remit";
+  const commission = a.commission.mode === "pct" ? `${a.commission.value}% of retail` : `₹${a.commission.value} per bag`;
+  const billing = bm === "remit" ? "you collect from your client and remit the net to Bagdrop" : bm === "wallet" ? "bookings are paid from your prepaid Bagdrop wallet" : "bookings go on your Bagdrop credit line";
+  return [
+    `Hi ${a.name.split(" ")[0] || a.name}, your Bagdrop partner account for ${a.company} is ready.`,
+    "Book door-to-door baggage pickups for your clients at our retail rates, and track every booking live:",
+    `${origin}/partner`,
+    `Agent code: ${a.code}`,
+    `Access key: ${a.key}`,
+    `Your commission: ${commission}. Billing: ${billing}.`,
+    "Keep the key private. You'll get a WhatsApp + email update at every step of each booking. — Team Bagdrop",
+  ].join("\n");
+}
+function InviteButtons({ a }: { a: AgentRow }) {
+  const [copied, setCopied] = useState(false);
+  const text = () => inviteText(a, window.location.origin);
+  const digits = a.mobile.replace(/\D/g, "");
+  const wa = digits.length === 10 ? `91${digits}` : digits;
+  return (
+    <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="text-muted">Invite:</span>
+      <Button size="sm" variant="outline" disabled={!wa} onClick={() => window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text())}`, "_blank", "noopener,noreferrer")}>WhatsApp</Button>
+      <Button size="sm" variant="outline" disabled={!a.email} onClick={() => { window.location.href = `mailto:${a.email}?subject=${encodeURIComponent("Your Bagdrop partner account")}&body=${encodeURIComponent(text())}`; }}>Email</Button>
+      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(text()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); })}>{copied ? "Copied ✓" : "Copy invite"}</Button>
+    </span>
+  );
+}
+
 async function post(body: unknown): Promise<{ error?: string; detail?: string }> {
   const r = await fetch("/api/admin/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   return r.json();
@@ -43,7 +74,7 @@ export default function PartnersAndApi() {
     const j = await r.json();
     if (j.error) setErr(j.error); else { setAgents(j.agents); setErr(null); }
   }, []);
-  useEffect(() => { void load(); const t = setInterval(() => void load(), 20000); return () => clearInterval(t); }, [load]);
+  useLoad(load, 20000);
 
   const totals = agents.reduce((s, a) => ({
     out: s.out + a.ledger.outstanding, n: s.n + a.ledger.rows.length,
@@ -61,7 +92,7 @@ export default function PartnersAndApi() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-sm font-bold">Agent accounts <span className="font-normal text-faint">portal: /partner · commission & billing set only here</span></h3>
+        <h3 className="font-display text-sm font-bold">Agent accounts <span className="font-normal text-faint">portal: /partner · invite each agent below · commission & billing set only here</span></h3>
         <Button size="sm" onClick={() => setAdding((v) => !v)}>{adding ? "Close" : "+ Open B2B account"}</Button>
       </div>
       {adding && <AgentForm onSaved={async () => { setAdding(false); await load(); }} />}
@@ -81,6 +112,7 @@ export default function PartnersAndApi() {
                   <p className="mt-1 text-xs">Portal: <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[11px]">{a.code}</code> · key <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[11px]">{a.key}</code>
                     <Button size="sm" variant="ghost" onClick={() => void post({ action: "rotateKey", id: a.id }).then(load)}>rotate</Button>
                   </p>
+                  <InviteButtons a={a} />
                 </div>
                 <div className="text-right text-xs">
                   <span className="block font-display text-base font-extrabold">{a.commission.mode === "pct" ? `${a.commission.value}%` : `${inr(a.commission.value)}/bag`}</span>

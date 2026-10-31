@@ -5,6 +5,7 @@
  *  contact to alert (vendor / captain / client). Shared by the API and UI. */
 import { opsOf, MILESTONES, type MilestoneKey } from "./opsModel";
 import type { Booking } from "./types";
+import { isPaid } from "./payState";
 
 export interface DeptContact {
   key: string; name: string; mobile?: string; email?: string;
@@ -125,7 +126,7 @@ export function inspect(bookings: Booking[], now = Date.now()): Flag[] {
     }
 
     /* SOP 2 — rate-on-request gets a quote within 4 hours */
-    if (b.quote.breakdown.ror && ["submitted", "quoted", "revised"].includes(b.status) && !b.pay) {
+    if (b.quote.breakdown.ror && ["submitted", "quoted", "revised"].includes(b.status) && !isPaid(b)) {
       const age = hoursSince(b.created, now);
       if (age > 4) add(b, {
         rule: "RATE_PENDING", sop: "A rate-on-request booking is priced and quoted within 4 hours.",

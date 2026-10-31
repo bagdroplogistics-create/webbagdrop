@@ -1,3 +1,4 @@
+import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
@@ -44,7 +45,7 @@ type Body =
   | { action: "saveDepts"; departments: DeptContact[] }
   | { action: "flag"; bookingId: string; rule: string; title: string; detail: string; deptKey?: string; extraMobile?: string; extraEmail?: string; note?: string };
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
         text: `⚑ Flagged ${b.rule} → ${dept?.name ?? "direct contact"}${extraMobile ? ` + ${extraMobile}` : ""}${b.note ? ` · ${b.note}` : ""}`,
       }],
     };
-    const up = await sb.from("bookings").upsert({ id: next.id, doc: next, status: next.status, created: next.created });
+    const up = await saveOrThrow(sb, next);
     if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
     kickSweep();
     return NextResponse.json({ ok: true, queued });
@@ -100,3 +101,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ error: "BAD_ACTION" }, { status: 400 });
 }
+
+export const POST = retryOnConflict(handlePOST);

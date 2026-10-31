@@ -10,11 +10,11 @@
  *  a luggage photo there instead), and step 0 ("Who's booking?") drops the
  *  phone-number "Find my family" guest-list lookup to match the live
  *  page's simpler lead-guest/mobile/email/side form. Data layer:
- *   - DB.get("bookings", code)   -> getBookingDoc (get_booking RPC, one row)
+ *   - DB.get("bookings", code)   -> getBookingDoc (/api/wedding/mine, id + lead mobile)
  *   - DB.put("bookings", ...)    -> saveWeddingBooking (server route; event
  *                                   must be open, same-mobile guard, status/
  *                                   admin stay server-authoritative)
- *   - DB.watchDoc(...)           -> watchBookingDoc (polls get_booking)
+ *   - DB.watchDoc(...)           -> watchBookingDoc (polls /api/wedding/mine)
  *   - ops desk DB.watch(...)     -> the cookie-gated /api/admin/bookings
  *                                   route via adminApi (sign in at /admin
  *                                   first, then open /e/y2k?ops=1)
@@ -387,7 +387,7 @@ export function initY2k(): () => void {
   function renderOps() {
     const sec = $("#ops")!; if (!isEditor) { sec.hidden = true; return; } sec.hidden = false;
     if (opsLocked) {
-      $("#opsNote")!.innerHTML = `Sign in to the <a href="/admin"><b>Admin OS</b></a> in this browser first, then reload this page — the manifest reads through the admin session.`;
+      $("#opsNote")!.innerHTML = `Sign in to the <a href="/admin"><b>BAGDROP OS</b></a> in this browser first, then reload this page — the manifest reads through the admin session.`;
       $("#opsKpis")!.innerHTML = "";
       $("#opsList")!.innerHTML = "";
       return;
@@ -478,7 +478,7 @@ export function initY2k(): () => void {
     const doc = { bookingId: code, state: JSON.parse(JSON.stringify(S)), bagStatus: (booking && booking.bagStatus) || {}, updatedAt: new Date().toISOString(), createdAt: (booking && booking.createdAt) || new Date().toISOString() };
     let saved = false;
     try {
-      const prev = await getBookingDoc(code).catch(() => null);
+      const prev = await getBookingDoc(code, S.family.phone).catch(() => null);
       await saveWeddingBooking(adminDoc(doc, prev) as Booking);
       saved = true; watchMine(code);
     } catch { saved = false; }
@@ -519,14 +519,14 @@ export function initY2k(): () => void {
   let unsubMine: (() => void) | null = null;
   function watchMine(code: string) {
     if (unsubMine) unsubMine();
-    unsubMine = watchBookingDoc(code, (d: any) => {
+    unsubMine = watchBookingDoc(code, booking?.state?.family?.phone ?? "", (d: any) => {
       if (d && d.wedding && booking) { booking.bagStatus = d.wedding.bagStatus || {}; renderTrack(); }
     });
     unsubs.push(unsubMine);
   }
   async function updateStatus(docId: string, tag: string, val: string) {
     try {
-      const d: any = opsRaw[docId] ?? (await getBookingDoc(docId)); if (!d || !d.wedding) return;
+      const d: any = opsRaw[docId] ?? (await adminListBookings()).find((x) => x.id === docId); if (!d || !d.wedding) return;
       d.wedding.bagStatus[tag] = val; d.wedding.updatedAt = new Date().toISOString();
       d.events = (d.events || []).concat([{ at: d.wedding.updatedAt, by: "admin", text: "Bag " + tag.split("-").slice(-1)[0] + " → " + val + " (Y2K ops desk)" }]);
       const k = STAGES.indexOf(val);

@@ -6,7 +6,8 @@
  *  attention list with record drill-downs, WhatsApp/email/PNG sharing —
  *  plus a generator for read-only, department-scoped links to send each
  *  department head. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import type { Metrics, Period, ViewKey } from "@/lib/metricsTypes";
 import { PERIODS, VIEWS } from "@/lib/metricsTypes";
 import { Button, Card, Select } from "@/components/ui";
@@ -19,14 +20,14 @@ export default function Executive({ openModule, openBooking }: { openModule?: (k
   const [m, setM] = useState<Metrics | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async (p: Period) => {
+  const load = useCallback(async () => {
     try {
-      const r = await fetch(`/api/admin/metrics?period=${p}`);
+      const r = await fetch(`/api/admin/metrics?period=${period}`);
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP_${r.status}`);
       setM(await r.json()); setErr(null);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-  }, []);
-  useEffect(() => { void load(period); const t = setInterval(() => void load(period), 30000); return () => clearInterval(t); }, [period, load]);
+  }, [period]);
+  useLoad(load, 30000);
 
   if (err) return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Couldn&apos;t load metrics:</b> {err}</p>;
   if (!m) return <p className="text-sm text-muted">Reading the company…</p>;

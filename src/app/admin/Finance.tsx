@@ -6,10 +6,11 @@
  *  bank-reconciliation loop that clears "uncategorized transactions".
  *  Invoices are AUTO-ISSUED by the sweep the moment a payment is captured. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
 import { inr } from "@/lib/pricing";
 import { gstSplit } from "@/lib/docs";
 import { lanes } from "@/lib/intelligence";
-import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
+import { adminApplyPatch, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, DocRecord } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import { useProductionLeads } from "@/lib/useProductionLeads";
@@ -40,14 +41,14 @@ export default function Finance() {
   const prodCapturedAll = prodLeads
     .filter((l) => l.booking && PROD_CAPTURED_STATUSES.includes(l.booking.status ?? ""))
     .reduce((a, l) => a + (l.booking?.totalAmount ?? 0), 0);
-  const pendingVerification = all.filter((b) => b.pay?.status === "submitted").length;
+  const pendingVerification = all.filter((b) => b.pay?.status === "submitted" || b.pay?.topup?.status === "submitted").length;
 
   if (err) return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Finance:</b> {err}</p>;
 
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap gap-1.5">
-        {([["overview", "CFO overview"], ["payments", `UPI Payments${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"]] as [Tab, string][]).map(([k, n]) => (
+        {([["overview", "CFO overview"], ["payments", `Payments to verify${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"]] as [Tab, string][]).map(([k, n]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "text-white" : "hover:opacity-80"}`}
             style={tab === k ? { background: "var(--a-navy)" } : { background: "var(--a-surface-2)", color: "var(--a-muted)" }}>{n}</button>
@@ -55,7 +56,7 @@ export default function Finance() {
       </div>
       <div key={tab} className="anim-in">
         {tab === "overview" && <Overview all={all} prodCapturedAll={prodCapturedAll} />}
-        {tab === "payments" && <PaymentVerification all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
+        {tab === "payments" && <PaymentVerification all={all} />}
         {tab === "invoices" && <Invoices all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
         {tab === "credit" && <CreditNotes bookings={all} />}
         {tab === "bank" && <BankRecon />}
@@ -64,69 +65,112 @@ export default function Finance() {
   );
 }
 
-/* ================= UPI payment verification (static QR, no gateway) =================
- * The customer self-reports payment against the booking's QR (amount +
- * reference baked in); nothing here is auto-trusted — a human verifies
- * against what actually landed in the account before the booking confirms. */
-function PaymentVerification({ all, onChanged }: { all: Booking[]; onChanged: (b: Booking) => void }) {
+/* ================= Payment verification (UPI / bank transfer, no gateway) =================
+ * The client uploads a screenshot + UTR from their dashboard; nothing is
+ * money until finance matches it against the bank (statement import or a
+ * manual check) and verifies it here. Every action goes through
+ * /api/admin/payments, which stamps the audit trail and tells the client. */
+type PayRow = { b: Booking; kind: "full" | "topup"; amount: number; status: string; utr?: string; at?: string | null; hasProof: boolean; note?: string };
+function PaymentVerification({ all }: { all: Booking[] }) {
   const rows = useMemo(() => {
-    const order: Record<string, number> = { submitted: 0, pending: 1, rejected: 2, captured: 3 };
-    return all.filter((b) => b.pay).sort((a, b) => (order[a.pay!.status] ?? 9) - (order[b.pay!.status] ?? 9) || (b.pay!.submittedAt ?? b.pay!.at).localeCompare(a.pay!.submittedAt ?? a.pay!.at));
+    const out: PayRow[] = [];
+    for (const b of all) {
+      const p = b.pay;
+      if (!p) continue;
+      if (p.status !== "pending") out.push({ b, kind: "full", amount: p.amount, status: p.status, utr: p.utr, at: p.submittedAt ?? p.at, hasProof: !!p.proof?.path, note: p.rejectedNote });
+      if (p.topup && p.topup.status !== "due") out.push({ b, kind: "topup", amount: p.topup.amount, status: p.topup.status, utr: p.topup.utr, at: p.topup.submittedAt, hasProof: !!p.topup.proof?.path, note: p.topup.rejectedNote });
+    }
+    const order: Record<string, number> = { submitted: 0, rejected: 1, captured: 2 };
+    return out.sort((x, y) => (order[x.status] ?? 9) - (order[y.status] ?? 9) || (y.at ?? "").localeCompare(x.at ?? ""));
   }, [all]);
+  const [stmt, setStmt] = useState<StatementRow[]>([]);
+  useEffect(() => { void fetch("/api/admin/finance/recon").then((r) => r.json()).then((j) => setStmt(j.rows ?? [])).catch(() => {}); }, []);
   const [note, setNote] = useState<Record<string, string>>({});
+  const [ref, setRef] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [show, setShow] = useState<"open" | "all">("open");
 
-  async function verify(b: Booking) {
-    setBusyId(b.id);
-    try {
-      await adminApplyPatch(b, { pay: { ...b.pay!, status: "captured", verifiedAt: new Date().toISOString(), verifiedBy: "admin" }, status: "accepted" },
-        `Payment verified via UPI (admin)${note[b.id] ? ` · ${note[b.id]}` : ""}`);
-      onChanged({ ...b, pay: { ...b.pay!, status: "captured", verifiedAt: new Date().toISOString(), verifiedBy: "admin" }, status: "accepted" });
-    } finally { setBusyId(null); }
+  /** Statement credits that look like this payment: the UTR appears in the
+   *  narration/ref, or the same amount landed within 5 days. */
+  function matches(r: PayRow) {
+    const utr = (r.utr ?? "").trim();
+    const t = r.at ? Date.parse(r.at) : NaN;
+    return stmt.filter((s) => s.amount > 0 && (
+      (utr.length >= 6 && `${s.ref ?? ""} ${s.description}`.includes(utr)) ||
+      (Math.round(s.amount) === Math.round(r.amount) && Math.abs(Date.parse(s.date) - t) <= 5 * 86400000)
+    )).slice(0, 3);
   }
-  async function reject(b: Booking) {
-    setBusyId(b.id);
+  async function call(r: PayRow, action: "verify" | "reject" | "proofUrl") {
+    const k = `${r.b.id}:${r.kind}`;
+    if (action === "reject" && !(note[k] ?? "").trim()) { setMsg("Write the reason for rejecting — the client sees it."); return; }
+    setBusyId(k); setMsg(null);
     try {
-      const rejectedAt = new Date().toISOString();
-      await adminApplyPatch(b, { pay: { ...b.pay!, status: "rejected", rejectedAt, rejectedNote: note[b.id] || undefined } },
-        `Payment rejected via UPI (admin)${note[b.id] ? ` · ${note[b.id]}` : ""}`);
-      onChanged({ ...b, pay: { ...b.pay!, status: "rejected", rejectedAt, rejectedNote: note[b.id] || undefined } });
-    } finally { setBusyId(null); }
+      const res = await fetch("/api/admin/payments", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: r.b.id, kind: r.kind, action, note: note[k], ref: ref[k] }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.detail ?? j?.error ?? `HTTP_${res.status}`);
+      if (action === "proofUrl") window.open(j.url, "_blank", "noopener,noreferrer");
+      else { refreshBookings(); }
+      if (action !== "proofUrl") setMsg(action === "verify" ? `Verified ${r.b.id} — the client is notified; the invoice and the bond-signing link go out automatically.` : `Rejected ${r.b.id} — the client is asked to re-check and re-upload.`);
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
+    setBusyId(null);
   }
 
+  const list = show === "open" ? rows.filter((r) => r.status === "submitted") : rows;
   return (
-    <Card>
-      <h3 className="mb-1 font-display text-sm font-bold">UPI payment verification</h3>
-      <p className="mb-3 text-xs text-muted">Static QR, no gateway — a customer's &quot;I Have Completed Payment&quot; click only self-reports. Nothing is marked Payment Received until verified here against what actually landed in the account.</p>
-      {rows.length === 0 && <p className="py-4 text-center text-sm text-muted">No UPI payment submissions yet.</p>}
-      <div className="grid gap-2">
-        {rows.map((b) => {
-          const p = b.pay!;
-          const tone = p.status === "captured" ? "ok" : p.status === "rejected" ? "bad" : p.status === "submitted" ? "warn" : "muted";
-          return (
-            <div key={b.id} className="rounded-xl border border-line bg-white p-3 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span><b className="font-mono text-[11px]">{b.id}</b> · {b.traveller.name}</span>
-                <Badge tone={tone}>{p.status}</Badge>
-              </div>
-              <div className="mt-1 text-muted">
-                Amount <b className="text-ink">{inr(p.amount)}</b>
-                {p.utr && <> · UTR <span className="font-mono">{p.utr}</span></>}
-                {p.submittedAt && <> · submitted {new Date(p.submittedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
-                {p.rejectedNote && <> · note: {p.rejectedNote}</>}
-              </div>
-              {p.status === "submitted" && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Input className="w-48" placeholder="Internal note (optional)" value={note[b.id] ?? ""} onChange={(e) => setNote((p2) => ({ ...p2, [b.id]: e.target.value }))} />
-                  <Button size="sm" disabled={busyId === b.id} onClick={() => void verify(b)}>{busyId === b.id ? "Saving…" : "Verify Payment"}</Button>
-                  <Button size="sm" variant="outline" disabled={busyId === b.id} onClick={() => void reject(b)}>Reject Payment</Button>
+    <div className="grid gap-5">
+      <Card className="border-l-4 border-l-emerald-500">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-display text-sm font-bold">💳 Payments to verify</h3>
+          <div className="flex gap-1">
+            {(["open", "all"] as const).map((k) => (
+              <button key={k} onClick={() => setShow(k)} className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-semibold ${show === k ? "bg-emerald-600 text-white" : "bg-paper text-muted"}`}>{k === "open" ? `To verify · ${rows.filter((r) => r.status === "submitted").length}` : "All"}</button>
+            ))}
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-muted">Client-reported UPI / bank payments. Open the screenshot, match the UTR or amount against the bank (import the statement under Banking &amp; reconciliation for automatic hints), then verify. Nothing counts as paid until verified here.</p>
+        {msg && <p className="mb-3 rounded-xl bg-paper p-2.5 text-xs">{msg}</p>}
+        {list.length === 0 && <p className="py-4 text-center text-sm text-muted">{show === "open" ? "Nothing waiting — all reported payments are handled." : "No payment submissions yet."}</p>}
+        <div className="grid gap-2">
+          {list.map((r) => {
+            const k = `${r.b.id}:${r.kind}`;
+            const tone = r.status === "captured" ? "ok" : r.status === "rejected" ? "bad" : r.status === "submitted" ? "warn" : "muted";
+            const hits = r.status === "submitted" ? matches(r) : [];
+            return (
+              <div key={k} className={`rounded-xl border p-3 text-xs ${r.status === "submitted" ? "border-emerald-300 bg-emerald-50/50" : "border-line bg-white"}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span><b className="font-mono text-[11px]">{r.b.id}</b> · {r.b.traveller.name} · {r.b.from} → {r.b.to}{r.kind === "topup" && <> · <b>extra bags top-up</b></>}</span>
+                  <Badge tone={tone}>{r.status === "captured" ? "verified" : r.status}</Badge>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
+                <div className="mt-1 text-muted">
+                  Amount <b className="text-ink">{inr(r.amount)}</b>
+                  {r.utr && <> · UTR <span className="font-mono">{r.utr}</span></>}
+                  {r.at && <> · {new Date(r.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
+                  {r.note && <> · note: {r.note}</>}
+                  {r.hasProof && <> · <button className="cursor-pointer font-semibold text-ink underline" disabled={busyId === k} onClick={() => void call(r, "proofUrl")}>view screenshot</button></>}
+                </div>
+                {r.status === "submitted" && (
+                  <>
+                    <p className={`mt-2 rounded-lg p-2 ${hits.length ? "bg-green-100 text-green-900" : "bg-amber-50 text-amber-900"}`}>
+                      {hits.length
+                        ? <>Bank match: {hits.map((h) => `${h.date} · ${inr(h.amount)} · ${h.ref || h.description.slice(0, 40)}`).join(" | ")}</>
+                        : stmt.length ? "No matching credit in the imported statement yet — check the bank manually or import a newer statement." : "No bank statement imported yet — check the bank manually."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Input className="w-44" placeholder="Bank ref (optional)" value={ref[k] ?? ""} onChange={(e) => setRef((p) => ({ ...p, [k]: e.target.value }))} />
+                      <Input className="w-56" placeholder="Note / reason if rejecting" value={note[k] ?? ""} onChange={(e) => setNote((p) => ({ ...p, [k]: e.target.value }))} />
+                      <Button size="sm" disabled={busyId === k} onClick={() => void call(r, "verify")}>{busyId === k ? "Saving…" : "Verify payment"}</Button>
+                      <Button size="sm" variant="outline" disabled={busyId === k} onClick={() => void call(r, "reject")}>Reject</Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -314,6 +358,7 @@ function Invoices({ all, onChanged }: { all: Booking[]; onChanged: (b: Booking) 
 
 /* ================= credit notes (with expiry) ================= */
 function CreditNotes({ bookings }: { bookings: Booking[] }) {
+  const [soon] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)); // expiry warning line, fixed at load
   const [notes, setNotes] = useState<CreditNote[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -323,7 +368,7 @@ function CreditNotes({ bookings }: { bookings: Booking[] }) {
     const j = await r.json();
     if (!j.error) setNotes(j.notes);
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useLoad(load);
 
   function pickBooking(id: string) {
     const b = bookings.find((x) => x.id === id);
@@ -350,7 +395,7 @@ function CreditNotes({ bookings }: { bookings: Booking[] }) {
           <Field label="Against booking (optional)">
             <Select className="py-2 text-xs" value={f.bookingId} onChange={(e) => pickBooking(e.target.value)}>
               <option value="">— standalone —</option>
-              {bookings.filter((b) => b.pay).map((b) => <option key={b.id} value={b.id}>{b.id} · {b.traveller.name}</option>)}
+              {bookings.filter((b) => b.pay?.status === "captured").map((b) => <option key={b.id} value={b.id}>{b.id} · {b.traveller.name}</option>)}
             </Select>
           </Field>
           <Field label="Customer *"><Input className="py-2 text-xs" value={f.customer} onChange={(e) => setF({ ...f, customer: e.target.value })} /></Field>
@@ -380,7 +425,7 @@ function CreditNotes({ bookings }: { bookings: Booking[] }) {
                   <td className="pr-2 font-mono text-[11px]">{n.bookingId ?? "—"}</td>
                   <td className="pr-2 text-right tabular-nums">{inr(n.amount)}</td>
                   <td className="pr-2">{dayKey(n.issuedAt)}</td>
-                  <td className={`pr-2 ${n.status === "active" && n.expiresAt <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) ? "font-bold text-amber-600" : ""}`}>{n.expiresAt}</td>
+                  <td className={`pr-2 ${n.status === "active" && n.expiresAt <= soon ? "font-bold text-amber-600" : ""}`}>{n.expiresAt}</td>
                   <td className="pr-2 text-muted">{n.reason || "—"}</td>
                   <td className="pr-2"><Badge tone={tone(n.status)}>{n.status}</Badge></td>
                   <td className="text-right">
@@ -400,6 +445,44 @@ function CreditNotes({ bookings }: { bookings: Booking[] }) {
 }
 
 /* ================= banking & reconciliation ================= */
+/* ---------- UPI / bank acceptance details (interim rail before gateway) ---------- */
+function PayConfigCard() {
+  const [f, setF] = useState({ upiId: "", payeeName: "", bankName: "", accountName: "", accountNo: "", ifsc: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch("/api/payconfig").then((r) => r.json()).then((j) => {
+      const c = j.config ?? {};
+      setF({ upiId: c.upiId ?? "", payeeName: c.payeeName ?? "", bankName: c.bankName ?? "", accountName: c.accountName ?? "", accountNo: c.accountNo ?? "", ifsc: c.ifsc ?? "", note: c.note ?? "" });
+    }).catch(() => {});
+  }, []);
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/payconfig", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      const j = await r.json();
+      setMsg(j.error ? (j.detail ?? j.error) : "Saved — the /q payment page now shows this UPI QR and these bank details to customers.");
+    } finally { setBusy(false); }
+  }
+  return (
+    <Card className="border-l-4 border-l-[#EA580C]">
+      <h3 className="mb-1 font-display text-sm font-bold">UPI & bank acceptance <span className="font-normal text-faint">interim payment rail — shown as a QR (Google Pay etc.) on every payment page until gateway keys activate</span></h3>
+      <div className="grid gap-x-3 sm:grid-cols-4">
+        <Field label="Company UPI ID *"><Input className="py-2 text-xs font-mono" value={f.upiId} onChange={(e) => setF({ ...f, upiId: e.target.value })} placeholder="bagdrop@iob" /></Field>
+        <Field label="Payee name on QR"><Input className="py-2 text-xs" value={f.payeeName} onChange={(e) => setF({ ...f, payeeName: e.target.value })} placeholder="Bagdrop Logistics" /></Field>
+        <Field label="Bank name"><Input className="py-2 text-xs" value={f.bankName} onChange={(e) => setF({ ...f, bankName: e.target.value })} placeholder="Indian Overseas Bank" /></Field>
+        <Field label="Account holder"><Input className="py-2 text-xs" value={f.accountName} onChange={(e) => setF({ ...f, accountName: e.target.value })} /></Field>
+        <Field label="Account number"><Input className="py-2 text-xs font-mono" value={f.accountNo} onChange={(e) => setF({ ...f, accountNo: e.target.value })} /></Field>
+        <Field label="IFSC"><Input className="py-2 text-xs font-mono" value={f.ifsc} onChange={(e) => setF({ ...f, ifsc: e.target.value.toUpperCase() })} placeholder="IOBA0001717" /></Field>
+        <div className="sm:col-span-2"><Field label="Note shown to customers"><Input className="py-2 text-xs" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Share the UTR after paying for faster confirmation" /></Field></div>
+      </div>
+      <Button size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save acceptance details"}</Button>
+      {msg && <p className="mt-2 rounded-xl bg-paper p-2.5 text-xs">{msg}</p>}
+      <p className="mt-2 text-[11px] text-faint">Client payment proofs arrive in Finance → Payments to verify (💳 alert in the bell) — match them against the bank, then verify. Clearing the UPI ID switches the payment page back to the gateway button.</p>
+    </Card>
+  );
+}
+
 function BankRecon() {
   const [rows, setRows] = useState<StatementRow[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -410,7 +493,7 @@ function BankRecon() {
     const j = await r.json();
     if (!j.error) { setRows(j.rows ?? []); setLedger(j.ledger ?? []); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useLoad(load);
 
   function onFile(file: File) {
     void file.text().then(async (t) => {
@@ -454,6 +537,7 @@ function BankRecon() {
 
   return (
     <div className="grid gap-5">
+      <PayConfigCard />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Uncategorized transactions" value={String(stats.uncat)} warn={stats.uncat > 0} />
         <Kpi label="Auto-matched · to confirm" value={String(stats.sugg)} />

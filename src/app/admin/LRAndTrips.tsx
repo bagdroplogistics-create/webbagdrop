@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { inr } from "@/lib/pricing";
 import { watchAdminBookings } from "@/lib/adminApi";
+import { isPaid } from "@/lib/payState";
 import { assignBookingToTrip, createTrip, patchTrip, unassignBooking, watchTrips, type LrDetails } from "@/lib/tripsApi";
 import { CHARGE_HEADS, DELIVERY_AT, GST_PAYABLE, LR_TYPES, PAYMENT_TERMS, lrTotals, type ChargeKey } from "@/lib/lrModel";
 import { COMPANY } from "@/lib/company";
@@ -16,8 +17,10 @@ import DocumentView, { BagLabelsDoc, OpsNoteDoc } from "./DocumentView";
 
 const VEHICLE_TYPES = ["Tata Ace", "Bolero pickup", "Eicher 14ft", "Eicher 17ft", "Tempo traveller", "Container"];
 const EXP_HEADS = ["Fuel", "Toll / FASTag", "Driver bhatta", "Loading / unloading", "Parking", "Airport charges", "Vehicle hire", "Misc"];
-/* LR exists only for CONFIRMED bookings — "submitted" must be accepted first */
-const ELIGIBLE = ["accepted", "assigned", "picked_up", "in_transit"];
+/* LR exists only for CONFIRMED bookings — approved AND paid (verified by
+ * finance, a partner's wallet/credit capture, or a host-billed event). */
+const ELIGIBLE_STATUS = ["accepted", "assigned", "picked_up", "in_transit"];
+const lrEligible = (b: Booking) => ELIGIBLE_STATUS.includes(b.status) && (isPaid(b) || !!b.payer);
 
 function tripRevenue(bookings: Booking[], tripId: string): number {
   return bookings.filter((b) => b.admin.trip === tripId).reduce((a, b) => a + b.quote.total, 0);
@@ -78,8 +81,8 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
     setBusy(false);
   }
 
-  const unassignedBookings = bookings.filter((b) => !b.admin.trip && ELIGIBLE.includes(b.status));
-  const readyForLr = bookings.filter((b) => !b.lr && ELIGIBLE.includes(b.status));
+  const unassignedBookings = bookings.filter((b) => !b.admin.trip && lrEligible(b));
+  const readyForLr = bookings.filter((b) => !b.lr && lrEligible(b));
 
   return (
     <div className="grid gap-5">

@@ -8,7 +8,8 @@
  *  live bookings, with an action that actually logs to the booking. The
  *  static build's "automatic response" reference table is preserved as-is
  *  since it's real operating policy, just not automated. */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
@@ -71,10 +72,10 @@ export default function Exceptions() {
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   const { leads: prodLeads } = useProductionLeads();
 
-  // deriveExceptions reads Date.now() — computed in an effect, never during
-  // render (see the same note in CommandCentre.tsx/Finance.tsx).
-  const [rows, setRows] = useState<ExceptionRow[]>([]);
-  useEffect(() => { setRows([...deriveExceptions(bookings), ...deriveProductionExceptions(prodLeads)]); }, [bookings, prodLeads]);
+  // deriveExceptions reads the clock — only once in the browser (useNow), so
+  // the server render and hydration always match; refreshed every minute.
+  const now = useNow();
+  const rows = useMemo<ExceptionRow[]>(() => (now ? [...deriveExceptions(bookings), ...deriveProductionExceptions(prodLeads)] : []), [now, bookings, prodLeads]);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function ack(row: ExceptionRow) {

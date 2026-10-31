@@ -1,5 +1,6 @@
 /** Server-authoritative quoting. The browser previews; the figure signed HERE
- *  is the only one /api/pay will capture against. */
+ *  is the one bookings are saved and paid against (/api/booking,
+ *  /api/create-order). */
 import { NextResponse } from "next/server";
 import { quote } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";

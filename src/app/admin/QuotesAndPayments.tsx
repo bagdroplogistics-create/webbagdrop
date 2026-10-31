@@ -4,7 +4,9 @@
  *  wizard), get a shareable payment link, and track every open quote until
  *  it's paid. Same pricing engine and signed-quote model as the website —
  *  see src/app/api/admin/quotes/route.ts. */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
+import { usePlanAutofill } from "@/lib/stateSync";
 import { CITIES, inr, quote } from "@/lib/pricing";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import { watchAdminBookings } from "@/lib/adminApi";
@@ -43,8 +45,8 @@ export default function QuotesAndPayments() {
     [all]
   );
 
-  const [today, setToday] = useState("");
-  useEffect(() => { setToday(new Date(Date.now()).toISOString().slice(0, 10)); }, []);
+  const now = useNow();
+  const today = now ? new Date(now).toISOString().slice(0, 10) : "";
 
   const [d, setD] = useState<Draft>(EMPTY);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
@@ -65,18 +67,7 @@ export default function QuotesAndPayments() {
     () => computeTravelPlan(d.mode, d.uc === "a2d", d.date, d.flightTime),
     [d.mode, d.uc, d.date, d.flightTime]
   );
-  const autoRef = useRef({ pickupDate: "", slot: "" });
-  useEffect(() => {
-    if (plan.suggestedPickupDate && (!d.pickupDate || d.pickupDate === autoRef.current.pickupDate)) {
-      autoRef.current.pickupDate = plan.suggestedPickupDate;
-      if (d.pickupDate !== plan.suggestedPickupDate) set("pickupDate", plan.suggestedPickupDate);
-    }
-    if (plan.suggestedSlot && (!d.slot || d.slot === autoRef.current.slot)) {
-      autoRef.current.slot = plan.suggestedSlot;
-      if (d.slot !== plan.suggestedSlot) set("slot", plan.suggestedSlot);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan.suggestedPickupDate, plan.suggestedSlot]);
+  usePlanAutofill(plan, d, setD);
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

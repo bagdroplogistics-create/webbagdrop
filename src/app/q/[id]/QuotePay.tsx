@@ -1,113 +1,79 @@
 "use client";
-/** The shared quote link: /q/BD-2026-XXXX — opens the quote, pays against the
- *  SERVER-VERIFIED signature. A tampered figure is refused by /api/pay. */
+/** The shared payment link /q/<id>. Reads the customer-safe summary from
+ *  the server (never the raw booking). Payment is shown only once the team
+ *  has approved the booking; proof upload happens in the client dashboard,
+ *  where the client is signed in. Nothing here writes to the database. */
 import { useEffect, useState } from "react";
 import { inr } from "@/lib/pricing";
-import { getBooking, updateBooking, watchBooking } from "@/lib/db";
-import type { Booking } from "@/lib/types";
 import { Badge, Button, Card } from "@/components/ui";
+import UpiPay, { type PayTo } from "@/components/UpiPay";
+
+interface V {
+  id: string; name: string; status: string; decision: { state: string; note?: string };
+  service: string; from: string; to: string; date: string; slot: string; bags: number; oversize: number;
+  priced: boolean; total: number; validUntil: string | null;
+  pay: null | { status: string; amount: number };
+  paid: boolean; canPay: boolean; identityOk: boolean;
+}
 
 export default function QuotePay({ id }: { id: string }) {
-  const [b, setB] = useState<Booking | null | "loading">("loading");
-  const [paying, setPaying] = useState(false);
-  const [err, setErr] = useState("");
-
+  const [b, setB] = useState<V | null | "loading">("loading");
+  const [payTo, setPayTo] = useState<PayTo>({});
   useEffect(() => {
-    void getBooking(id).then((d) => setB(d));
-    return watchBooking(id, (d) => { if (d) setB(d); });
+    let dead = false;
+    const load = () => fetch(`/api/booking?id=${encodeURIComponent(id)}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (dead) return;
+      if (j.error) setB(null); else { setB(j.booking); setPayTo(j.payTo ?? {}); }
+    }).catch(() => { if (!dead) setB(null); });
+    void load();
+    const t = setInterval(load, 15000);
+    return () => { dead = true; clearInterval(t); };
   }, [id]);
 
-  if (b === "loading") return <Card className="mx-auto max-w-xl text-center text-muted">Loading the quote…</Card>;
+  if (b === "loading") return <Card className="mx-auto max-w-xl text-center text-muted">Loading your booking…</Card>;
   if (!b) {
     return (
       <Card className="mx-auto max-w-xl text-center">
-        <h2 className="font-display text-xl font-extrabold">That quote link is not valid any more.</h2>
-        <p className="mt-2 text-sm text-muted">Ask the team to re-share it, or get a fresh price in two minutes on the booking page.</p>
+        <h2 className="font-display text-xl font-extrabold">That link isn&apos;t valid.</h2>
+        <p className="mt-2 text-sm text-muted">Ask the team to re-share it, or open your dashboard.</p>
+        <a href="/account" className="mt-3 inline-block"><Button>Open my dashboard</Button></a>
       </Card>
     );
   }
 
-  const expired = !!b.quote.validUntil && new Date(b.quote.validUntil).getTime() < Date.now();
-  const paid = !!b.pay;
-
-  async function pay() {
-    if (!b || b === "loading") return;
-    const bk: Booking = b;
-    setPaying(true); setErr("");
-    const res = await fetch("/api/pay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        qid: bk.quote.qid, fromName: bk.from, toName: bk.to,
-        bags: bk.bags, oversize: bk.oversize,
-        total: bk.quote.total, validUntil: bk.quote.validUntil,
-        signature: bk.quote.signature, mode: "full",
-      }),
-    });
-    const j = await res.json();
-    setPaying(false);
-    if (!res.ok || j.error) { setErr(j.detail ?? j.error ?? "Payment failed"); return; }
-    const updated = await updateBooking(
-      bk.id,
-      {
-        status: "submitted",
-        pay: { mode: "full", amount: j.amount, status: "captured", gateway: j.gateway, at: j.capturedAt },
-        ...(bk.identity?.ok ? {} : { identity: { ok: false, at: "", method: "UIDAI Aadhaar OTP · pending (required before pickup)", score: 0 } }),
-      },
-      `Paid ${inr(j.amount)} via quote link · signature verified server-side · ${j.reference}`
-    );
-    setB(updated);
-  }
-
+  const approved = b.decision.state === "approved";
   return (
     <Card className="mx-auto max-w-xl">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">Your Bagdrop quote</p>
-          <h2 className="font-display text-2xl font-extrabold">{b.traveller.title ? `${b.traveller.title} ` : ""}{b.traveller.name || "Traveller"}</h2>
-          <p className="font-mono text-xs text-muted">{b.quote.qid ?? b.id} · {b.id}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">Your Bagdrop booking</p>
+          <h2 className="font-display text-2xl font-extrabold">{b.name || "Traveller"}</h2>
+          <p className="font-mono text-xs text-muted">{b.id}</p>
         </div>
-        <Badge tone={paid ? "ok" : expired ? "bad" : "info"}>{paid ? "paid" : expired ? "expired" : "server-signed"}</Badge>
+        <Badge tone={b.paid ? "ok" : approved ? "info" : "warn"}>{b.paid ? "paid" : approved ? "approved" : b.decision.state === "rejected" ? "not accepted" : "awaiting approval"}</Badge>
       </div>
-
       {([
-        ["Service", b.ucName],
+        ["Service", b.service],
         ["Route", `${b.from} → ${b.to}`],
-        ["Travel", `${b.date}${b.ref ? ` · ${b.ref}` : ""}${b.flightTime ? ` · ${b.flightTime}` : ""}`],
-        ["Pieces", `${b.bags} bag(s)${b.oversize ? ` + ${b.oversize} oversize` : ""} · billed ${b.billed}`],
-        ["Includes", b.quote.breakdown.gst ? `GST 5% ${inr(b.quote.breakdown.gst)}` : "GST 5%"],
+        ["Pickup", `${b.date}${b.slot ? ` · ${b.slot}` : ""}`],
+        ["Pieces", `${b.bags} bag(s)${b.oversize ? ` + ${b.oversize} oversize` : ""}`],
       ] as const).map(([k, v]) => (
-        <div key={k} className="flex justify-between border-b border-dashed border-line py-2 text-sm last:border-0">
-          <span className="text-muted">{k}</span><span className="text-right">{v}</span>
-        </div>
+        <div key={k} className="flex justify-between border-b border-dashed border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><span className="text-right">{v}</span></div>
       ))}
+      <p className="my-4 text-center font-display text-4xl font-extrabold">{b.priced ? inr(b.total) : "Rate on request"}</p>
 
-      <p className="my-4 text-center font-display text-4xl font-extrabold">{inr(b.quote.total)}</p>
-      {b.quote.validUntil && !paid && !expired && (
-        <p className="mb-4 text-center text-xs text-muted">
-          Price locked until {new Date(b.quote.validUntil).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-        </p>
-      )}
-
-      {paid ? (
+      {b.paid ? (
+        <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Payment verified.</b> {b.identityOk ? "You're all set for pickup." : <>Next: <a className="font-semibold underline" href={`/verify/${b.id}`}>sign the baggage declaration &amp; bond →</a></>}</p>
+      ) : b.canPay ? (
         <>
-          <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
-            <b>Paid</b> · {inr(b.pay!.amount)} via {b.pay!.gateway}. Booking is with operations.
-          </p>
-          {!b.identity?.ok && (
-            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <b>One step before pickup:</b> Aadhaar verification via UIDAI OTP — about a minute.{" "}
-              <a className="font-semibold underline" href={`/verify/${b.id}`}>Verify now →</a>
-            </p>
-          )}
+          <UpiPay amount={b.total} reference={b.id} payTo={payTo} />
+          <a href="/account" className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard →</Button></a>
         </>
-      ) : expired ? (
-        <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">This price lock has expired — message the team and a fresh quote arrives in a minute.</p>
+      ) : b.pay?.status === "submitted" ? (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><b>Payment proof received</b> — finance is verifying it.</p>
       ) : (
-        <Button className="w-full" disabled={paying} onClick={() => void pay()}>{paying ? "Verifying signature…" : `Pay ${inr(b.quote.total)}`}</Button>
+        <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">{b.decision.state === "rejected" ? `This booking wasn't accepted${b.decision.note ? `: ${b.decision.note}` : ""}.` : "Our team is reviewing your booking — payment opens here once it's approved."}</p>
       )}
-      {err && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Refused:</b> {err}</p>}
-      <p className="mt-4 text-center text-[11px] text-faint">The server verifies the quote signature before capture — a price edited in the browser is refused.</p>
     </Card>
   );
 }

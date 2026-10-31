@@ -5,7 +5,7 @@
  *  amount) but had nothing to show for it. Not a port of the static
  *  build's print-window HTML verbatim, but the same information: company
  *  letterhead, customer/consignment details, GST breakup, doc-type terms. */
-import { useEffect, useState } from "react";
+import { useNow } from "@/lib/useNow";
 import { gstSplit, SAC } from "@/lib/docs";
 import { COMPANY, inrWords } from "@/lib/company";
 import { inr } from "@/lib/pricing";
@@ -214,10 +214,8 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
 export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose: () => void }) {
   const lr = ((b.admin as { lrDetails?: LrD }).lrDetails ?? {}) as LrD;
   const note = buildOpsNote(b, lr);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  useEffect(() => {
-    setGeneratedAt(new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }));
-  }, []);
+  const now = useNow();
+  const generatedAt = now ? new Date(now).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">

@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import VerifyClient from "./VerifyClient";
 
-/** /verify/[id] — post-payment Aadhaar verification. Params are awaited
+/** /verify/[id] — the pre-pickup indemnity bond (after payment). Params are awaited
  *  inside <Suspense> so the shell still prerenders (Next 16 requirement). */
 
 export const metadata: Metadata = {
-  title: "Verify your identity · Bagdrop",
+  title: "Sign before pickup · Bagdrop",
 };
 
 export default function VerifyPage({ params }: PageProps<"/verify/[id]">) {

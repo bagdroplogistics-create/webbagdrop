@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BagdropEvent, Booking, CrmActivity, Inquiry, Trip } from "./types";
 import type { Attention, Delta, Metrics, Period, Trend, ViewKey } from "./metricsTypes";
+import { isPaid, paidAmount, paidAt } from "./payState";
 
 /** Executive dashboard aggregation. ALL the math happens here, server-side —
  *  the browser receives computed figures only, never raw tables. One call
@@ -32,7 +33,7 @@ const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
 function deliveredDay(b: Booking): string | null {
   if (b.status !== "delivered") return null;
   for (let i = b.events.length - 1; i >= 0; i--) if (/deliver/i.test(b.events[i].text)) return istDay(b.events[i].at);
-  return b.pay ? istDay(b.pay.at) : istDay(b.created);
+  return isPaid(b) ? istDay(paidAt(b)!) : istDay(b.created);
 }
 
 export async function computeMetrics(sb: SupabaseClient, period: Period): Promise<Metrics | { error: string }> {
@@ -86,7 +87,7 @@ export async function computeMetrics(sb: SupabaseClient, period: Period): Promis
   /* ---- trips & margin ---- */
   const tripRows = trips.map((t) => {
     const linked = bookings.filter((b) => (b.admin as { trip?: string }).trip === t.id);
-    const rev = linked.reduce((s, b) => s + num(b.pay?.amount), 0);
+    const rev = linked.reduce((s, b) => s + paidAmount(b), 0);
     const exp = t.expenses.reduce((s, e) => s + num(e.amount), 0);
     const adv = t.advances.reduce((s, a) => s + num(a.amount), 0);
     return { id: t.id, route: t.route, date: t.date, status: t.status, bookings: linked.length, revenue: rev, expenses: exp, advances: adv, pnl: rev - exp };

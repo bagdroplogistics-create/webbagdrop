@@ -3,12 +3,15 @@ import { kickSweep } from "@/lib/automation";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { opsOf } from "@/lib/opsModel";
+import { isPaid } from "@/lib/payState";
+import { saveBooking } from "@/lib/bookingStore";
 import type { Booking } from "@/lib/types";
 
 /** True once the shipment has physically moved — the point of no return the
  *  identity gate protects. */
 const MOVED: Booking["status"][] = ["picked_up", "in_transit", "delivered"];
 const crossedPickup = (b: Booking) => MOVED.includes(b.status) || !!opsOf(b).milestones?.picked;
+const DISPATCHED: Booking["status"][] = ["assigned", ...MOVED];
 
 /** Admin reads/writes ALL bookings with the SERVICE ROLE key — this is the
  *  only place in the app that key is used, it never reaches the browser,
@@ -34,6 +37,22 @@ export async function POST(req: Request) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "BAD_JSON" }, { status: 400 }); }
   if (!body.doc?.id) return NextResponse.json({ error: "MISSING_DOC" }, { status: 400 });
 
+  /* THE PAYMENT GATE — a booking may not get a captain or move until money is
+   * settled: payment verified by finance, a partner wallet/credit capture,
+   * or a host-billed event. Only the transition is checked, so records that
+   * were already past it are left alone. */
+  const settled = (b: Booking) => isPaid(b) || !!b.payer;
+  if (DISPATCHED.includes(body.doc.status) && !settled(body.doc)) {
+    const prev = await sb.from("bookings").select("doc").eq("id", body.doc.id).maybeSingle();
+    const was = prev.data?.doc as Booking | undefined;
+    if (!was || !DISPATCHED.includes(was.status)) {
+      return NextResponse.json({
+        error: "PAYMENT_NOT_VERIFIED",
+        detail: `Payment for ${body.doc.id} is not verified yet — verify it in Finance → Payments to verify before assigning a captain.`,
+      }, { status: 409 });
+    }
+  }
+
   /* THE PICKUP GATE — a booking may not cross into picked_up (status or ops
    * milestone) until the client's Aadhaar UIDAI verification is done. An
    * explicit admin override is possible but is stamped on the record. */
@@ -55,10 +74,16 @@ export async function POST(req: Request) {
     }
   }
 
-  const { error } = await sb.from("bookings").upsert({
-    id: body.doc.id, doc: body.doc, status: body.doc.status, created: body.doc.created,
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  /* compare-and-swap against the revision this screen loaded — a payment
+   * verification or client edit made since is never silently overwritten */
+  const sv = await saveBooking(sb, body.doc);
+  if (sv.conflict) {
+    return NextResponse.json({
+      error: "STALE",
+      detail: `${body.doc.id} changed since your screen loaded (a payment, client or team update). It has refreshed — please redo the action.`,
+    }, { status: 409 });
+  }
+  if (sv.error) return NextResponse.json({ error: sv.error.message }, { status: 500 });
   kickSweep();
   return NextResponse.json({ ok: true, booking: body.doc });
 }

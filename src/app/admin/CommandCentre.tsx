@@ -8,7 +8,8 @@
  *  map itself is the same honest exception the reference design plan notes
  *  elsewhere for Drivers: no live GPS feed wired up, so it's a schematic,
  *  not real vehicle telemetry — everything else on this page is real data. */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
 import { inr } from "@/lib/pricing";
 import { anomalies, brief, stats, type Notice, type Stats } from "@/lib/intelligence";
 import { watchAdminBookings } from "@/lib/adminApi";
@@ -17,6 +18,9 @@ import type { Booking, WeddingEvent } from "@/lib/types";
 import { deriveExceptions } from "./Exceptions";
 import { CAPTAINS } from "./Drivers";
 import { useProductionLeads } from "@/lib/useProductionLeads";
+import { isPaid } from "@/lib/payState";
+
+const needsBond = (b: Booking) => (isPaid(b) || !!b.payer) && !b.identity?.ok && !["delivered", "cancelled", "rejected", "picked_up", "in_transit"].includes(b.status);
 
 const PROD_PRE_CONVERT = ["new", "contacted", "qualified"];
 
@@ -49,7 +53,7 @@ interface Computed {
 
 /* ---------- the all-departments board ---------- */
 interface DeptCard {
-  key: string; module?: string; name: string; sev: "ok" | "warn" | "bad";
+  key: string; module?: string; name: string; sev: "ok" | "warn" | "bad" | "pay";
   kpis: [string, string][]; note: string;
 }
 
@@ -72,35 +76,41 @@ function useDepartments(all: Booking[]) {
     return () => clearInterval(t);
   }, []);
 
-  const [cards, setCards] = useState<DeptCard[] | null>(null);
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+  const now = useNow();
+  return useMemo<DeptCard[] | null>(() => {
+    if (!now) return null;
+    const today = new Date(now).toISOString().slice(0, 10);
     const flags = ext?.flags ?? [];
     const red = (d?: string) => flags.filter((f) => f.severity === "red" && (!d || f.dept === d)).length;
     const amber = (d?: string) => flags.filter((f) => f.severity === "amber" && (!d || f.dept === d)).length;
-    const needsDecision = all.filter((b) => b.status === "submitted").length;
+    const needsDecision = all.filter((b) => b.status === "submitted" && !isPaid(b)).length;
+    const toVerify = all.filter((b) => b.pay?.status === "submitted" || b.pay?.topup?.status === "submitted");
+    const toVerifyAmt = toVerify.reduce((s, b) => s + (b.pay?.status === "submitted" ? b.pay.amount : b.pay?.topup?.amount ?? 0), 0);
     const paidToday = all.filter((b) => b.pay?.status === "captured" && (b.pay.verifiedAt ?? b.pay.at).slice(0, 10) === today).reduce((a, b) => a + b.pay!.amount, 0);
-    const receivable = all.filter((b) => b.pay && b.pay.amount < b.quote.total && !["rejected", "cancelled"].includes(b.status)).reduce((a, b) => a + (b.quote.total - b.pay!.amount), 0);
+    const receivable = all.filter((b) => isPaid(b) && b.pay!.amount < b.quote.total && !["rejected", "cancelled"].includes(b.status)).reduce((a, b) => a + (b.quote.total - b.pay!.amount), 0);
     const missingInv = all.filter((b) => b.pay?.status === "captured" && !(b.docs ?? []).some((d) => d.type === "INV")).length;
-    const aadhaarPending = all.filter((b) => b.pay?.status === "captured" && !b.identity?.ok && !["delivered", "cancelled", "rejected"].includes(b.status)).length;
+    const tomorrow = new Date(now + 5.5 * 3600 * 1000 + 86400000).toISOString().slice(0, 10);
+    const unsigned = all.filter(needsBond);
+    const aadhaarPending = unsigned.length;
+    const atRisk = unsigned.filter((b) => b.date && b.date <= tomorrow).length;
     const inCustody = all.filter((b) => ["picked_up", "in_transit"].includes(b.status)).length;
     const noLr = all.filter((b) => ["accepted", "assigned"].includes(b.status) && !b.lr).length;
     const agents = ext?.agents ?? [];
     const b2bOut = agents.reduce((s, a) => s + a.ledger.outstanding, 0);
     const commDue = agents.reduce((s, a) => s + a.ledger.commissionDue, 0);
     const sev = (bad: boolean, warn: boolean): DeptCard["sev"] => (bad ? "bad" : warn ? "warn" : "ok");
-    setCards([
+    return [
       { key: "bookings", module: "ship", name: "Bookings desk", sev: sev(red("bookings") > 0, needsDecision > 0), kpis: [["needs decision", String(needsDecision)], ["red flags", String(red("bookings"))]], note: "accept within 2h — the CTO chases breaches" },
+      { key: "payverify", module: "fin", name: "💳 Payments to verify", sev: toVerify.length ? "pay" : "ok", kpis: [["proofs waiting", String(toVerify.length)], ["amount", inr(toVerifyAmt)]], note: toVerify.length ? "match UTR against the bank, then verify in Finance" : "no client proofs waiting" },
       { key: "finance", module: "fin", name: "Finance", sev: sev(false, receivable > 0 || missingInv > 0), kpis: [["paid today", inr(paidToday)], ["receivable", inr(receivable)]], note: missingInv ? `${missingInv} invoice(s) auto-issuing` : `${ext?.cn ?? 0} credit notes live · invoices auto-issued` },
       { key: "ops", module: "opsx", name: "Operations", sev: sev(red("ops") > 0, amber("ops") > 0), kpis: [["in custody", String(inCustody)], ["red flags", String(red("ops"))]], note: "pickup window & captain SLAs" },
       { key: "lr", module: "lr", name: "LR & dispatch", sev: sev(false, noLr > 0), kpis: [["awaiting LR", String(noLr)], ["auto-drafts", "00:01 daily"]], note: "confirmed consignments queue on the LR page" },
-      { key: "compliance", module: "id", name: "Compliance · KYC", sev: sev(red("compliance") > 0, aadhaarPending > 0), kpis: [["Aadhaar pending", String(aadhaarPending)], ["pickups locked", String(aadhaarPending)]], note: "pickup is server-locked until UIDAI verifies" },
+      { key: "compliance", module: "id", name: "Identity & compliance", sev: sev(red("compliance") > 0 || atRisk > 0, aadhaarPending > 0), kpis: [["bond unsigned", String(aadhaarPending)], ["pickup at risk", String(atRisk)]], note: "pickup is server-locked until the bond is signed" },
       { key: "partners", module: "part", name: "Partners · B2B", sev: sev(false, b2bOut > 0), kpis: [["to collect", inr(b2bOut)], ["comm. due", inr(commDue)]], note: `${agents.length} agents · wallet & credit live` },
       { key: "inspector", module: "insp", name: "Tracking Inspector", sev: sev(red() > 0, amber() > 0), kpis: [["SLA breached", String(red())], ["at risk", String(amber())]], note: "CTO on duty 24×7 — red auto-dispatched" },
       { key: "automation", module: "opsx", name: "Automation", sev: sev((ext?.counts?.dead ?? 0) > 0, (ext?.counts?.queued ?? 0) > 10), kpis: [["queued", String(ext?.counts?.queued ?? 0)], ["dead letters", String(ext?.counts?.dead ?? 0)]], note: "WhatsApp + email pairs, idempotent outbox" },
-    ]);
-  }, [all, ext]);
-  return cards;
+    ];
+  }, [now, all, ext]);
 }
 
 export default function CommandCentre({ openModule }: { openModule?: (k: string) => void }) {
@@ -113,21 +123,22 @@ export default function CommandCentre({ openModule }: { openModule?: (k: string)
   const { leads: prodLeads } = useProductionLeads();
   const prodNeedsDecision = prodLeads.filter((l) => PROD_PRE_CONVERT.includes(l.status));
 
-  const [computed, setComputed] = useState<Computed | null>(null);
-  useEffect(() => {
+  const now = useNow();
+  const computed = useMemo<Computed | null>(() => {
+    if (!now) return null;
     const s = stats(all);
     const notices = anomalies(all);
     const feed = all
       .flatMap((b) => b.events.map((e) => ({ ...e, bookingId: b.id })))
       .sort((a, b) => b.at.localeCompare(a.at))
       .slice(0, 20);
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = new Date(now).toISOString().slice(0, 10);
     const activeStatuses = ["quoted", "identified", "submitted", "revised", "accepted", "assigned"];
     const pickupsNext24h = all.filter((b) => (b.pickupDate || b.date) === todayKey && activeStatuses.includes(b.status)).length;
     const cutoffsToday = all.filter((b) => b.date === todayKey && (b.mode === "air" || b.mode === "rail" || b.mode === "sea")).length;
     const exceptionsOpen = deriveExceptions(all).length;
-    setComputed({ s, notices, briefText: brief(s, notices), feed, pickupsNext24h, cutoffsToday, exceptionsOpen });
-  }, [all]);
+    return { s, notices, briefText: brief(s, notices), feed, pickupsNext24h, cutoffsToday, exceptionsOpen };
+  }, [now, all]);
 
   if (!computed) return <p className="text-sm" style={{ color: "var(--a-muted)" }}>Reading the day…</p>;
   const { s, notices, briefText, feed, pickupsNext24h, cutoffsToday, exceptionsOpen } = computed;
@@ -175,6 +186,8 @@ export default function CommandCentre({ openModule }: { openModule?: (k: string)
         <Kpi card label="Open exceptions" value={String(exceptionsOpen)} hint="from the exceptions module" />
       </div>
 
+      <ComplianceIssues all={all} openModule={openModule} />
+
       {/* every department, one glance — live findings with severity stripes */}
       <div className="a-card">
         <H3 r="refreshed every 45 s · click a card to open the department">All departments now</H3>
@@ -187,11 +200,12 @@ export default function CommandCentre({ openModule }: { openModule?: (k: string)
                 animationDelay: `${i * 55}ms`,
                 borderColor: "var(--a-line)",
                 background: "var(--a-surface)",
-                borderLeft: `4px solid ${d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)"}`,
+                borderLeft: `4px solid ${d.sev === "pay" ? "#059669" : d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)"}`,
+                ...(d.sev === "pay" ? { background: "#ECFDF5", borderColor: "#6EE7B7" } : {}),
               }}>
               <div className="flex items-center justify-between gap-1">
                 <b className="text-[12.5px]" style={{ fontFamily: "var(--a-display)" }}>{d.name}</b>
-                <span className={d.sev !== "ok" ? "a-dot a-dot-anim" : "a-dot"} style={{ background: d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)", width: 8, height: 8, borderRadius: 99, display: "inline-block", animation: d.sev !== "ok" ? "a-pulse 1.8s ease-in-out infinite" : undefined }} />
+                <span className={d.sev !== "ok" ? "a-dot a-dot-anim" : "a-dot"} style={{ background: d.sev === "pay" ? "#059669" : d.sev === "bad" ? "var(--a-bad)" : d.sev === "warn" ? "var(--a-warn)" : "var(--a-ok)", width: 8, height: 8, borderRadius: 99, display: "inline-block", animation: d.sev !== "ok" ? "a-pulse 1.8s ease-in-out infinite" : undefined }} />
               </div>
               <div className="mt-1.5 grid grid-cols-2 gap-1">
                 {d.kpis.map(([k, v]) => (
@@ -334,4 +348,30 @@ function Kpi({ label, value, hint, card }: { label: string; value: string; hint?
     </>
   );
   return card ? <div className="a-card">{body}</div> : <div>{body}</div>;
+}
+
+/** Compliance issues at a glance (step 7): paid bookings whose bond is not
+ *  signed — locked, documents waiting for our review, or pickup within a day. */
+function ComplianceIssues({ all, openModule }: { all: Booking[]; openModule?: (k: string) => void }) {
+  const [tomorrow] = useState(() => new Date(Date.now() + 5.5 * 3600 * 1000 + 86400000).toISOString().slice(0, 10));
+  const rows = all.filter(needsBond).map((b) => {
+    const locked = !!(b.admin as { aadhaarLocked?: boolean }).aadhaarLocked;
+    const docs = b.kyc?.status === "docs_submitted";
+    const risk = !!b.date && b.date <= tomorrow;
+    return { b, locked, docs, risk, why: locked ? "Aadhaar locked" : docs ? "documents to review" : b.kyc?.status === "docs_rejected" ? "documents rejected" : "bond not signed" };
+  }).filter((r) => r.locked || r.docs || r.risk).sort((x, y) => Number(y.risk) - Number(x.risk) || Number(y.locked) - Number(x.locked));
+  if (!rows.length) return null;
+  return (
+    <div className="a-card" style={{ borderLeft: "4px solid var(--a-bad)" }}>
+      <H3 r="pickup is locked until each is cleared">🛂 Compliance issues · {rows.length}</H3>
+      <div className="grid gap-1.5">
+        {rows.slice(0, 6).map(({ b, risk, why }) => (
+          <button key={b.id} onClick={() => openModule?.("id")} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs" style={{ background: "var(--a-surface-2)" }}>
+            <span><b style={{ fontFamily: "var(--a-mono)" }}>{b.id}</b> · {b.traveller.name} · {b.from} → {b.to}</span>
+            <span style={{ color: risk ? "var(--a-bad)" : "var(--a-warn)", fontWeight: 600 }}>{why}{risk ? ` · pickup ${b.date}` : ""}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

@@ -2,8 +2,8 @@ import { Suspense } from "react";
 import QuoteClient from "./QuoteClient";
 
 /** Per-booking quote link: static shell; the id resolves client-side inside
- *  the Suspense boundary (Next 16 prerender rule), and payment is authorised
- *  by /api/pay against the server-side quote signature. */
+ *  the Suspense boundary (Next 16 prerender rule), and payment happens in My
+ *  bookings (UPI / bank proof, or online via /api/create-order). */
 export default function QuotePage() {
   return (
     <main className="min-h-screen px-4 py-10">

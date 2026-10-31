@@ -6,7 +6,8 @@
  *  driver/captain table exists in the schema — this derives "today's job"
  *  from live bookings the same way LR & trips does). CAP (daily capacity)
  *  is a plain constant, same as the original: "5 captains × 6 pieces". */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
 import { forecast, type Forecast } from "@/lib/intelligence";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
@@ -20,8 +21,8 @@ export default function CapacityAndRoster() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
 
-  const [fc, setFc] = useState<Forecast | null>(null);
-  useEffect(() => { setFc(forecast(bookings, 7)); }, [bookings]);
+  const now = useNow();
+  const fc = useMemo<Forecast | null>(() => (now ? forecast(bookings, 7) : null), [now, bookings]);
 
   const cap = CAPTAINS.length * CAP_PER_CAPTAIN;
   const activeJobs = bookings.filter((b) => ["assigned", "picked_up", "in_transit"].includes(b.status));

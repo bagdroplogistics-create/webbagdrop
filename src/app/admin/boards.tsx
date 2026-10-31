@@ -5,7 +5,7 @@
  *  depth: KPI row with vs-previous-period deltas, a 14-day trend, its own
  *  "needs attention" list, and drill-down links when rendered inside the
  *  Admin OS (onNav present). */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { inr } from "@/lib/pricing";
 import type { Attention, Delta, Metrics, Trend, ViewKey } from "@/lib/metricsTypes";
 import { VIEWS } from "@/lib/metricsTypes";
@@ -14,14 +14,17 @@ import { Badge, Button, Card } from "@/components/ui";
 export type Nav = (module: string, bookingId?: string) => void;
 
 /* ---------- animated number ---------- */
+const REDUCED = "(prefers-reduced-motion: reduce)";
+const subscribeReduced = (cb: () => void) => { const m = matchMedia(REDUCED); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
+
 export function CountUp({ value, format }: { value: number; format?: (n: number) => string }) {
   const [shown, setShown] = useState(value);
   const prev = useRef(value);
+  /* reduced motion: show the figure straight away, no animation */
+  const reduced = useSyncExternalStore(subscribeReduced, () => matchMedia(REDUCED).matches, () => false);
   useEffect(() => {
     const from = prev.current; prev.current = value;
-    if (from === value) return;
-    const reduced = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) { setShown(value); return; }
+    if (from === value || reduced) return;
     const t0 = performance.now(); const dur = 650;
     let raf = 0;
     const tick = (t: number) => {
@@ -33,8 +36,9 @@ export function CountUp({ value, format }: { value: number; format?: (n: number)
     /* background tabs never fire rAF — snap so the figure is always right */
     const snap = setTimeout(() => { cancelAnimationFrame(raf); setShown(value); }, dur + 150);
     return () => { cancelAnimationFrame(raf); clearTimeout(snap); };
-  }, [value]);
-  return <>{format ? format(shown) : shown.toLocaleString("en-IN")}</>;
+  }, [value, reduced]);
+  const n = reduced ? value : shown;
+  return <>{format ? format(n) : n.toLocaleString("en-IN")}</>;
 }
 
 /* ---------- KPI with delta chip ---------- */
