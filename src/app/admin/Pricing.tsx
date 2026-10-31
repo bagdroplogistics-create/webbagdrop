@@ -7,7 +7,7 @@
  *  Also: instant-booking setup per route (with a calendar preview), the
  *  profitability view (cost, margin, target-margin prices, actuals,
  *  benchmarks), routes to add from inquiries, and a new-route wizard. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { useNow } from "@/lib/useNow";
 import { useSyncedState } from "@/lib/stateSync";
@@ -117,20 +117,43 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
                 const rowIssues = issues.filter((x) => x.lane === lane);
                 const m1 = marginAt(r, 1, costModel), m2 = marginAt(r, 2, costModel);
                 return (
-                  <tr key={i} className={`border-b border-dashed border-line align-top last:border-0 ${rowIssues.some((x) => x.level === "error") ? "bg-red-50/60" : ""}`}>
-                    <td className="py-1 pr-2"><CitySelect cities={masters.cities} value={r.from} onChange={(v) => set(i, { from: v })} /></td>
-                    <td className="pr-2"><CitySelect cities={masters.cities} value={r.to} onChange={(v) => set(i, { to: v })} /></td>
-                    <td className="pr-2"><Select className="w-20" value={r.dir} onChange={(e) => set(i, { dir: e.target.value as RouteRate["dir"] })}><option value="both">both</option><option value="one">one</option></Select></td>
-                    <td className="pr-2"><Num value={r.r1} onChange={(v) => set(i, { r1: v ?? 0 })} /></td>
-                    <td className="pr-2"><Num value={r.r2} onChange={(v) => set(i, { r2: v ?? 0 })} /></td>
-                    <td className="pr-2"><Num value={r.addl} onChange={(v) => set(i, { addl: v ?? 0 })} /></td>
-                    <td className="pr-2"><Num w="w-16" value={r.bulkMin ?? null} onChange={(v) => set(i, { bulkMin: v })} /></td>
-                    <td className="pr-2"><Num value={r.bulkRate ?? null} onChange={(v) => set(i, { bulkRate: v })} /></td>
-                    <td className="whitespace-nowrap pr-2 pt-2"><Badge tone={tone(m1, costModel.marginFloorPct)}>{m1}%</Badge> <Badge tone={tone(m2, costModel.marginFloorPct)}>{m2}%</Badge></td>
-                    <td className="pr-2 pt-1"><Button size="sm" variant={r.instant?.enabled ? "outline" : "ghost"} onClick={() => setOpenInstant(openInstant === i ? null : i)}>{r.instant?.enabled ? "⚡ on" : "off"}</Button></td>
-                    <td className="pr-2"><Input className="w-28" value={r.note ?? ""} onChange={(e) => set(i, { note: e.target.value })} /></td>
-                    <td className="pt-2"><button className="text-red-700 hover:underline" onClick={() => { if (confirm(`Remove ${lane} from the draft?`)) setWork((p) => p.filter((_, idx) => idx !== i)); }}>remove</button></td>
-                  </tr>
+                  <Fragment key={i}>
+                    <tr className={`border-b border-dashed border-line align-top last:border-0 ${rowIssues.some((x) => x.level === "error") ? "bg-red-50/60" : ""}`}>
+                      <td className="py-1 pr-2"><CitySelect cities={masters.cities} value={r.from} onChange={(v) => set(i, { from: v })} /></td>
+                      <td className="pr-2"><CitySelect cities={masters.cities} value={r.to} onChange={(v) => set(i, { to: v })} /></td>
+                      <td className="pr-2"><Select className="w-20" value={r.dir} onChange={(e) => set(i, { dir: e.target.value as RouteRate["dir"] })}><option value="both">both</option><option value="one">one</option></Select></td>
+                      <td className="pr-2"><Num value={r.r1} onChange={(v) => set(i, { r1: v ?? 0 })} /></td>
+                      <td className="pr-2"><Num value={r.r2} onChange={(v) => set(i, { r2: v ?? 0 })} /></td>
+                      <td className="pr-2"><Num value={r.addl} onChange={(v) => set(i, { addl: v ?? 0 })} /></td>
+                      <td className="pr-2"><Num w="w-16" value={r.bulkMin ?? null} onChange={(v) => set(i, { bulkMin: v })} /></td>
+                      <td className="pr-2"><Num value={r.bulkRate ?? null} onChange={(v) => set(i, { bulkRate: v })} /></td>
+                      <td className="whitespace-nowrap pr-2 pt-2"><Badge tone={tone(m1, costModel.marginFloorPct)}>{m1}%</Badge> <Badge tone={tone(m2, costModel.marginFloorPct)}>{m2}%</Badge></td>
+                      <td className="pr-2 pt-1"><Button size="sm" variant={r.instant?.enabled ? "outline" : "ghost"} onClick={() => setOpenInstant(openInstant === i ? null : i)}>{r.instant?.enabled ? "⚡ on" : "off"}</Button></td>
+                      <td className="pr-2"><Input className="w-28" value={r.note ?? ""} onChange={(e) => set(i, { note: e.target.value })} /></td>
+                      <td className="pt-2"><button className="text-red-700 hover:underline" onClick={() => { if (confirm(`Remove ${lane} from the draft?`)) setWork((p) => p.filter((_, idx) => idx !== i)); }}>remove</button></td>
+                    </tr>
+                    {/* "both" routes price identically either way (see pricingRules.ts/
+                     * pricing.ts dir==="both" matching) — this mirror row is display-only
+                     * so admins can see the reverse direction listed explicitly, same as
+                     * customers can already book it either way. Editing the row above
+                     * (incl. flipping it to "one") updates this mirror automatically. */}
+                    {r.dir === "both" && r.from && r.to && (
+                      <tr className="border-b border-dashed border-line align-top last:border-0 bg-paper/50 text-faint">
+                        <td className="py-1 pr-2">{r.to}</td>
+                        <td className="pr-2">{r.from}</td>
+                        <td className="pr-2 italic">↔ same route</td>
+                        <td className="pr-2">{r.r1}</td>
+                        <td className="pr-2">{r.r2}</td>
+                        <td className="pr-2">{r.addl}</td>
+                        <td className="pr-2">{r.bulkMin ?? "—"}</td>
+                        <td className="pr-2">{r.bulkRate ?? "—"}</td>
+                        <td className="whitespace-nowrap pr-2"><Badge tone={tone(m1, costModel.marginFloorPct)}>{m1}%</Badge> <Badge tone={tone(m2, costModel.marginFloorPct)}>{m2}%</Badge></td>
+                        <td className="pr-2">{r.instant?.enabled ? "⚡ on" : "off"}</td>
+                        <td className="pr-2 italic">reverse of above</td>
+                        <td />
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
