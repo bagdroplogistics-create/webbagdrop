@@ -5,6 +5,7 @@
  *  here, since this app has no such endpoint). */
 import { inr, isPeak } from "./pricing";
 import type { Booking, CrmActivity, Inquiry } from "./types";
+import { isPaid, paidAmount } from "./payState";
 
 const DAY = 86400000;
 const dayKey = (iso: string) => (iso || "").slice(0, 10);
@@ -33,7 +34,7 @@ export function stats(all: Booking[]): Stats {
     quotedUnpaid: all.filter((d) => d.status === "quoted" || d.status === "identified").length,
     inCustody: all.filter((d) => d.status === "picked_up" || d.status === "in_transit").length,
     delivered: all.filter((d) => d.status === "delivered").length,
-    paidToday: t.reduce((a, d) => a + (d.pay ? d.pay.amount : 0), 0),
+    paidToday: t.reduce((a, d) => a + paidAmount(d), 0),
     pieces: all.reduce((a, d) => a + (d.bags || 0) + (d.oversize || 0), 0),
   };
 }
@@ -165,7 +166,7 @@ export function anomalies(all: Booking[]): Notice[] {
     (byMob[m] = byMob[m] || []).push(d);
   });
   Object.keys(byMob).forEach((m) => {
-    const unpaid = byMob[m].filter((d) => !d.pay);
+    const unpaid = byMob[m].filter((d) => !isPaid(d));
     if (unpaid.length >= 3) {
       out.push({ sev: "warn", text: `${unpaid.length} unpaid quotes from +${m.slice(-10)} — possible scraping; consider a per-contact quote limit.` });
     }
@@ -210,7 +211,7 @@ export function crmCustomers(all: Booking[]): Customer[] {
     const c = (by[m] = by[m] || { mobile: d.traveller.mobile, name: d.traveller.name, bookings: [], value: 0, pieces: 0 });
     c.name = d.traveller.name || c.name;
     c.bookings.push(d);
-    if (d.pay) c.value += d.pay.amount;
+    c.value += paidAmount(d);
     c.pieces += (d.bags || 0) + (d.oversize || 0);
   });
   return Object.values(by)

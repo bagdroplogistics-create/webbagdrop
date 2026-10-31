@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
 import { kickSweep } from "@/lib/automation";
+import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 
 /** Mirrors every new Y2K booking into a Google Sheet, alongside the Admin OS,
  *  via a Google Apps Script "Web App" (see the setup doc for the script and
@@ -58,7 +59,7 @@ function notifySheet(doc: Booking) {
  *     guest edit can never un-reject or re-route a booking the ops team has
  *     already acted on.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { doc?: Booking };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "BAD_JSON" }, { status: 400 }); }
 
@@ -92,23 +93,37 @@ export async function POST(req: Request) {
     if (prev.eventCode !== doc.eventCode || prevMobile.slice(-10) !== mobile.slice(-10)) {
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
-    // Server-authoritative fields survive the guest's re-save.
+    // Server-authoritative fields survive the guest's re-save — a browser
+    // can never set its own identity, payment, documents or LR.
     doc.status = prev.status;
     doc.admin = prev.admin ?? {};
     doc.created = prev.created;
     doc.pay = prev.pay ?? null;
+    doc.identity = prev.identity ?? null;
+    doc.indemnity = prev.indemnity ?? null;
+    doc.docs = prev.docs;
+    doc.lr = prev.lr ?? null;
   } else {
     doc.status = "submitted";
     doc.created = doc.created || new Date().toISOString();
     doc.admin = {};
     doc.pay = null;
+    doc.identity = { ok: false, at: "", method: "Pending — verified by the team before pickup", score: 0 };
+    doc.indemnity = null;
+    delete doc.docs;
+    doc.lr = null;
   }
 
-  const { error } = await sb.from("bookings").upsert({
-    id: doc.id, doc, status: doc.status, created: doc.created,
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (prev) {
+    doc.rev = prev.rev;
+    await saveOrThrow(sb, doc);
+  } else {
+    const { error } = await sb.from("bookings").insert({ id: doc.id, doc, status: doc.status, created: doc.created });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   if (isNew) notifySheet(doc);
   kickSweep();
   return NextResponse.json({ ok: true, booking: doc });
 }
+
+export const POST = retryOnConflict(handlePOST);

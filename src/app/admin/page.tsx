@@ -3,6 +3,7 @@ import { useState } from "react";
 import AdminShell, { type ModuleKey } from "./AdminShell";
 import CapacityAndRoster from "./CapacityAndRoster";
 import CommandCentre from "./CommandCentre";
+import Clients from "./Clients";
 import CRM from "./CRM";
 import DataAndPrivacy from "./DataAndPrivacy";
 import Drivers from "./Drivers";
@@ -63,6 +64,7 @@ export default function AdminPage() {
       {tab === "insp" && <Inspector />}
       {tab === "dash" && <Executive openModule={(k) => setTab((k === "wed" ? "wed" : k) as ModuleKey)} />}
       {tab === "wed" && <Weddings onOpenBooking={() => setTab("ship")} />}
+      {tab === "cli" && <Clients />}
       {tab === "ads" && <LeadImport />}
       {tab === "rep" && <Reports />}
       {tab === "exc" && <Exceptions />}

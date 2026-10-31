@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BAGDROP OS · Sidebar Contrast Options</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.55 Inter,-apple-system,sans-serif;background:#F1F0ED;color:#17181C;
+  padding:0 max(16px,env(safe-area-inset-left,0px)) 80px max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font:800 30px/1.1 Inter;letter-spacing:-.02em;margin:38px 0 6px}
+.lede{color:#5c606a;margin:0 0 28px;max-width:70ch}
+.grid{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.opt{border-radius:20px;overflow:hidden;border:1px solid #E0DFDA;background:#fff;box-shadow:0 3px 14px rgba(10,15,40,.06)}
+.head{padding:14px 18px;border-bottom:1px solid #ECEBE7}
+.head b{font:800 16px Inter}
+.head span{display:block;font-size:12px;color:#8a8d95;margin-top:2px}
+.os{display:flex;min-height:330px;background:#FAFAF9}
+.side{width:46%;padding:14px 10px;font-size:12px;display:flex;flex-direction:column}
+.logo{font-weight:800;font-size:14px;margin:0 8px 4px;letter-spacing:-.01em}
+.sub{font:600 8.5px "IBM Plex Mono";letter-spacing:.12em;text-transform:uppercase;margin:0 8px 12px;opacity:.75}
+.grp{font:700 9px Inter;letter-spacing:.12em;text-transform:uppercase;margin:8px 8px 4px;opacity:.65}
+.it{padding:7px 10px;border-radius:9px;margin-bottom:2px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.pill{font:600 9px "IBM Plex Mono";border-radius:999px;padding:1.5px 7px}
+.main{flex:1;padding:14px}
+.main h3{font:800 15px Inter;margin:0 0 8px}
+.mini{border-radius:11px;padding:9px 11px;font-size:10.5px;margin-bottom:8px;background:#fff;border:1px solid #E7E2D9;color:#1A1714;box-shadow:0 4px 14px -8px rgba(25,30,50,.08)}
+.mini.navy{background:#1B2A4A;color:#E7ECF5;border:0;font-family:"IBM Plex Mono"}
+.fonts{padding:12px 18px 15px;border-top:1px solid #ECEBE7;font-size:12.5px;color:#5c606a}
+.fonts b{color:#17181C}
+
+/* A · Deep Navy — matches the Today's-brief card */
+.sA{background:#1B2A4A;color:#B9C4D9}
+.sA .logo{color:#fff}.sA .logo em{color:#FF7A33;font-style:normal}
+.sA .sub{color:#7E8DA8}
+.sA .grp{color:#6E7D99}
+.sA .it:hover{background:#24355A}
+.sA .it.on{background:#F25C05;color:#fff}
+.sA .pill{background:#2A3B61;color:#AEBBD4}
+
+/* B · Warm Espresso — stays in the warm palette family */
+.sB{background:#241E17;color:#C8BFB2}
+.sB .logo{color:#FFF7ED}.sB .logo em{color:#FF8A3D;font-style:normal}
+.sB .sub{color:#8F8576}
+.sB .grp{color:#7E7466}
+.sB .it.on{background:#F25C05;color:#fff}
+.sB .pill{background:#383025;color:#C8BFB2}
+
+/* C · High-contrast Light — white rail, ink text, stronger pills */
+.sC{background:#FFFFFF;color:#2A2520;border-right:1px solid #DDD6CC;box-shadow:2px 0 16px -8px rgba(25,30,50,.08)}
+.sC .logo{color:#1A1714}.sC .logo em{color:#F25C05;font-style:normal}
+.sC .sub{color:#8A8273}
+.sC .grp{color:#8A8273}
+.sC .it.on{background:#1A1714;color:#fff}
+.sC .it.on .pill{background:#3A332B;color:#FFD9BF}
+.sC .pill{background:#F0ECE6;color:#5C544A}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>BAGDROP OS — sidebar contrast options</h1>
+<p class="lede">Same Light &amp; airy workspace on the right in every option; only the left rail changes. Reply A, B or C.</p>
+
+<div class="grid">
+
+<div class="opt">
+  <div class="head"><b>A · Deep Navy rail</b><span>anchors the OS · matches the Today's-brief navy · strongest hierarchy</span></div>
+  <div class="os">
+    <div class="side sA">
+      <div class="logo">BAG<em>DROP</em> OS</div>
+      <div class="sub">one platform · one database</div>
+      <div class="grp">Operate</div>
+      <div class="it on">Command centre <span class="pill" style="background:rgba(255,255,255,.22);color:#fff">live</span></div>
+      <div class="it">Shipments &amp; ops</div>
+      <div class="it">Weddings &amp; events</div>
+      <div class="grp">Commerce</div>
+      <div class="it">Quotes &amp; payments</div>
+      <div class="it">Partners &amp; API <span class="pill">b2b</span></div>
+      <div class="grp">Intelligence</div>
+      <div class="it">Executive boards</div>
+      <div class="it">Reports &amp; MIS</div>
+    </div>
+    <div class="main">
+      <h3>Command centre</h3>
+      <div class="mini navy">TODAY'S BRIEF · ₹43,365 collected</div>
+      <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+      <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+    </div>
+  </div>
+  <div class="fonts">Rail <b>#1B2A4A</b> · text #B9C4D9 (7.2:1) · active <b>orange pill</b> · ties the whole OS to the navy brief card — the classic "control room" look.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>B · Warm Espresso rail</b><span>stays in the warm-paper family · cosy but commanding</span></div>
+  <div class="os">
+    <div class="side sB">
+      <div class="logo">BAG<em>DROP</em> OS</div>
+      <div class="sub">one platform · one database</div>
+      <div class="grp">Operate</div>
+      <div class="it on">Command centre <span class="pill" style="background:rgba(255,255,255,.22);color:#fff">live</span></div>
+      <div class="it">Shipments &amp; ops</div>
+      <div class="it">Weddings &amp; events</div>
+      <div class="grp">Commerce</div>
+      <div class="it">Quotes &amp; payments</div>
+      <div class="it">Partners &amp; API <span class="pill">b2b</span></div>
+      <div class="grp">Intelligence</div>
+      <div class="it">Executive boards</div>
+      <div class="it">Reports &amp; MIS</div>
+    </div>
+    <div class="main">
+      <h3>Command centre</h3>
+      <div class="mini navy">TODAY'S BRIEF · ₹43,365 collected</div>
+      <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+      <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+    </div>
+  </div>
+  <div class="fonts">Rail <b>#241E17</b> espresso · text #C8BFB2 (8.1:1) · orange active pill — harmonises with the warm paper canvas rather than contrasting coolly against it.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>C · High-contrast Light rail</b><span>keeps Light &amp; airy · ink text, ink active pill</span></div>
+  <div class="os">
+    <div class="side sC">
+      <div class="logo">BAG<em>DROP</em> OS</div>
+      <div class="sub">one platform · one database</div>
+      <div class="grp">Operate</div>
+      <div class="it on">Command centre <span class="pill">live</span></div>
+      <div class="it">Shipments &amp; ops</div>
+      <div class="it">Weddings &amp; events</div>
+      <div class="grp">Commerce</div>
+      <div class="it">Quotes &amp; payments</div>
+      <div class="it">Partners &amp; API <span class="pill">b2b</span></div>
+      <div class="grp">Intelligence</div>
+      <div class="it">Executive boards</div>
+      <div class="it">Reports &amp; MIS</div>
+    </div>
+    <div class="main">
+      <h3>Command centre</h3>
+      <div class="mini navy">TODAY'S BRIEF · ₹43,365 collected</div>
+      <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+      <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+    </div>
+  </div>
+  <div class="fonts">White rail kept, nav text darkened to <b>#2A2520</b> (13.5:1) · active item flips to <b>ink-on-white</b> with an orange-tinted badge — maximum legibility with the least change.</div>
+</div>
+
+</div>
+</div>
+</body>
+</html>

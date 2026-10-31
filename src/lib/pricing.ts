@@ -12,7 +12,7 @@
  *  Every function here takes an optional `masters` argument so one code
  *  path serves both the static-default client preview and the
  *  override-aware server routes. */
-import type { City, Mode, QuoteInput, QuoteResult, RouteRate, Zone } from "./types";
+import type { City, QuoteInput, QuoteResult, RouteRate, Zone } from "./types";
 
 export const GST_RATE = 0.05; // 5% GTA transport rate — never 18%
 export const MIN_PIECES = 2;
@@ -20,6 +20,36 @@ export const RATE_FLOOR = 2500;
 export const OVERSIZE_RATE = 900; // per oversize piece, per the rate chart add-ons
 
 export const ZONES: Zone[] = ["MUM", "GUJ", "NOR", "SOU", "GOA", "EAS"];
+
+/** Airports for every city in the location list, keyed by the city's `ap`
+ *  code. Terminals are listed only where the airport runs more than one
+ *  passenger terminal; the customer can always add detail in the address. */
+export const AIRPORTS: Record<string, { name: string; terminals?: string[] }> = {
+  BOM: { name: "Mumbai — Chhatrapati Shivaji Maharaj Intl (BOM)", terminals: ["Terminal 1", "Terminal 2"] },
+  PNQ: { name: "Pune Airport (PNQ)" },
+  AMD: { name: "Ahmedabad — Sardar Vallabhbhai Patel Intl (AMD)", terminals: ["Terminal 1", "Terminal 2"] },
+  BDQ: { name: "Vadodara Airport (BDQ)" },
+  STV: { name: "Surat Airport (STV)" },
+  RAJ: { name: "Rajkot Intl Airport, Hirasar (RAJ)" },
+  DEL: { name: "Delhi — Indira Gandhi Intl (DEL)", terminals: ["Terminal 1", "Terminal 2", "Terminal 3"] },
+  JAI: { name: "Jaipur Intl (JAI)" },
+  UDR: { name: "Udaipur — Maharana Pratap Airport (UDR)" },
+  IXC: { name: "Chandigarh Intl (IXC)" },
+  BLR: { name: "Bengaluru — Kempegowda Intl (BLR)", terminals: ["Terminal 1", "Terminal 2"] },
+  HYD: { name: "Hyderabad — Rajiv Gandhi Intl (HYD)" },
+  MAA: { name: "Chennai Intl (MAA)" },
+  COK: { name: "Kochi — Cochin Intl (COK)" },
+  GOI: { name: "Goa — Dabolim Airport (GOI)" },
+  GOX: { name: "North Goa — Manohar Intl, Mopa (GOX)" },
+  CCU: { name: "Kolkata — Netaji Subhas Chandra Bose Intl (CCU)" },
+};
+
+/** True only when the SECTOR RATE CHART prices this lane. Lanes the chart
+ *  doesn't list are inquiries — the zone-matrix estimate is never shown to
+ *  customers. */
+export function isChartPriced(q: QuoteOutcome): q is QuoteResult & { source: "route" } {
+  return !("error" in q) && q.source === "route";
+}
 
 export const CITIES: City[] = [
   { name: "Mumbai", zone: "MUM", ap: "BOM" },
@@ -102,12 +132,6 @@ export function routeBase(r: RouteRate, bags: number): { amount: number; rule: s
   return { amount: r.r2 + (n - 2) * r.addl, rule: `2-bag rate + ${n - 2} × ₹${r.addl.toLocaleString("en-IN")} addl` };
 }
 
-function slabPct(pieces: number): number {
-  if (pieces >= 8) return 0.15;
-  if (pieces >= 5) return 0.1;
-  if (pieces >= 3) return 0.05;
-  return 0;
-}
 
 export function isPeak(date?: string): boolean {
   if (!date) return false;
@@ -140,24 +164,10 @@ export function quote(q: QuoteInput, masters: Masters = DEFAULT_MASTERS): QuoteO
     };
   }
 
-  const from = cityByName(q.fromName, masters.cities), to = cityByName(q.toName, masters.cities);
-  if (!from || !to) return { error: "RATE_ON_REQUEST" };
-  const rate = masters.matrix[from.zone][ZONES.indexOf(to.zone)];
-  if (!rate || rate < RATE_FLOOR) return { error: "BELOW_FLOOR" };
-
-  const billed = Math.max(bags + odd, MIN_PIECES);
-  const base = rate * (billed - odd);
-  const sub = base + oversizeAmt;
-  const slab = Math.round(sub * slabPct(billed));
-  const peak = isPeak(q.date) ? Math.round((sub - slab) * 0.08) : 0;
-  const taxable = sub - slab + peak;
-  const gst = Math.round(taxable * GST_RATE);
-  return {
-    source: "matrix",
-    rule: `regional matrix · ₹${rate.toLocaleString("en-IN")} × ${billed - odd}`,
-    billed, base, oversize: oversizeAmt, slab, peak, gst,
-    total: taxable + gst, perBag: Math.round((taxable + gst) / billed),
-  };
+  /* chart only: a lane that is not on the rate chart is ALWAYS "rate on
+   * request" — everywhere (website, partner desk, team quotes, imports).
+   * The old regional zone matrix no longer prices anything. */
+  return { error: "RATE_ON_REQUEST" };
 }
 
 export const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;

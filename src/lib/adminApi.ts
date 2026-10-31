@@ -26,6 +26,10 @@ export async function adminListBookings(): Promise<Booking[]> {
   return ((await r.json()).bookings ?? []) as Booking[];
 }
 
+const REFRESH_EVENT = "bagdrop:bookings-changed";
+/** Ask every open booking list to refetch now (after a server-side action). */
+export function refreshBookings() { window.dispatchEvent(new Event(REFRESH_EVENT)); }
+
 export async function adminSaveBooking(doc: Booking): Promise<void> {
   if (backend === "local") {
     const map = lsRead();
@@ -37,6 +41,8 @@ export async function adminSaveBooking(doc: Booking): Promise<void> {
   const r = await fetch("/api/admin/bookings", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc }),
   });
+  /* refetch every open list now, so the next action uses the new revision */
+  window.dispatchEvent(new Event(REFRESH_EVENT));
   if (!r.ok) {
     const j = await r.json().catch(() => ({} as { error?: string; detail?: string }));
     throw new Error(j?.detail ?? j?.error ?? `HTTP_${r.status}`);
@@ -65,5 +71,6 @@ export function watchAdminBookings(cb: (list: Booking[]) => void, onError?: (e: 
   const tick = () => { adminListBookings().then((l) => { if (!dead) cb(l); }).catch((e) => { if (!dead) onError?.(e); }); };
   tick();
   const timer = setInterval(tick, POLL_MS);
-  return () => { dead = true; clearInterval(timer); };
+  window.addEventListener(REFRESH_EVENT, tick);
+  return () => { dead = true; clearInterval(timer); window.removeEventListener(REFRESH_EVENT, tick); };
 }

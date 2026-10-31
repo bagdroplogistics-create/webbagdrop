@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { decideInstant } from "@/lib/instantServer";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { loadAgents, saveAgents, makePartnerToken, partnerIdFromCookies, ledgerFor, commissionFor, billingMode, walletApply, type Agent } from "@/lib/partners";
 import { makeQuotedBooking } from "@/lib/quoteFactory";
 import { loadMasters } from "@/lib/pricingSettings";
-import { quote } from "@/lib/pricing";
+import { quote, routeFor } from "@/lib/pricing";
 import { notify, kickSweep } from "@/lib/automation";
 import type { Booking, CrmActivity, Inquiry, Mode, UseCase } from "@/lib/types";
 
@@ -135,6 +136,20 @@ export async function POST(req: Request) {
           : `B2B booking by ${agent.company} (${agent.code}) · retail ${inr(total)} charged to partner ${mode} · commission ${inr(commission)} accrues to agent`,
       }],
     };
+    /* instant booking: wallet/credit agents are paid at booking, so a booking on an
+     * instant route that qualifies is confirmed straight away (no team step).
+     * Collect-and-remit stays on team approval — Bagdrop hasn't been paid yet. */
+    if (mode !== "remit") {
+      const route = routeFor(paid.from, paid.to, (await loadMasters()).routes);
+      const inst = await decideInstant(sb, route, { date: paid.pickupDate || paid.date, bags: paid.bags, oversize: paid.oversize });
+      if (inst?.result.ok) {
+        paid.status = "accepted";
+        paid.admin = { ...paid.admin, decision: { state: "approved", at: now, by: "instant", note: "Instant booking — partner prepaid" }, instant: { at: now, holdUntil: null } };
+        paid.events = [...paid.events, { at: now, by: "admin", text: "⚡ INSTANT booking — auto-confirmed (instant route, partner prepaid)" }];
+      } else if (inst && !inst.result.ok) {
+        paid.admin = { ...paid.admin, instantMiss: { code: inst.result.code, reason: inst.result.reason } };
+      }
+    }
     const { error } = await sb.from("bookings").upsert({ id: paid.id, doc: paid, status: paid.status, created: paid.created });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

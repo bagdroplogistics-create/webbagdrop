@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bagdrop · Front-end Theme Options</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=Source+Sans+3:wght@400;600&family=Archivo:wght@500;800;900&family=Inter:wght@400;600;800&family=Manrope:wght@400;600;800&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.55 Inter,-apple-system,sans-serif;background:#F4F3F0;color:#17181C;
+  padding:0 max(16px,env(safe-area-inset-left,0px)) 70px max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font:800 30px/1.1 Inter;letter-spacing:-.02em;margin:40px 0 6px}
+.lede{color:#6b6f78;margin:0 0 26px;max-width:62ch}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(460px,1fr))}
+@media (max-width:520px){.grid{grid-template-columns:1fr}}
+.opt{border-radius:20px;overflow:hidden;border:1px solid #E2E1DC;background:#fff;box-shadow:0 2px 10px rgba(10,15,40,.05)}
+.opt .tag{display:flex;justify-content:space-between;align-items:baseline;padding:14px 18px;border-bottom:1px solid #EDECE8}
+.opt .tag b{font:800 16px Inter}
+.opt .tag span{font-size:12px;color:#8a8d95}
+.sw{display:flex;height:34px}
+.sw i{flex:1}
+.mock{padding:22px;min-height:240px}
+.mock .kick{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+.mock h2{margin:0 0 8px}
+.mock p{margin:0 0 16px;font-size:14px}
+.mock .card{border-radius:14px;padding:14px 16px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.mock .btn{display:inline-block;border-radius:999px;padding:10px 22px;font-size:13.5px;font-weight:700}
+.fonts{padding:10px 18px 16px;border-top:1px solid #EDECE8;font-size:12px;color:#6b6f78}
+.fonts b{color:#17181C}
+
+/* A — current */
+.a .mock{background:#FAFAF8;color:#0B1426}
+.a .kick{color:#EA580C}
+.a h2{font:800 26px/1.1 Geist;letter-spacing:-.02em}
+.a p{color:#6B7280;font-family:Geist}
+.a .card{background:#fff;border:1px solid #E5E7EB;font-family:Geist}
+.a .btn{background:#EA580C;color:#fff;font-family:Geist}
+/* B — editorial warm */
+.b .mock{background:#F7F3E9;color:#1E2A23}
+.b .kick{color:#8C6F2E}
+.b h2{font:700 30px/1.05 "Cormorant Garamond";letter-spacing:0}
+.b p{color:#5B6A60;font-family:"Source Sans 3"}
+.b .card{background:#FFFDF7;border:1px solid #E4DCC6;font-family:"Source Sans 3"}
+.b .btn{background:#23402F;color:#F2E8C9;font-family:"Source Sans 3"}
+/* C — bold modern */
+.c .mock{background:#101014;color:#F5F5F2}
+.c .kick{color:#FF6A1A}
+.c h2{font:900 28px/1.05 Archivo;letter-spacing:-.02em;text-transform:uppercase}
+.c p{color:#9CA0AA;font-family:Inter}
+.c .card{background:#1A1B21;border:1px solid #2A2C35;font-family:Inter}
+.c .btn{background:#FF6A1A;color:#101014;font-family:Inter}
+/* D — soft minimal */
+.d .mock{background:#F6F7F8;color:#2A2D33}
+.d .kick{color:#D97745}
+.d h2{font:800 26px/1.15 Manrope;letter-spacing:-.015em}
+.d p{color:#7C828C;font-family:Manrope}
+.d .card{background:#fff;border:0;box-shadow:0 6px 24px -10px rgba(30,40,70,.14);font-family:Manrope}
+.d .btn{background:#D97745;color:#fff;font-family:Manrope}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Front-end theme options</h1>
+<p class="lede">The same booking moment rendered in each direction — palette strip, display + body fonts, and how a price card and button feel. Tell Claude A, B, C or D (or mix: “B’s colors with A’s fonts”).</p>
+
+<div class="grid">
+
+<div class="opt a">
+  <div class="tag"><b>A · Current — Bagdrop Orange</b><span>as live today</span></div>
+  <div class="sw"><i style="background:#FAFAF8"></i><i style="background:#FFFFFF"></i><i style="background:#0B1426"></i><i style="background:#EA580C"></i><i style="background:#FFF7ED"></i></div>
+  <div class="mock">
+    <div class="kick">Sealed · Tracked · Insured</div>
+    <h2>Travel light. We carry the rest.</h2>
+    <p>Door-to-door baggage across India. GST 5%, no hidden charges.</p>
+    <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+    <p style="margin-top:14px"><span class="btn">Book a pickup</span></p>
+  </div>
+  <div class="fonts">Display &amp; body: <b>Geist Sans</b> · Canvas #FAFAF8 · Ink #0B1426 · Accent <b>#EA580C</b></div>
+</div>
+
+<div class="opt b">
+  <div class="tag"><b>B · Editorial Warm</b><span>premium travel journal</span></div>
+  <div class="sw"><i style="background:#F7F3E9"></i><i style="background:#FFFDF7"></i><i style="background:#23402F"></i><i style="background:#8C6F2E"></i><i style="background:#F2E8C9"></i></div>
+  <div class="mock">
+    <div class="kick">The art of arriving empty-handed</div>
+    <h2>Your bags, travelling first class.</h2>
+    <p>Sealed with you at the door. Released only to you.</p>
+    <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+    <p style="margin-top:14px"><span class="btn">Reserve a pickup</span></p>
+  </div>
+  <div class="fonts">Display: <b>Cormorant Garamond</b> · Body: <b>Source Sans 3</b> · Cream #F7F3E9 · Forest #23402F · Gold <b>#8C6F2E</b></div>
+</div>
+
+<div class="opt c">
+  <div class="tag"><b>C · Bold Modern</b><span>startup energy, dark hero</span></div>
+  <div class="sw"><i style="background:#101014"></i><i style="background:#1A1B21"></i><i style="background:#F5F5F2"></i><i style="background:#FF6A1A"></i><i style="background:#2A2C35"></i></div>
+  <div class="mock">
+    <div class="kick">Zero bags. Full speed.</div>
+    <h2>Skip the carousel forever</h2>
+    <p>Your bags fly separately. You just fly.</p>
+    <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+    <p style="margin-top:14px"><span class="btn">Book now →</span></p>
+  </div>
+  <div class="fonts">Display: <b>Archivo Black</b> · Body: <b>Inter</b> · Near-black #101014 · Vivid orange <b>#FF6A1A</b></div>
+</div>
+
+<div class="opt d">
+  <div class="tag"><b>D · Soft Minimal</b><span>calm, Apple-like</span></div>
+  <div class="sw"><i style="background:#F6F7F8"></i><i style="background:#FFFFFF"></i><i style="background:#2A2D33"></i><i style="background:#D97745"></i><i style="background:#E8EAEE"></i></div>
+  <div class="mock">
+    <div class="kick">Baggage, handled</div>
+    <h2>The lightest way to travel.</h2>
+    <p>Book in two minutes. Track every step.</p>
+    <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+    <p style="margin-top:14px"><span class="btn">Get started</span></p>
+  </div>
+  <div class="fonts">Display &amp; body: <b>Manrope</b> · Pale grey #F6F7F8 · Muted orange <b>#D97745</b> · Shadow-led cards, no borders</div>
+</div>
+
+</div>
+</div>
+</body>
+</html>

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { NAV } from "./data";
 import { Icon } from "./Icon";
 import { CONTAINER } from "./SectionHeading";
@@ -27,6 +28,15 @@ export default function SiteHeader() {
             <a key={n.href} href={n.href} className="transition-colors hover:text-brand">{n.label}</a>
           ))}
         </nav>
+
+        {/* customers come back here to see, pay for and track a booking */}
+        <Link href="/account" className="hidden whitespace-nowrap text-base font-semibold text-ink transition-colors hover:text-brand md:inline">
+          My bookings
+        </Link>
+        {/* B2B: travel agents, hotels and event companies book here */}
+        <Link href="/partner" className="hidden whitespace-nowrap text-base font-medium text-graphite transition-colors hover:text-brand lg:inline">
+          Partner login
+        </Link>
 
         <a
           href="#book"
@@ -58,6 +68,12 @@ export default function SiteHeader() {
                 {n.label}
               </a>
             ))}
+            <Link href="/account" onClick={() => setOpen(false)} className="rounded-lg px-2 py-2.5 text-[16px] font-semibold text-ink hover:bg-paper">
+              My bookings · track, pay or change a booking
+            </Link>
+            <Link href="/partner" onClick={() => setOpen(false)} className="rounded-lg px-2 py-2.5 text-[16px] font-medium text-graphite hover:bg-paper hover:text-ink">
+              Partner login · agents & hotels
+            </Link>
             <a href="#book" onClick={() => setOpen(false)} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white">
               Book Now <Icon name="arrow" size={15} />
             </a>

@@ -11,9 +11,12 @@
  *  happens exactly as it does on bagdrop.co today. Only status values this
  *  app has actually observed in production data, or that bagdrop-web's own
  *  lead→booking status-sync map uses, are offered here — never invented. */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLoad } from "@/lib/useLoad";
+import { useOnChange } from "@/lib/stateSync";
 import { inr } from "@/lib/pricing";
-import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
+import { adminApplyPatch, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
+import { isPaid } from "@/lib/payState";
 import type { Booking, BookingStatus } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
@@ -28,6 +31,11 @@ const LABEL: Record<BookingStatus, string> = {
   accepted: "accepted", assigned: "captain assigned", picked_up: "picked up",
   in_transit: "in transit", delivered: "delivered", rejected: "rejected", cancelled: "cancelled",
 };
+const DECISION_LABEL: Record<string, string> = { approved: "approved", rejected: "rejected", hold: "on hold", info: "waiting for client info" };
+/** Staff can (re)decide until payment is verified or the bags move. */
+const canDecide = (b: Booking) => !isPaid(b) && !b.payer && b.pay?.status !== "submitted" && ["submitted", "revised", "accepted"].includes(b.status);
+/** Money is settled: verified payment, a partner's wallet/credit capture, or a host-billed event. */
+const opsReady = (b: Booking) => isPaid(b) || !!b.payer;
 const FILTERS = ["all", "submitted", "revised", "accepted", "rejected", "quoted"] as const;
 const FILTER_LABEL: Record<(typeof FILTERS)[number], string> = {
   all: "All", submitted: "Needs decision", revised: "Revised",
@@ -61,7 +69,8 @@ function bookingRow(b: Booking): Row {
     route: `${b.from} → ${b.to}`, sub: `${b.ucName} · ${b.date}`,
     pcs: `${b.bags}${b.oversize ? `+${b.oversize}` : ""}`,
     total: b.quote.breakdown.ror ? "ROR" : inr(b.quote.total),
-    statusLabel: LABEL[b.status], statusTone: TONE[b.status], sortAt: b.created,
+    statusLabel: (b.admin as { instant?: { expired?: boolean } }).instant && !(b.admin as { instant?: { expired?: boolean } }).instant!.expired ? `⚡ ${LABEL[b.status]}` : LABEL[b.status],
+    statusTone: TONE[b.status], sortAt: b.created,
   };
 }
 function leadRow(l: ProductionLead): Row {
@@ -77,6 +86,48 @@ function leadRow(l: ProductionLead): Row {
   };
 }
 
+/* ---------- payment details for an approved, unpaid booking ----------
+ * Prefers a Razorpay payment link (paid in one tap, confirmed automatically);
+ * falls back to the UPI / bank text when the gateway isn't configured. */
+function PayLinkButtons({ booking }: { booking: Booking }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  async function link(): Promise<string | null> {
+    const r = await fetch("/api/admin/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: booking.id }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.url) return j.url as string;
+    if (r.status !== 503) setMsg(j.detail ?? j.error ?? "Couldn't make the payment link.");
+    return null;
+  }
+  async function whatsapp() {
+    setMsg(null);
+    const url = await link();
+    const first = booking.traveller.name.split(" ")[0];
+    const amount = `₹${booking.quote.total.toLocaleString("en-IN")}`;
+    let text: string;
+    if (url) {
+      text = `Hi ${first}, Bagdrop here. Your booking ${booking.id} (${booking.from} → ${booking.to}) is approved. Please pay ${amount} securely here — UPI, card or netbanking, confirmed instantly: ${url}\nYour bookings: ${location.origin}/account`;
+    } else {
+      const c = (await fetch("/api/payconfig").then((r) => r.json()).catch(() => ({}))).config ?? {};
+      text = `Hi ${first}, Bagdrop here. Your booking ${booking.id} (${booking.from} → ${booking.to}) is approved. Please pay ${amount}${c.upiId ? ` by UPI to ${c.upiId} (Google Pay/PhonePe/Paytm)` : ""}${c.accountNo ? ` or bank transfer to ${c.accountName ?? c.payeeName ?? "Bagdrop"} · A/c ${c.accountNo} · IFSC ${c.ifsc ?? ""}` : ""}. Pay page with QR: ${location.origin}/q/${booking.id} — then upload the screenshot in your dashboard: ${location.origin}/account`;
+    }
+    const msisdn = booking.traveller.mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+    window.open(`https://wa.me/${msisdn}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+  async function copy() {
+    setMsg(null);
+    const url = await link();
+    if (url) { await navigator.clipboard?.writeText(url); setMsg(`Payment link copied: ${url}`); }
+    else if (!msg) setMsg("Online payment isn't switched on — send the UPI / bank details instead.");
+  }
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => void whatsapp()}>WhatsApp payment link →</Button>
+      <Button size="sm" variant="ghost" onClick={() => void copy()}>Copy pay link</Button>
+      {msg && <span className="w-full text-xs text-muted">{msg}</span>}
+    </>
+  );
+}
+
 export default function Inbox({ search = "" }: { search?: string }) {
   const [all, setAll] = useState<Booking[]>([]);
   const [leads, setLeads] = useState<ProductionLead[]>([]);
@@ -85,7 +136,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
   const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
-  const [form, setForm] = useState<{ kind: "accept" | "revise" | "reject" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
+  const [form, setForm] = useState<{ kind: "approve" | "revise" | "hold" | "info" | "reject" | "captain" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
 
   const [prodBusy, setProdBusy] = useState(false);
   const [prodErr, setProdErr] = useState<string | null>(null);
@@ -94,17 +145,18 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setAll, (e) => setErr(e instanceof Error ? e.message : String(e))), []);
 
-  async function refetchLeads() {
+  const refetchLeads = useCallback(async () => {
     const r = await fetch("/api/admin/production-leads?limit=1000");
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
     setLeads(j.leads as ProductionLead[]);
-  }
+  }, []);
   // Both sources are fetched together, and the table waits for both before
   // showing anything — otherwise this app's own (mostly old test) bookings
   // flash alone for the second or two it takes bagdrop.co's leads to load,
   // then jump around once they join and the list re-sorts by date.
-  useEffect(() => { refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))).finally(() => setProdLoaded(true)); }, []);
+  const firstLoad = useCallback(() => refetchLeads().catch((e) => setLeadsErr(e instanceof Error ? e.message : String(e))).finally(() => setProdLoaded(true)), [refetchLeads]);
+  useLoad(firstLoad);
 
   /** Writes a status/price change to production via bagdrop-web's own admin
    *  API (see src/app/api/admin/production-leads/[id]/route.ts) and refetches. */
@@ -122,7 +174,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
     setProdBusy(false);
   }
 
-  useEffect(() => { setForm({ kind: null, captain: "", amount: "", reason: "" }); }, [sel]);
+  useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => setForm({ kind: null, captain: "", amount: "", reason: "" }));
 
   const q = search.trim().toLowerCase();
   const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
@@ -136,12 +188,40 @@ export default function Inbox({ search = "" }: { search?: string }) {
     return merged.filter((r) => [r.ref, r.name, r.mobile, r.route].some((v) => v?.toLowerCase().includes(q)));
   }, [newBookings, leads, filter, q]);
 
-  useEffect(() => { setPage(1); }, [filter, q]);
+  useOnChange(`${filter}|${q}`, () => setPage(1));
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const booking = sel?.source === "new" ? all.find((b) => b.id === sel.id) ?? null : null;
   const lead = sel?.source === "production" ? leads.find((l) => l.id === sel.id) ?? null : null;
+
+  const [busy, setBusy] = useState(false);
+  /** Approve / revise / hold / needs-info / reject go through the server, which
+   *  signs the price, stamps the decision history and notifies the client. */
+  async function decide(b: Booking, decision: "approve" | "revise" | "hold" | "info" | "reject", note: string, total?: number) {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/admin/decision", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: b.id, decision, note: note.trim(), total }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.detail ?? j?.error ?? `HTTP_${r.status}`);
+      setForm({ kind: null, captain: "", amount: "", reason: "" });
+      refreshBookings();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    setBusy(false);
+  }
+  async function unlockAadhaar(b: Booking) {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/admin/identity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "unlock", id: b.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error ?? `HTTP_${r.status}`);
+      refreshBookings();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    setBusy(false);
+  }
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
     try {
@@ -321,7 +401,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
               ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
               ["Pieces", `${booking.bags} bags${booking.oversize ? ` + ${booking.oversize} oversize` : ""}`],
               ["Quote", booking.quote.breakdown.ror ? "Rate on request" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
-              ["Payment", booking.pay ? `${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
+              ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "✓ verified" : booking.pay.status === "submitted" ? "⏳ proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
               ["Identity", booking.identity?.ok ? `✓ verified · ${booking.identity.method}` : "⚠ Aadhaar pending — pickup locked"],
             ] as const).map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
@@ -334,43 +414,72 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </p>
             )}
 
+            {(() => {
+              const d = booking.admin.decision as { state?: string; note?: string } | undefined;
+              return d?.state && d.state !== "pending" ? (
+                <p className={`mt-2 rounded-xl p-2.5 text-xs ${d.state === "approved" ? "bg-green-50 text-green-900" : d.state === "rejected" ? "bg-red-50 text-red-900" : "bg-amber-50 text-amber-900"}`}>
+                  <b>Decision: {DECISION_LABEL[d.state] ?? d.state}</b>{d.note ? ` · ${d.note}` : ""}
+                </p>
+              ) : null;
+            })()}
+            {booking.admin.aadhaarLocked === true && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-900">
+                <span><b>Aadhaar locked</b> after 3 wrong codes. Speak to the client, then unlock.</span>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void unlockAadhaar(booking)}>Unlock</Button>
+              </div>
+            )}
+
             <div className="mt-4 flex flex-wrap gap-2">
-              {["submitted", "revised"].includes(booking.status) && (
+              {canDecide(booking) && (
                 <>
-                  <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "accept" }))}>Accept</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "revise", amount: String(booking.quote.total) }))}>Revise price</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "reject" }))}>Reject</Button>
+                  <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "approve", amount: booking.quote.breakdown.ror ? "" : String(booking.quote.total), reason: "" }))}>Approve</Button>
+                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "revise", amount: booking.quote.breakdown.ror ? "" : String(booking.quote.total), reason: "" }))}>Revise price</Button>
+                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "hold", reason: "" }))}>On hold</Button>
+                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "info", reason: "" }))}>Needs info</Button>
+                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "reject", reason: "" }))}>Reject</Button>
                 </>
               )}
-              {booking.status === "accepted" && <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "accept" }))}>Assign captain</Button>}
+              {["submitted", "revised"].includes(booking.status) && opsReady(booking) && <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "captain" }))}>Confirm booking</Button>}
+              {booking.status === "accepted" && opsReady(booking) && <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "captain" }))}>Assign captain</Button>}
+              {booking.status === "accepted" && !opsReady(booking) && <span className="self-center text-xs text-muted">Approved · waiting for the client&apos;s payment to be verified in Finance before a captain is assigned.</span>}
+              {booking.status === "accepted" && !opsReady(booking) && booking.pay?.status !== "submitted" && booking.quote.total > 0 && <PayLinkButtons booking={booking} />}
               {booking.status === "assigned" && <Button size="sm" onClick={() => void act(booking, { status: "picked_up" }, "Picked up · sealed and photographed")}>Mark picked up</Button>}
               {booking.status === "picked_up" && <Button size="sm" onClick={() => void act(booking, { status: "in_transit" }, `On the line haul to ${booking.to}`)}>Mark in transit</Button>}
               {booking.status === "in_transit" && <Button size="sm" onClick={() => void act(booking, { status: "delivered" }, "Delivered against OTP · invoice sent")}>Mark delivered</Button>}
             </div>
 
-            {form.kind === "accept" && (
+            {form.kind === "captain" && (
               <div className="mt-3 rounded-xl bg-paper p-3">
-                <Field label="Captain (optional)"><Input value={form.captain} onChange={(e) => setForm((f) => ({ ...f, captain: e.target.value }))} placeholder="Ravi K" /></Field>
-                <Button size="sm" onClick={() => void act(booking,
-                  { status: form.captain ? "assigned" : "accepted", admin: { ...booking.admin, captain: form.captain || booking.admin.captain } },
-                  `Accepted by ops${form.captain ? ` · captain ${form.captain}` : ""}. LR issued.`)}>Confirm accept</Button>
+                <Field label={booking.status === "accepted" ? "Captain" : "Captain (optional)"}><Input value={form.captain} onChange={(e) => setForm((f) => ({ ...f, captain: e.target.value }))} placeholder="Ravi K" /></Field>
+                <Button size="sm" disabled={booking.status === "accepted" && !form.captain.trim()} onClick={() => void act(booking,
+                  { status: form.captain.trim() ? "assigned" : "accepted", admin: { ...booking.admin, captain: form.captain.trim() || booking.admin.captain } },
+                  form.captain.trim() ? `Confirmed by ops · captain ${form.captain.trim()} assigned` : "Confirmed by ops")}>{booking.status === "accepted" ? "Assign" : "Confirm"}</Button>
               </div>
             )}
-            {form.kind === "revise" && (
+            {(form.kind === "approve" || form.kind === "revise") && (
               <div className="mt-3 rounded-xl bg-paper p-3">
-                <Field label="Revised total (₹)"><Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
-                <Field label="Reason shown to the customer"><Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Oversize re-rated after review" /></Field>
-                <Button size="sm" onClick={() => void act(booking,
-                  { status: "revised", admin: { ...booking.admin, revisedTotal: Math.round(+form.amount || 0), reason: form.reason } },
-                  `Price revised to ${inr(+form.amount || 0)} · ${form.reason}`)}>Send revised price</Button>
+                <Field label={form.kind === "approve"
+                  ? (booking.quote.breakdown.ror ? "Amount to approve at (₹, incl. 5% GST) — required for a new sector" : "Amount (₹, incl. 5% GST) — change only to override the chart price")
+                  : "Revised total (₹, incl. 5% GST)"}>
+                  <Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value.replace(/[^\d]/g, "") }))} />
+                </Field>
+                <Field label="Note to the client (optional)"><Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder={form.kind === "approve" ? "Pickup window confirmed" : "Oversize re-rated after review"} /></Field>
+                <Button size="sm" disabled={busy || (form.kind === "revise" && !(+form.amount > 0)) || (form.kind === "approve" && !!booking.quote.breakdown.ror && !(+form.amount > 0))}
+                  onClick={() => void decide(booking, form.kind as "approve" | "revise",
+                    form.reason, form.kind === "approve" && +form.amount === booking.quote.total && !booking.quote.breakdown.ror ? undefined : +form.amount || undefined)}>
+                  {form.kind === "approve" ? "Approve and send payment details" : "Send revised price"}
+                </Button>
               </div>
             )}
-            {form.kind === "reject" && (
+            {(form.kind === "hold" || form.kind === "info" || form.kind === "reject") && (
               <div className="mt-3 rounded-xl bg-paper p-3">
-                <Field label="Reason shown to the customer"><Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Capacity full for the chosen date" /></Field>
-                <Button size="sm" onClick={() => void act(booking,
-                  { status: "rejected", admin: { ...booking.admin, reason: form.reason } },
-                  `Rejected · ${form.reason} · refund initiated`)}>Reject and refund</Button>
+                <Field label={form.kind === "info" ? "Question for the client" : "Reason shown to the client"}>
+                  <Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+                    placeholder={form.kind === "hold" ? "Checking truck capacity for that date" : form.kind === "info" ? "Please share the exact flat number and lift access" : "No capacity on the chosen date"} />
+                </Field>
+                <Button size="sm" disabled={busy || !form.reason.trim()} onClick={() => void decide(booking, form.kind as "hold" | "info" | "reject", form.reason)}>
+                  {form.kind === "hold" ? "Put on hold" : form.kind === "info" ? "Ask the client" : "Reject booking"}
+                </Button>
               </div>
             )}
 

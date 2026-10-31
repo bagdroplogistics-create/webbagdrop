@@ -4,14 +4,13 @@
  *  Only the data calls changed:
  *   - DB.watchDoc("events", code)  -> watchEvent (anon select, RLS-limited
  *                                     to open events; polls for changes)
- *   - DB.put("bookings", id, doc)  -> createBooking (create_booking RPC —
- *                                     the real id is assigned server-side)
+ *   - DB.put("bookings", id, doc)  -> POST /api/wedding/landing (server
+ *                                     decides id, price, status, identity)
  *   - DB.list("bookings")+filter   -> trackEventBookings (server route; needs
  *                                     the full mobile, returns a reduced view)
  */
-import { createBooking, newBookingId, nowIso } from "@/lib/db";
 import { trackEventBookings, watchEvent } from "@/lib/eventDb";
-import type { BagdropEvent, Booking } from "@/lib/types";
+import type { BagdropEvent } from "@/lib/types";
 
 export function initWeddingLanding(): () => void {
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -120,35 +119,29 @@ export function initWeddingLanding(): () => void {
       $("w-go").textContent = "Confirm and reserve";
       return;
     }
-    if (val("w-aad") !== "112233") { msg.textContent = "The Aadhaar code is not right. (demo code: 112233)"; return; }
-
-    const s = sectorFor(val("w-city"));
-    const doc: Booking = {
-      id: newBookingId(), created: nowIso(), status: "submitted",
-      eventCode: EV.id, eventName: EV.name,
-      uc: "wed", ucName: "Wedding · " + ((EV.landing || {}).names || EV.name), mode: "road",
-      from: val("w-city"), to: EV.venueCity,
-      pickAddr: val("w-addr"), dropAddr: EV.venue || EV.venueCity,
-      zo: "", zd: "", date: s ? s.pickDay : EV.dates.in, ref: EV.id,
-      slot: "Wedding pickup day",
-      bags, oversize: 0, billed: Math.max(bags, (EV.rates || {}).minBags || 2),
-      traveller: { name: val("w-lead"), mobile: val("w-mob"), email: "", res: "in" },
-      family: { name: val("w-fam"), side: val("w-side") },
-      payer: EV.billing === "host" ? { name: "Host account · " + EV.id, contact: (EV.contacts || {}).hostMobile || "" } : null,
-      note: val("w-note"),
-      quote: { qid: null, total: s ? s.rate * Math.max(bags, (EV.rates || {}).minBags || 2) * (EV.direction === "both" ? 2 : 1) : 0, breakdown: { internal: true } as Booking["quote"]["breakdown"] },
-      identity: { ok: true, at: nowIso(), method: "DigiLocker (guest link)", score: 0.95 },
-      pay: null, admin: {}, events: [{ at: nowIso(), by: "customer", text: "Family booked on the wedding landing page · " + EV.id }],
-    };
+    /* the server checks the code, decides price, status and identity */
     saving = true;
     $("w-go").textContent = "Saving…";
-    createBooking(doc).then((saved) => {
+    fetch("/api/wedding/landing", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventCode: EV.id, family: val("w-fam"), lead: val("w-lead"), mobile: val("w-mob"),
+        city: val("w-city"), addr: val("w-addr"), side: val("w-side"), note: val("w-note"),
+        bags, aadhaar: val("w-aad"),
+        prohibited: ($("w-proh") as HTMLInputElement).checked, indemnity: ($("w-ind") as HTMLInputElement).checked,
+      }),
+    }).then((r) => r.json()).then((j: { ok?: boolean; id?: string; pickDay?: string; retDay?: string; error?: string }) => {
       saving = false;
+      if (!j.ok || !j.id) {
+        $("w-go").textContent = "Confirm and reserve";
+        msg.textContent = j.error === "WRONG_AADHAAR_OTP" ? "The Aadhaar code is not right. (demo code: 112233)" : "Could not save the booking. Check your details and try again.";
+        return;
+      }
       $("formview").hidden = true;
       $("doneview").hidden = false;
-      $("w-ref").textContent = saved.id;
+      $("w-ref").textContent = j.id;
       $("w-donedays").innerHTML = "<b>" + esc(val("w-fam")) + "</b> · " + bags + " bags from " + esc(val("w-city")) +
-        " · pickup " + esc(s ? s.pickDay : EV!.dates.in) + (EV!.direction !== "out" ? " · home again after " + esc(s ? s.retDay : EV!.dates.out) : "") + ".";
+        " · pickup " + esc(j.pickDay ?? EV!.dates.in) + (EV!.direction !== "out" ? " · home again after " + esc(j.retDay ?? EV!.dates.out) : "") + ".";
     }).catch(() => {
       saving = false;
       $("w-go").textContent = "Confirm and reserve";

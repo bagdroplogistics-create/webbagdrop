@@ -1,3 +1,4 @@
+import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
@@ -18,7 +19,7 @@ import type { Booking, CrmActivity } from "@/lib/types";
 
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
       if (!bk) { failed++; continue; }
       const rq = await requoteBooking(bk.doc as Booking);
       if (!rq) { failed++; continue; }                       // rate still not on the masters
-      await sb.from("bookings").upsert({ id: rq.doc.id, doc: rq.doc, status: rq.doc.status, created: rq.doc.created });
+      await saveOrThrow(sb, rq.doc);
       const upd: CrmActivity = { ...lead, ratePending: undefined, stage: "quoted", value: rq.doc.quote.total,
         quoteInfo: { qid: rq.doc.quote.qid, total: rq.doc.quote.total, validUntil: rq.doc.quote.validUntil ?? undefined, link: `/q/${rq.doc.id}` } };
       await sb.from("crm").upsert({ id: upd.id, doc: upd, status: null, created: upd.created });
@@ -99,3 +100,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ error: "BAD_ACTION" }, { status: 400 });
 }
+
+export const POST = retryOnConflict(handlePOST);

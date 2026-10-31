@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { TRACK_DEMO_STEPS } from "./data";
 import { Icon } from "./Icon";
 import { Section, SectionHeading } from "./SectionHeading";
@@ -97,6 +98,17 @@ export default function TrackDemo() {
             <span className="mt-1 text-[13px] text-steel">WhatsApp &amp; email updates ship today. Live GPS tracking will be available soon.</span>
           </div>
         </div>
+      </div>
+
+      {/* the real thing: every booking for the customer's mobile or email */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-brand/30 bg-brand-soft px-6 py-5">
+        <div className="flex flex-col gap-1">
+          <span className="text-[17px] font-semibold text-ink">Already booked? Track your real booking.</span>
+          <span className="text-[14px] text-steel">Sign in with the mobile or email you booked with: see its status, pay, add bags or sign the baggage bond.</span>
+        </div>
+        <Link href="/account" className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-dark">
+          Track my booking <Icon name="arrow" size={14} />
+        </Link>
       </div>
     </Section>
   );

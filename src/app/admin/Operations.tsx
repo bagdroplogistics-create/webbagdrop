@@ -16,6 +16,9 @@
  *  · Day planner: everything picking up / delivering around a date, grouped
  *    by city, with clubbing hints. DPMO/sigma strip on top. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
+import { useSyncedState } from "@/lib/stateSync";
+import { useLoad } from "@/lib/useLoad";
 import { inr } from "@/lib/pricing";
 import { adminApplyPatch, watchAdminBookings } from "@/lib/adminApi";
 import {
@@ -44,7 +47,7 @@ export default function Operations() {
     const j = await r.json();
     if (j.error) setErr(j.error); else { setVendors(j.vendors); setModel(j.costModel); }
   }, []);
-  useEffect(() => { void loadMasters(); }, [loadMasters]);
+  useLoad(loadMasters);
 
   const active = useMemo(() => bookings.filter((b) => ACTIVE.includes(b.status)), [bookings]);
   const sel = bookings.find((b) => b.id === selId) ?? null;
@@ -214,7 +217,6 @@ function ShipmentDesk({ b, vendors, model, onSave, onScore }: {
   void clubbing;
 
   const actual = actualCost(o);
-  const rev = b.pay?.amount ?? b.quote.total;
   const mg = marginPct(b);
   const custUpdate = next
     ? `BAGDROP UPDATE · ${b.id}\n${MILESTONES.filter((m) => o.milestones?.[m.key]).map((m) => `✓ ${m.name}`).join("\n")}\nNext: ${next.name}\nTrack live on your booking page.`
@@ -436,8 +438,9 @@ function CameraScanner({ onTag }: { onTag: (t: string) => void }) {
 
 /* ================= day planner ================= */
 function DayPlanner({ bookings, onOpen }: { bookings: Booking[]; onOpen: (id: string) => void }) {
-  const [date, setDate] = useState("");
-  useEffect(() => { setDate(new Date().toISOString().slice(0, 10)); }, []);
+  const now = useNow();
+  const [picked, setDate] = useState("");
+  const date = picked || (now ? new Date(now).toISOString().slice(0, 10) : ""); // today until a date is picked
   const near = (d: string) => Math.abs(new Date(d).getTime() - new Date(date).getTime()) <= 86400000;
   const pickups = bookings.filter((b) => ["accepted", "assigned"].includes(b.status) && near(b.pickupDate ?? b.date));
   const deliveries = bookings.filter((b) => ["picked_up", "in_transit"].includes(b.status) && near(b.deliveryDate ?? b.date));
@@ -524,8 +527,7 @@ function Vendors({ vendors, onSaved }: { vendors: Vendor[]; onSaved: () => Promi
 
 /* ================= cost model desk ================= */
 function CostDesk({ model, onSaved }: { model: CostModel; onSaved: () => Promise<void> }) {
-  const [m, setM] = useState<CostModel>(model);
-  useEffect(() => setM(model), [model]);
+  const [m, setM] = useSyncedState<CostModel>(model);
   const [lane, setLane] = useState({ name: "", pickup: "", linehaul: "", lastmile: "" });
   async function save(next: CostModel) {
     await fetch("/api/admin/ops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "saveCostModel", model: next }) });
@@ -655,7 +657,7 @@ function AutomationDesk() {
     const r = await fetch("/api/admin/automation");
     if (r.ok) setD(await r.json());
   }, []);
-  useEffect(() => { void load(); const t = setInterval(() => void load(), 15000); return () => clearInterval(t); }, [load]);
+  useLoad(load, 15000);
 
   async function run() {
     setBusy(true);

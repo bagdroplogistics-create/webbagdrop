@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bagdrop · Booking-page Side Card Options</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&family=Geist+Mono:wght@400;600&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.55 Geist,-apple-system,sans-serif;background:#F1F0ED;color:#0B1426;
+  padding:0 max(16px,env(safe-area-inset-left,0px)) 80px max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font:800 30px/1.1 Geist;letter-spacing:-.02em;margin:38px 0 6px}
+.lede{color:#525a68;margin:0 0 28px;max-width:72ch}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.opt{border-radius:18px;border:1px solid #E0DFDA;background:#FAFAF8;box-shadow:0 3px 14px rgba(10,15,40,.06);overflow:hidden}
+.head{padding:13px 16px;border-bottom:1px solid #ECEBE7;background:#fff}
+.head b{font:800 15px Geist}
+.head span{display:block;font-size:12px;color:#8a8d95;margin-top:2px}
+.stage{padding:16px}
+.sumcard{background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:14px;max-width:300px;margin:0 auto}
+.sumcard h4{font:700 13px Geist;margin:0 0 8px}
+.row{display:flex;justify-content:space-between;border-bottom:1px dashed #E5E7EB;padding:5px 0;font-size:12px}
+.row span:first-child{color:#525a68}
+.ink{background:#0B1426;color:#F4EEE4;border-radius:12px;padding:13px;margin-top:11px}
+.ink .k{font:600 10.5px "Geist Mono";opacity:.7;text-transform:uppercase;letter-spacing:.06em}
+.ink p{margin:5px 0 0;font-size:12.5px;line-height:1.5}
+.chips{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:10px}
+.chips i{font-style:normal;font-size:9.5px;background:rgba(255,255,255,.1);border-radius:8px;padding:6px 3px;text-align:center}
+.step{display:flex;gap:8px;margin-top:9px;font-size:11.5px;align-items:flex-start}
+.step b{flex:0 0 18px;height:18px;border-radius:50%;background:#EA580C;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+.stat{display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px}
+.stat b{font-family:"Geist Mono"}
+.quote{font-size:12px;line-height:1.55;font-style:italic;opacity:.95;margin-top:6px}
+.who{font-size:10.5px;opacity:.7;margin-top:6px;font-style:normal}
+.track{margin-top:9px;font-size:10.5px;font-family:"Geist Mono"}
+.track em{font-style:normal;color:#7BE3A2}
+.wa{display:block;text-align:center;background:#EA580C;color:#fff;border-radius:999px;padding:8px;font:700 12px Geist;margin-top:11px;text-decoration:none}
+.note{padding:11px 16px 14px;border-top:1px solid #ECEBE7;background:#fff;font-size:12px;color:#525a68}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Booking page — what sits where the price was</h1>
+<p class="lede">The exact price now appears only at the "Your locked price" step. These are five options for the dark card in the booking summary until then. Reply A–E, or combine ("A, and D after the traveller step").</p>
+
+<div class="grid">
+
+<div class="opt">
+  <div class="head"><b>A · Transparent-pricing promise</b><span>applied right now as the default</span></div>
+  <div class="stage"><div class="sumcard">
+    <h4>Your booking</h4>
+    <div class="row"><span>Route</span><span>Ahmedabad → Mumbai</span></div>
+    <div class="row"><span>Pieces</span><span>2 bags</span></div>
+    <div class="ink">
+      <span class="k">Transparent pricing</span>
+      <p>Your exact price is revealed before payment — GST 5% included, no hidden charges, locked for 24 hours.</p>
+      <div class="chips"><i>Sealed at pickup</i><i>Scan-tracked</i><i>Insured</i></div>
+    </div>
+  </div></div>
+  <div class="note">Reassures on price without quoting one; keeps the trust chips visible from the first second.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>B · How it works</b><span>three steps, zero anxiety</span></div>
+  <div class="stage"><div class="sumcard">
+    <h4>Your booking</h4>
+    <div class="row"><span>Route</span><span>Ahmedabad → Mumbai</span></div>
+    <div class="row"><span>Pieces</span><span>2 bags</span></div>
+    <div class="ink">
+      <span class="k">How it works</span>
+      <div class="step"><b>1</b><span>Captain arrives in your window, seals &amp; tags each bag with you</span></div>
+      <div class="step"><b>2</b><span>Every tag is scanned at each hand-off — track live on your phone</span></div>
+      <div class="step"><b>3</b><span>Released only against your verified identity at delivery</span></div>
+    </div>
+  </div></div>
+  <div class="note">Best for first-time customers — answers "what happens to my bag?" before they ask.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>C · Proof &amp; numbers</b><span>operations stats as trust</span></div>
+  <div class="stage"><div class="sumcard">
+    <h4>Your booking</h4>
+    <div class="row"><span>Route</span><span>Ahmedabad → Mumbai</span></div>
+    <div class="row"><span>Pieces</span><span>2 bags</span></div>
+    <div class="ink">
+      <span class="k">Why travellers trust us</span>
+      <div class="stat"><span>Bags delivered intact</span><b>99.97%</b></div>
+      <div class="stat"><span>Scans per journey</span><b>8+</b></div>
+      <div class="stat"><span>Cover per bag</span><b>₹20,000</b></div>
+      <div class="stat"><span>Avg. pickup punctuality</span><b>97%</b></div>
+    </div>
+  </div></div>
+  <div class="note">Numbers sell to business travellers; figures come from the live ops metrics once volumes build.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>D · Customer voice</b><span>one rotating testimonial</span></div>
+  <div class="stage"><div class="sumcard">
+    <h4>Your booking</h4>
+    <div class="row"><span>Route</span><span>Ahmedabad → Mumbai</span></div>
+    <div class="row"><span>Pieces</span><span>2 bags</span></div>
+    <div class="ink">
+      <span class="k">★★★★★ · verified booking</span>
+      <p class="quote">"Checked out of the hotel empty-handed, found every bag waiting at home in Mumbai. The seal-at-door moment is what convinced my parents."</p>
+      <p class="who">— Priya S. · Ahmedabad → Mumbai · 4 bags</p>
+    </div>
+  </div></div>
+  <div class="note">Human and warm; rotates through 3–4 real quotes. Strongest for the wedding/family audience.</div>
+</div>
+
+<div class="opt">
+  <div class="head"><b>E · Live tracking preview + help</b><span>show the product, offer a hand</span></div>
+  <div class="stage"><div class="sumcard">
+    <h4>Your booking</h4>
+    <div class="row"><span>Route</span><span>Ahmedabad → Mumbai</span></div>
+    <div class="row"><span>Pieces</span><span>2 bags</span></div>
+    <div class="ink">
+      <span class="k">What you'll see after booking</span>
+      <div class="track"><em>✓</em> Picked up &amp; sealed · 08:42</div>
+      <div class="track"><em>✓</em> In hub, all pieces scanned · 10:15</div>
+      <div class="track">○ Out for delivery…</div>
+      <a class="wa" href="#">WhatsApp us — reply in minutes</a>
+    </div>
+  </div></div>
+  <div class="note">Demonstrates the live tracking they're buying and gives hesitant bookers a one-tap human channel.</div>
+</div>
+
+</div>
+</div>
+</body>
+</html>

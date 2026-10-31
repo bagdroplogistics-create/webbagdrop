@@ -1,3 +1,4 @@
+import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
@@ -15,7 +16,7 @@ const CONFIRMED = ["accepted", "assigned", "picked_up", "in_transit"];
  *  intermediate "assigned but no LR yet" state had no distinct behaviour.
  *  Optional `lr` details (pre-filled from the booking, editable on the LR
  *  page) are stored on the booking and rendered on the LR document. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     docs: [...(booking.docs ?? []), { type: "LR", no: String(no), at: nowIso, amount: lrAmount }],
     events: [...booking.events, { at: nowIso, by: "admin", text: `${b.approveDraft ? "Auto-drafted LR approved by the team · " : ""}Assigned to trip ${tripId} · LR ${no} issued${lrDetails?.consignee ? ` · consignee ${lrDetails.consignee}` : ""}` }],
   };
-  const { error } = await sb.from("bookings").upsert({ id: updated.id, doc: updated, status: updated.status, created: updated.created });
+  const { error } = await saveOrThrow(sb, updated);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, booking: updated });
 }
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
 /** Unassign — drop the trip link so the booking can be re-assigned. The LR
  *  number itself is left on the booking's docs[] history (it was issued and
  *  stays issued; only the trip linkage is removed). */
-export async function DELETE(req: Request) {
+async function handleDELETE(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
@@ -101,7 +102,10 @@ export async function DELETE(req: Request) {
     ...booking, admin: restAdmin,
     events: [...booking.events, { at: nowIso, by: "admin", text: "Unassigned from trip" }],
   };
-  const { error } = await sb.from("bookings").upsert({ id: updated.id, doc: updated, status: updated.status, created: updated.created });
+  const { error } = await saveOrThrow(sb, updated);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, booking: updated });
 }
+
+export const POST = retryOnConflict(handlePOST);
+export const DELETE = retryOnConflict(handleDELETE);

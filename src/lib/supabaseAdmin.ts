@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 /** The SERVICE ROLE client — full read/write, bypasses every RLS policy.
@@ -17,6 +18,7 @@ const ID_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O/1/I/L
  *  used when the admin app creates a row itself (service role, no RPC). */
 export function newToken(prefix: string, len = 10): string {
   let s = "";
-  for (let i = 0; i < len; i++) s += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)];
+  /* cryptographic randomness — a booking id is the bearer key to its pages */
+  for (let i = 0; i < len; i++) s += ID_CHARS[randomInt(ID_CHARS.length)];
   return `${prefix}-${new Date().getFullYear()}-${s}`;
 }

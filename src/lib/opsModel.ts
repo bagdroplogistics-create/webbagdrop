@@ -82,7 +82,7 @@ export interface Vendor {
 /** Per-lane standard leg costs; `laneKey` is "From → To". Lanes not listed
  *  fall back to the defaults. The COO edits this in the module. */
 export interface CostModel {
-  defaults: { pickup: number; linehaul: number; lastmile: number };
+  defaults: { pickup: number; linehaul: number; lastmile: number; perBag?: number }; // perBag: extra handling/space cost per bag beyond the first
   lanes: Record<string, { pickup?: number; linehaul?: number; lastmile?: number }>;
   marginFloorPct: number; // warn when gross margin falls below this
 }

@@ -26,6 +26,21 @@ export interface RouteRate {
   addl: number;      // each additional bag
   bulkMin?: number | null;  // at this count, EVERY bag bills at bulkRate
   bulkRate?: number | null;
+  /** Instant booking: when on, a qualifying booking is auto-approved and
+   *  confirmed the moment it is paid — no team review (src/lib/instant.ts). */
+  instant?: InstantRule | null;
+}
+
+export interface InstantRule {
+  enabled: boolean;
+  minNoticeDays?: number | null; // days from today to the pickup date (default: settings, 5)
+  from?: string | null;          // active window, YYYY-MM-DD (inclusive)
+  to?: string | null;
+  blackout?: string[];           // YYYY-MM-DD dates closed for instant booking
+  weekdays?: number[] | null;    // pickup weekdays allowed, 0 = Sunday … 6; empty/missing = all
+  dailyCap?: number | null;      // instant bookings per pickup date on this route
+  maxBags?: number | null;       // bags per instant booking
+  allowOversize?: boolean;       // oversize pieces allowed in an instant booking
 }
 
 export interface QuoteInput {
@@ -81,6 +96,12 @@ export interface Payment {
   verifiedBy?: string;
   rejectedAt?: string | null;
   rejectedNote?: string;
+  /** payment proof the customer uploaded (private storage path) */
+  proof?: { path: string; name?: string; at: string } | null;
+  /** extra amount due after bags were ADDED post-payment */
+  topup?: { amount: number; status: "due" | "submitted" | "rejected"; utr?: string; proof?: { path: string; name?: string; at: string } | null; submittedAt?: string | null; rejectedNote?: string } | null;
+  /** every verified amount, for the audit trail */
+  history?: { at: string; amount: number; kind: "full" | "topup"; utr?: string; verifiedBy?: string }[];
   recon?: { at: string; ref: string };
 }
 
@@ -130,8 +151,25 @@ export interface Booking {
   pay: Payment | null;
   /** The signed "Undertaking for Moving Baggage Goods & Household Goods" —
    *  captured right before Aadhaar verification, after payment is verified. */
-  indemnity?: { acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place?: string } | null;
+  indemnity?: {
+    acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place?: string;
+    /** bond version + SHA-256 of the exact text agreed, the boxes ticked and how it was signed */
+    version?: string; textHash?: string; accepted?: string[]; fragile?: string; method?: "aadhaar_otp" | "email_otp" | "mobile_otp";
+  } | null;
+  /** Identity & compliance state for the pre-pickup bond. Domestic guests
+   *  sign with Aadhaar OTP; international guests upload documents that the
+   *  team reviews before they can sign. Document files live in the private
+   *  "identity-docs" bucket and are only ever served as short signed links. */
+  kyc?: {
+    kind: "domestic" | "international";
+    status: "docs_submitted" | "docs_rejected" | "docs_approved" | "signed";
+    nationality?: string; passportNo?: string; indiaAddress?: string;
+    docs?: { path: string; kind: "passport" | "visa" | "other"; name?: string; at: string }[];
+    submissions?: number; note?: string; reviewedAt?: string; reviewedBy?: string;
+  } | null;
   admin: Record<string, unknown>;
+  /** revision for compare-and-swap writes (src/lib/bookingStore.ts) */
+  rev?: number;
   events: BookingEvent[];
   lr?: { no: string; at: string; trip: string } | null;
   eway?: { at: string; status: string } | null;

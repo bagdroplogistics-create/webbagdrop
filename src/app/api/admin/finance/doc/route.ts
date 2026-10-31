@@ -1,3 +1,4 @@
+import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
@@ -13,7 +14,7 @@ import type { Booking, DocType } from "@/lib/types";
  *  too, so nothing functional is lost, just the document templates. */
 interface DocRequest { bookingId: string; type: DocType; amount?: number }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
@@ -50,7 +51,9 @@ export async function POST(req: Request) {
     docs: [...(booking.docs ?? []), { type: b.type, no: String(no), at: nowIso, amount }],
     events: [...events, { at: nowIso, by: "admin", text: `${b.type} ${no} generated` }],
   };
-  const { error } = await sb.from("bookings").upsert({ id: updated.id, doc: updated, status: updated.status, created: updated.created });
+  const { error } = await saveOrThrow(sb, updated);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, booking: updated, docNo: String(no) });
 }
+
+export const POST = retryOnConflict(handlePOST);

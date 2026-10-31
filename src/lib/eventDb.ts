@@ -5,12 +5,10 @@
  *
  *  - events:   direct anon SELECT is allowed by RLS, but only rows with
  *              status = 'open' (policy anon_read_event in supabase/schema.sql).
- *  - bookings: reads go through the get_booking SECURITY DEFINER RPC
- *              (one row, by unguessable id); creates through create_booking
- *              (see db.ts); the wedding desk's upsert-by-code and the
- *              track-by-mobile search go through server-only API routes
- *              (/api/wedding/*) that use the service role behind their own
- *              guards — the browser still has no path to "give me everything".
+ *  - bookings: every read and write goes through server-only API routes
+ *              (/api/wedding/mine, /booking, /track) that use the service
+ *              role behind an id + lead-mobile guard — the browser has no
+ *              path to the table and no anon RPCs (migration_003_lockdown).
  *
  *  Local-demo fallback mirrors the static build's shared/db.js storage
  *  (localStorage "bagdrop:<collection>" maps), so demo data carries over.
@@ -63,20 +61,23 @@ export function watchEvent(code: string, cb: (e: BagdropEvent | null) => void): 
   return () => { dead = true; bc?.close(); window.removeEventListener("storage", tick); };
 }
 
-/** Fetch one booking by its exact id — get_booking RPC (single row, no
- *  enumeration path) in Supabase mode. */
-export async function getBookingDoc(id: string): Promise<Booking | null> {
+/** A guest's own wedding booking — id AND the lead mobile it was booked
+ *  with, checked server-side by /api/wedding/mine. Returns only id, status,
+ *  events and the desk state. */
+export async function getBookingDoc(id: string, mobile: string): Promise<Booking | null> {
   if (sb) {
-    const { data, error } = await sb.rpc("get_booking", { p_id: id });
-    if (error) throw error;
-    return (data as Booking) ?? null;
+    const r = await fetch("/api/wedding/mine", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, mobile }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP_${r.status}`);
+    return ((await r.json()).booking ?? null) as Booking | null;
   }
   return lsMap<Booking>("bookings")[id] ?? null;
 }
 
-export function watchBookingDoc(id: string, cb: (b: Booking | null) => void): () => void {
+export function watchBookingDoc(id: string, mobile: string, cb: (b: Booking | null) => void): () => void {
   let dead = false;
-  const tick = () => { void getBookingDoc(id).then((b) => { if (!dead) cb(b); }).catch(() => {}); };
+  const tick = () => { void getBookingDoc(id, mobile).then((b) => { if (!dead) cb(b); }).catch(() => {}); };
   tick();
   if (sb) {
     const timer = setInterval(tick, 4000);

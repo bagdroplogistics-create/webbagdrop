@@ -9,6 +9,7 @@ import { watchCrmActivity } from "@/lib/crmApi";
 import { marginPct, opsOf, sixSigma } from "@/lib/opsModel";
 import type { Booking, CrmActivity } from "@/lib/types";
 import { Badge, Button, Card } from "@/components/ui";
+import { isPaid, paidAmount } from "@/lib/payState";
 
 const REPORTS = [
   ["funnel", "Conversion funnel"], ["lanes", "Lane P&L heatmap"], ["ads", "Ads ROI"],
@@ -77,7 +78,7 @@ function HBar({ label, value, max, text, tone }: { label: string; value: number;
 function Funnel({ bookings, activity, digest }: { bookings: Booking[]; activity: CrmActivity[]; digest: Digest }) {
   const leads = activity.filter((a) => a.kind === "lead").length + bookings.filter((b) => !activity.some((a) => a.refId === b.id)).length;
   const quoted = bookings.filter((b) => b.quote.qid || b.quote.breakdown.ror).length;
-  const paid = bookings.filter((b) => b.pay).length;
+  const paid = bookings.filter((b) => isPaid(b)).length;
   const delivered = bookings.filter((b) => b.status === "delivered").length;
   const steps = [["Leads", leads], ["Quoted", quoted], ["Paid", paid], ["Delivered", delivered]] as const;
   const conv = (a: number, b: number) => (a ? Math.round((100 * b) / a) : 0);
@@ -96,7 +97,7 @@ function Funnel({ bookings, activity, digest }: { bookings: Booking[]; activity:
 function Lanes({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
   const lanes = useMemo(() => {
     const m = new Map<string, { n: number; rev: number; margins: number[] }>();
-    bookings.filter((b) => b.pay).forEach((b) => {
+    bookings.filter((b) => isPaid(b)).forEach((b) => {
       const k = `${b.from} → ${b.to}`;
       const l = m.get(k) ?? { n: 0, rev: 0, margins: [] };
       l.n++; l.rev += b.pay!.amount;
@@ -141,7 +142,7 @@ function Ads({ activity, bookings, digest }: { activity: CrmActivity[]; bookings
       r.leads++;
       if (a.quoteInfo || a.stage === "quoted") r.quoted++;
       const bk = bookings.find((b) => b.id === a.refId);
-      if (bk?.pay) { r.paid++; r.rev += bk.pay.amount; }
+      if (bk && isPaid(bk)) { r.paid++; r.rev += paidAmount(bk); }
       m.set(k, r);
     });
     return [...m.entries()].sort((a, b) => b[1].rev - a[1].rev);
@@ -179,8 +180,8 @@ function Cohort({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
   }, [bookings]);
   const once = byMobile.filter((l) => l.length === 1).length;
   const repeat = byMobile.filter((l) => l.length >= 2).length;
-  const gold = byMobile.filter((l) => l.reduce((s, b) => s + (b.pay?.amount ?? 0), 0) >= 20000 || l.length >= 3).length;
-  const repeatRev = byMobile.filter((l) => l.length >= 2).reduce((s, l) => s + l.reduce((x, b) => x + (b.pay?.amount ?? 0), 0), 0);
+  const gold = byMobile.filter((l) => l.reduce((s, b) => s + paidAmount(b), 0) >= 20000 || l.length >= 3).length;
+  const repeatRev = byMobile.filter((l) => l.length >= 2).reduce((s, l) => s + l.reduce((x, b) => x + paidAmount(b), 0), 0);
   const d = digest("Repeat customers", [`Customers: ${byMobile.length}`, `One-time: ${once}`, `Repeat: ${repeat} (${byMobile.length ? Math.round((100 * repeat) / byMobile.length) : 0}%)`, `Gold: ${gold}`, `Repeat revenue: ${inr(repeatRev)}`]);
   return (
     <Card>
@@ -196,7 +197,7 @@ function Cohort({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
 
 /* ---------- 5 · receivables aging ---------- */
 function Aging({ bookings, digest }: { bookings: Booking[]; digest: Digest }) {
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
   const open = bookings.filter((b) => b.pay?.status !== "captured" && b.quote.total > 0 && !["rejected", "cancelled"].includes(b.status));
   const buckets = [["0–24 h", 0, 1], ["1–3 d", 1, 3], ["3–7 d", 3, 7], ["7+ d", 7, 10000]] as const;
   const val = (lo: number, hi: number) => open.filter((b) => { const dd = (now - new Date(b.created).getTime()) / 86400000; return dd >= lo && dd < hi; }).reduce((s, b) => s + b.quote.total, 0);

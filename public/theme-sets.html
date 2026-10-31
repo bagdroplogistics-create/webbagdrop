@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bagdrop · Total Theme Options</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&family=Inter:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&family=Archivo:wght@500;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&family=Manrope:wght@400;600;800&family=Space+Grotesk:wght@400;600;700&family=DM+Sans:wght@400;600;800&family=Sora:wght@400;600;800&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.55 Inter,-apple-system,sans-serif;background:#F1F0ED;color:#17181C;
+  padding:0 max(16px,env(safe-area-inset-left,0px)) 80px max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font:800 32px/1.1 Inter;letter-spacing:-.02em;margin:40px 0 6px}
+.lede{color:#6b6f78;margin:0 0 30px;max-width:70ch}
+.opt{border-radius:22px;overflow:hidden;border:1px solid #E0DFDA;background:#fff;box-shadow:0 3px 14px rgba(10,15,40,.06);margin-bottom:34px}
+.head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;padding:16px 20px;border-bottom:1px solid #ECEBE7}
+.head b{font:800 18px Inter}
+.head span{font-size:12px;color:#8a8d95}
+.sw{display:flex;height:36px}
+.sw i{flex:1}
+.panes{display:grid;grid-template-columns:1.1fr 1fr 1fr;min-height:280px}
+@media (max-width:860px){.panes{grid-template-columns:1fr}}
+.pane{padding:20px;border-right:1px solid #ECEBE7}
+.pane:last-child{border-right:0}
+.pane .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#9a9da5;margin-bottom:10px}
+.kick{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin-bottom:7px}
+.card{border-radius:12px;padding:11px 13px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
+.btn{display:inline-block;border-radius:999px;padding:8px 18px;font-size:12.5px;font-weight:700;margin-top:12px}
+.os{border-radius:14px;overflow:hidden;display:flex;min-height:190px;border:1px solid rgba(0,0,0,.08)}
+.os .side{width:40%;padding:12px 10px;font-size:10.5px}
+.os .side .logo{font-weight:800;font-size:12px;margin-bottom:10px;letter-spacing:-.01em}
+.os .side .it{padding:5px 8px;border-radius:8px;margin-bottom:3px}
+.os .main{flex:1;padding:12px}
+.os .main .mini{border-radius:10px;padding:8px 10px;font-size:10px;margin-bottom:8px}
+.fonts{padding:12px 20px 16px;border-top:1px solid #ECEBE7;font-size:12.5px;color:#6b6f78}
+.fonts b{color:#17181C}
+.pd{border-radius:14px;padding:14px;border:1px solid rgba(0,0,0,.08)}
+.pd .row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px dashed rgba(0,0,0,.1)}
+.badge{font-size:9.5px;font-weight:700;border-radius:999px;padding:2.5px 8px}
+
+/* ===== 1 · SIGNATURE ORANGE (current, locked) ===== */
+.t1 .fe{background:#FAFAF8;color:#0B1426}
+.t1 .kick{color:#EA580C}
+.t1 h2{font:800 23px/1.1 Geist;letter-spacing:-.02em;margin:0 0 6px}
+.t1 .fe p{color:#6B7280;font:13px Geist;margin:0}
+.t1 .card{background:#fff;border:1px solid #E5E7EB;font-family:Geist}
+.t1 .btn{background:#EA580C;color:#fff;font-family:Geist}
+.t1 .os{background:#FAFAF9}
+.t1 .os .side{background:#fff;border-right:1px solid #ECEBE7;color:#57534E;font-family:Inter}
+.t1 .os .logo{color:#1C1917}.t1 .os .logo em{color:#EA580C;font-style:normal}
+.t1 .os .it.on{background:#EA580C;color:#fff}
+.t1 .os .main .mini{background:#1B2A4A;color:#E7ECF5;font-family:"IBM Plex Mono"}
+.t1 .os .main .mini.w{background:#fff;color:#1C1917;border:1px solid #ECEBE7;box-shadow:0 4px 14px -8px rgba(25,30,50,.1);font-family:Inter}
+.t1 .pd{background:#fff;color:#0B1426;font-family:Geist}
+.t1 .badge{background:#FFF7ED;color:#EA580C}
+
+/* ===== 2 · MIDNIGHT FLEET (dark premium) ===== */
+.t2 .fe{background:#0D1117;color:#F2F4F8}
+.t2 .kick{color:#FF8A3D}
+.t2 h2{font:900 23px/1.08 Archivo;letter-spacing:-.01em;margin:0 0 6px;text-transform:uppercase}
+.t2 .fe p{color:#9AA3B2;font:13px Inter;margin:0}
+.t2 .card{background:#161C26;border:1px solid #28303E;font-family:Inter;color:#F2F4F8}
+.t2 .btn{background:#FF8A3D;color:#0D1117;font-family:Inter}
+.t2 .os{background:#10151D}
+.t2 .os .side{background:#0A0E14;color:#8B95A5;font-family:Inter}
+.t2 .os .logo{color:#F2F4F8}.t2 .os .logo em{color:#FF8A3D;font-style:normal}
+.t2 .os .it.on{background:#FF8A3D;color:#0D1117}
+.t2 .os .main .mini{background:#161C26;color:#F2F4F8;border:1px solid #28303E;font-family:Inter}
+.t2 .os .main .mini.money{color:#4ADE80;font-family:"IBM Plex Mono"}
+.t2 .pd{background:#161C26;color:#F2F4F8;font-family:Inter}
+.t2 .pd .row{border-color:#28303E}
+.t2 .badge{background:#2A1C10;color:#FF8A3D}
+
+/* ===== 3 · IVORY & FOREST (premium editorial) ===== */
+.t3 .fe{background:#F7F3E9;color:#1E2A23}
+.t3 .kick{color:#9A7B2E}
+.t3 h2{font:700 25px/1.08 Fraunces;margin:0 0 6px}
+.t3 .fe p{color:#5B6A60;font:13px "Source Sans 3";margin:0}
+.t3 .card{background:#FFFDF7;border:1px solid #E2DAC4;font-family:"Source Sans 3"}
+.t3 .btn{background:#23402F;color:#F2E8C9;font-family:"Source Sans 3"}
+.t3 .os{background:#F4F1E8}
+.t3 .os .side{background:#23402F;color:#C9D4C5;font-family:"Source Sans 3"}
+.t3 .os .logo{color:#F2E8C9}.t3 .os .logo em{color:#D9B55A;font-style:normal}
+.t3 .os .it.on{background:#D9B55A;color:#23402F}
+.t3 .os .main .mini{background:#FFFDF7;color:#1E2A23;border:1px solid #E2DAC4;font-family:"Source Sans 3"}
+.t3 .os .main .mini.money{font-family:"IBM Plex Mono";color:#23402F}
+.t3 .pd{background:#FFFDF7;color:#1E2A23;font-family:"Source Sans 3"}
+.t3 .pd .row{border-color:#E2DAC4}
+.t3 .badge{background:#EFE6CD;color:#8C6F2E}
+
+/* ===== 4 · MONSOON TEAL (fresh coastal) ===== */
+.t4 .fe{background:#F2F7F7;color:#0E2B2B}
+.t4 .kick{color:#0F766E}
+.t4 h2{font:800 23px/1.1 Sora;letter-spacing:-.02em;margin:0 0 6px}
+.t4 .fe p{color:#51706D;font:13px Sora;margin:0}
+.t4 .card{background:#fff;border:1px solid #D7E5E3;font-family:Sora}
+.t4 .btn{background:#0F766E;color:#ECFEFF;font-family:Sora}
+.t4 .os{background:#F4F8F8}
+.t4 .os .side{background:#0B3B38;color:#9FC4C0;font-family:Sora}
+.t4 .os .logo{color:#ECFEFF}.t4 .os .logo em{color:#FF8A5C;font-style:normal}
+.t4 .os .it.on{background:#FF8A5C;color:#0B3B38}
+.t4 .os .main .mini{background:#fff;color:#0E2B2B;border:1px solid #D7E5E3;font-family:Sora}
+.t4 .os .main .mini.money{font-family:"IBM Plex Mono";color:#0F766E}
+.t4 .pd{background:#fff;color:#0E2B2B;font-family:Sora}
+.t4 .pd .row{border-color:#D7E5E3}
+.t4 .badge{background:#CCFBF1;color:#0F766E}
+
+/* ===== 5 · ROYAL INDIGO & SAFFRON (national carrier) ===== */
+.t5 .fe{background:#F6F6FB;color:#1E1B4B}
+.t5 .kick{color:#D97706}
+.t5 h2{font:800 23px/1.1 "DM Sans";letter-spacing:-.02em;margin:0 0 6px}
+.t5 .fe p{color:#5B5E7E;font:13px "DM Sans";margin:0}
+.t5 .card{background:#fff;border:1px solid #E2E2F0;font-family:"DM Sans"}
+.t5 .btn{background:#312E81;color:#fff;font-family:"DM Sans"}
+.t5 .os{background:#F6F6FB}
+.t5 .os .side{background:#1E1B4B;color:#A5A3C8;font-family:"DM Sans"}
+.t5 .os .logo{color:#fff}.t5 .os .logo em{color:#F59E0B;font-style:normal}
+.t5 .os .it.on{background:#F59E0B;color:#1E1B4B}
+.t5 .os .main .mini{background:#fff;color:#1E1B4B;border:1px solid #E2E2F0;font-family:"DM Sans"}
+.t5 .os .main .mini.money{font-family:"IBM Plex Mono";color:#B45309}
+.t5 .pd{background:#fff;color:#1E1B4B;font-family:"DM Sans"}
+.t5 .pd .row{border-color:#E2E2F0}
+.t5 .badge{background:#FEF3C7;color:#B45309}
+
+/* ===== 6 · SWISS MONO (one accent, pure utility) ===== */
+.t6 .fe{background:#FFFFFF;color:#111113}
+.t6 .kick{color:#F59E0B}
+.t6 h2{font:700 23px/1.08 "Space Grotesk";letter-spacing:-.02em;margin:0 0 6px}
+.t6 .fe p{color:#6F7176;font:13px "Space Grotesk";margin:0}
+.t6 .card{background:#F6F6F7;border:1px solid #E6E6E8;font-family:"Space Grotesk";border-radius:4px}
+.t6 .btn{background:#111113;color:#fff;font-family:"Space Grotesk";border-radius:6px}
+.t6 .os{background:#FAFAFA;border-radius:6px}
+.t6 .os .side{background:#F1F1F2;border-right:1px solid #E6E6E8;color:#55565C;font-family:"Space Grotesk"}
+.t6 .os .logo{color:#111113}.t6 .os .logo em{color:#F59E0B;font-style:normal}
+.t6 .os .it{border-radius:3px}
+.t6 .os .it.on{background:#111113;color:#fff}
+.t6 .os .main .mini{background:#fff;color:#111113;border:1px solid #E6E6E8;font-family:"Space Grotesk";border-radius:4px}
+.t6 .os .main .mini.money{font-family:"IBM Plex Mono"}
+.t6 .pd{background:#fff;color:#111113;font-family:"Space Grotesk";border-radius:6px}
+.t6 .pd .row{border-color:#E6E6E8}
+.t6 .badge{background:#FEF3C7;color:#B45309;border-radius:3px}
+
+/* ===== 7 · DESERT TERRACOTTA (warm Indian craft) ===== */
+.t7 .fe{background:#F9F1E7;color:#2E1D14}
+.t7 .kick{color:#C2573B}
+.t7 h2{font:700 25px/1.08 Fraunces;margin:0 0 6px}
+.t7 .fe p{color:#7A6A5C;font:13px Manrope;margin:0}
+.t7 .card{background:#FFFBF4;border:1px solid #EADDC9;font-family:Manrope}
+.t7 .btn{background:#C2573B;color:#FFF4EC;font-family:Manrope}
+.t7 .os{background:#F7F0E6}
+.t7 .os .side{background:#2E1D14;color:#C9B5A4;font-family:Manrope}
+.t7 .os .logo{color:#FFF4EC}.t7 .os .logo em{color:#E8A24A;font-style:normal}
+.t7 .os .it.on{background:#C2573B;color:#FFF4EC}
+.t7 .os .main .mini{background:#FFFBF4;color:#2E1D14;border:1px solid #EADDC9;font-family:Manrope}
+.t7 .os .main .mini.money{font-family:"IBM Plex Mono";color:#8A3B24}
+.t7 .pd{background:#FFFBF4;color:#2E1D14;font-family:Manrope}
+.t7 .pd .row{border-color:#EADDC9}
+.t7 .badge{background:#F6E3D3;color:#C2573B}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Total theme options — the whole platform, one language</h1>
+<p class="lede">Each option carries ONE design language across all three surfaces: the customer front end, BAGDROP OS, and the Partner desk. Reply 1, 2 or 3 — or mix (“2's BAGDROP OS with 1's front end”).</p>
+
+<!-- ============ OPTION 1 ============ -->
+<div class="opt t1">
+  <div class="head"><b>1 · Signature Orange — as locked today</b><span>zero change · Geist + Bagdrop orange / Light &amp; airy OS</span></div>
+  <div class="sw"><i style="background:#FAFAF8"></i><i style="background:#FFFFFF"></i><i style="background:#0B1426"></i><i style="background:#EA580C"></i><i style="background:#FFF7ED"></i><i style="background:#1B2A4A"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag" style="color:#b0652e">Front end · booking</div>
+      <div class="kick">Sealed · Tracked · Insured</div>
+      <h2>Travel light. We carry the rest.</h2>
+      <p>Door-to-door baggage across India. GST 5%, no hidden charges.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini">TODAY'S BRIEF · ₹43,365 collected</div>
+        <div class="mini w"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini w">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#15803D">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Front end: <b>Geist</b> · OS: <b>Inter + IBM Plex Mono</b> · Canvas #FAFAF8 / #FAFAF9 · Ink #0B1426 · Accent <b>#EA580C</b> · Navy brief #1B2A4A — <b>this is what runs right now; choosing it means no work.</b></div>
+</div>
+
+<!-- ============ OPTION 2 ============ -->
+<div class="opt t2">
+  <div class="head"><b>2 · Midnight Fleet — dark, premium logistics</b><span>control-tower feel · vivid orange on near-black</span></div>
+  <div class="sw"><i style="background:#0D1117"></i><i style="background:#161C26"></i><i style="background:#28303E"></i><i style="background:#FF8A3D"></i><i style="background:#F2F4F8"></i><i style="background:#4ADE80"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag">Front end · booking</div>
+      <div class="kick">Zero bags · Full speed</div>
+      <h2>Skip the carousel forever</h2>
+      <p>Your bags fly separately. You just fly.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book now →</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today ▲</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#4ADE80">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display: <b>Archivo Black</b> · Body: <b>Inter</b> · Numbers: <b>IBM Plex Mono</b> · Near-black #0D1117 · Panels #161C26 · Accent <b>#FF8A3D</b> · Money green #4ADE80 — night-shift-friendly ops, startup energy for customers.</div>
+</div>
+
+<!-- ============ OPTION 3 ============ -->
+<div class="opt t3">
+  <div class="head"><b>3 · Ivory &amp; Forest — quiet luxury, editorial</b><span>wedding &amp; five-star-hotel ready · cream, forest, gold</span></div>
+  <div class="sw"><i style="background:#F7F3E9"></i><i style="background:#FFFDF7"></i><i style="background:#23402F"></i><i style="background:#D9B55A"></i><i style="background:#F2E8C9"></i><i style="background:#8C6F2E"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag" style="color:#9A7B2E">Front end · booking</div>
+      <div class="kick">The art of arriving empty-handed</div>
+      <h2>Your bags, travelling first class.</h2>
+      <p>Sealed with you at the door. Released only to you.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Reserve a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#23402F">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display: <b>Fraunces</b> · Body: <b>Source Sans 3</b> · Numbers: <b>IBM Plex Mono</b> · Cream #F7F3E9 · Forest <b>#23402F</b> (OS sidebar) · Gold <b>#D9B55A</b> — matches the weddings &amp; events line and hotel partners; feels concierge, not courier.</div>
+</div>
+
+<!-- ============ OPTION 4 ============ -->
+<div class="opt t4">
+  <div class="head"><b>4 · Monsoon Teal — fresh, coastal, trustworthy</b><span>fintech-clean · deep teal OS, coral highlights</span></div>
+  <div class="sw"><i style="background:#F2F7F7"></i><i style="background:#FFFFFF"></i><i style="background:#0B3B38"></i><i style="background:#0F766E"></i><i style="background:#FF8A5C"></i><i style="background:#CCFBF1"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag">Front end · booking</div>
+      <div class="kick">Sealed · Tracked · Insured</div>
+      <h2>Travel light. We carry the rest.</h2>
+      <p>Door-to-door baggage across India. GST 5%, no hidden charges.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#0F766E">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display &amp; body: <b>Sora</b> · Numbers: <b>IBM Plex Mono</b> · Mist #F2F7F7 · Teal <b>#0F766E</b> · OS sidebar #0B3B38 · Coral <b>#FF8A5C</b> — calm and modern; reads "insured &amp; safe" at a glance.</div>
+</div>
+
+<!-- ============ OPTION 5 ============ -->
+<div class="opt t5">
+  <div class="head"><b>5 · Royal Indigo &amp; Saffron — the national carrier</b><span>airline heritage · indigo authority, saffron warmth</span></div>
+  <div class="sw"><i style="background:#F6F6FB"></i><i style="background:#FFFFFF"></i><i style="background:#1E1B4B"></i><i style="background:#312E81"></i><i style="background:#F59E0B"></i><i style="background:#FEF3C7"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag" style="color:#B45309">Front end · booking</div>
+      <div class="kick">Fly ahead of your bags — we mean it</div>
+      <h2>Baggage, boarded separately.</h2>
+      <p>Door-to-door across India. GST 5%, no hidden charges.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#B45309">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display &amp; body: <b>DM Sans</b> · Numbers: <b>IBM Plex Mono</b> · Lavender-white #F6F6FB · Indigo <b>#312E81</b> · OS sidebar #1E1B4B · Saffron <b>#F59E0B</b> — institutional trust with an unmistakably Indian accent.</div>
+</div>
+
+<!-- ============ OPTION 6 ============ -->
+<div class="opt t6">
+  <div class="head"><b>6 · Swiss Mono — one accent, pure utility</b><span>black &amp; white precision · square corners · saffron only where it matters</span></div>
+  <div class="sw"><i style="background:#FFFFFF"></i><i style="background:#F6F6F7"></i><i style="background:#111113"></i><i style="background:#F59E0B"></i><i style="background:#E6E6E8"></i><i style="background:#55565C"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag">Front end · booking</div>
+      <div class="kick">Sealed · Tracked · Insured</div>
+      <h2>Travel light. We carry the rest.</h2>
+      <p>Door-to-door baggage across India. GST 5%, no hidden charges.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b>₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display &amp; body: <b>Space Grotesk</b> · Numbers: <b>IBM Plex Mono</b> · White / #F6F6F7 · Ink <b>#111113</b> · Single accent <b>#F59E0B</b> — the "German engineering" read: nothing decorative, everything legible.</div>
+</div>
+
+<!-- ============ OPTION 7 ============ -->
+<div class="opt t7">
+  <div class="head"><b>7 · Desert Terracotta — warm Indian craft</b><span>earthy &amp; human · terracotta, sand, marigold</span></div>
+  <div class="sw"><i style="background:#F9F1E7"></i><i style="background:#FFFBF4"></i><i style="background:#2E1D14"></i><i style="background:#C2573B"></i><i style="background:#E8A24A"></i><i style="background:#EADDC9"></i></div>
+  <div class="panes">
+    <div class="pane fe">
+      <div class="tag">Front end · booking</div>
+      <div class="kick">Hands free, heart light</div>
+      <h2>Your bags, in good hands.</h2>
+      <p>Sealed with you at the door, delivered with care. GST 5%.</p>
+      <div class="card"><span>Ahmedabad → Mumbai · 2 bags</span><b>₹6,300</b></div>
+      <span class="btn">Book a pickup</span>
+    </div>
+    <div class="pane">
+      <div class="tag">BAGDROP OS</div>
+      <div class="os"><div class="side">
+        <div class="logo">BAG<em>DROP</em> OS</div>
+        <div class="it on">Command centre</div><div class="it">Shipments</div><div class="it">Partners &amp; API</div><div class="it">Reports &amp; MIS</div>
+      </div><div class="main">
+        <div class="mini money">₹43,365 collected today</div>
+        <div class="mini"><b>10 bookings</b> · 14 waiting on a decision</div>
+        <div class="mini">Pickup gate: 1 Aadhaar pending</div>
+      </div></div>
+    </div>
+    <div class="pane">
+      <div class="tag">Partner desk</div>
+      <div class="pd">
+        <b style="font-size:13px">GrandStay Hotels</b> <span class="badge">credit line</span>
+        <div class="row"><span>Retail (incl. GST 5%)</span><b>₹7,245</b></div>
+        <div class="row"><span>Your commission</span><b style="color:#8A3B24">₹600</b></div>
+        <div class="row"><span>Credit available</span><b>₹11,300</b></div>
+        <span class="btn" style="font-size:11px;padding:6px 14px">Confirm on credit</span>
+      </div>
+    </div>
+  </div>
+  <div class="fonts">Display: <b>Fraunces</b> · Body: <b>Manrope</b> · Numbers: <b>IBM Plex Mono</b> · Sand #F9F1E7 · Terracotta <b>#C2573B</b> · OS sidebar espresso #2E1D14 · Marigold <b>#E8A24A</b> — warm hospitality; pairs beautifully with weddings and hotels.</div>
+</div>
+
+</div>
+</body>
+</html>

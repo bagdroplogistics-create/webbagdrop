@@ -1,94 +1,79 @@
 "use client";
-/** The customer booking wizard — the migration template for every other page.
- *  Pattern: typed draft state → pure pricing preview → SERVER-SIGNED quote
- *  (/api/quote) → booking saved in the shared Admin OS shape.
- *
- *  Flow (locked 2026-10-28): the booking is confirmed with a mobile/email OTP
- *  at booking time (server-issued, /api/otp), payment creates the booking
- *  IMMEDIATELY, and Aadhaar UIDAI verification follows payment — it can be
- *  done right here or later via /verify/<id>, but pickup is blocked
- *  server-side until it is done. A paid client who closes the tab still has
- *  their booking, their money accounted for, and a verification link coming
- *  on WhatsApp + email. */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CITIES, inr, quote } from "@/lib/pricing";
+/** The homepage booking flow (approved 30 Oct 2026).
+ *  1. Service → route → when → bags → traveller. Cities, airports and the
+ *     rate-chart sectors come LIVE from the pricing engine (/api/catalog).
+ *  2. The customer verifies a mobile/email OTP; only then does the server
+ *     (/api/booking) save the request and release the price — for a sector
+ *     on the rate chart. A new sector becomes an inquiry, no price shown.
+ *     The inquiry desk (info@ + aditya@) is alerted.
+ *  3. The team approves / revises / holds / asks / rejects in BAGDROP OS.
+ *  4. The client pays, uploads proof and manages bags in their dashboard
+ *     (/account). Nothing on this page writes to the database directly. */
+import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/useNow";
+import { useOnChange, usePlanAutofill } from "@/lib/stateSync";
+import { CITIES, inr } from "@/lib/pricing";
+import { SERVICES } from "@/lib/services";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
-import { backend, createBooking, newBookingId, nowIso, updateBooking, watchBooking } from "@/lib/db";
-import type { Booking, Mode, SignedQuote, UseCase } from "@/lib/types";
-import { Badge, Button, Card, Field, Input, Select, Tile } from "@/components/ui";
+import type { InstantRule, UseCase } from "@/lib/types";
+import { DEFAULT_INSTANT, instantCheck } from "@/lib/instant";
+import OnlinePay from "@/components/OnlinePay";
+import { Button, Card, Field, Input, Select, Tile } from "@/components/ui";
 
-const SERVICES: { uc: UseCase; mode: Mode; title: string; sub: string }[] = [
-  { uc: "d2a", mode: "air", title: "Home → Airport", sub: "Bags reach the airport before you do" },
-  { uc: "a2d", mode: "air", title: "Airport → Home", sub: "Land and leave, we bring them home" },
-  { uc: "h2a", mode: "air", title: "Hotel → Airport", sub: "Check out light" },
-  { uc: "h2h", mode: "road", title: "Hotel → Hotel", sub: "Next city, same bags" },
-  { uc: "d2d", mode: "road", title: "Door → Door", sub: "City to city, by road" },
-  { uc: "rail", mode: "rail", title: "Railway station", sub: "Vande Bharat, Rajdhani" },
-  { uc: "cruise", mode: "sea", title: "Cruise terminal", sub: "Mumbai, Goa, Kochi sailings" },
-];
-const STEPS = ["Service", "Route", "When", "Bags", "You", "Confirm", "Price", "Pay"];
-const AAD_DEMO = "112233";
-const MAX_AADHAAR_ATTEMPTS = 2;
+const STEPS = ["Service", "Route", "When", "Bags", "You", "Verify"];
 
-/** Static UPI QR payment — no payment gateway. The customer scans, pays in
- *  their own UPI app, then self-reports; an admin verifies before the
- *  booking is confirmed. See src/app/admin/PaymentVerification.tsx. */
-const UPI_ID = "BAGDROP1717@iob";
-const UPI_PAYEE = "Bagdrop Logistics Solutions Pvt Ltd";
-function upiQrUrl(amount: number, bookingId: string): string {
-  const upi = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE)}&am=${amount}&cu=INR&tn=${encodeURIComponent(bookingId)}`;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=0&data=${encodeURIComponent(upi)}`;
+interface Catalog {
+  cities: { name: string; ap: string | null }[];
+  airports: Record<string, { name: string; terminals?: string[] }>;
+  sectors: { from: string; to: string; both: boolean; instant?: InstantRule | null }[];
 }
-
-/** Verbatim from the signed "Undertaking for Moving Baggage Goods &
- *  Household Goods" bond letter — do not reword. */
-const INDEMNITY_PARAGRAPHS = [
-  "I declare that the goods being moved are used and not new, they are being shifted from one location to another as a part of relocation and are not for sale. I also confirm that the goods do not contain any valuables, cash, jewelry or any other expensive items and that there is nothing which is illegal or any item that is listed as hazardous or banned by the government.",
-  "I understand and acknowledge that Bagdrop Logistics Solutions will take utmost care and handle the goods with care during transportation. However, I also acknowledge that any loss or breakage during transportation will not be the responsibility of Bagdrop Logistics Solutions, though they will make every effort to minimize any potential damage.",
-  "I agree to indemnify and hold Bagdrop Logistics Solutions harmless from any and all claims, losses, damages, liabilities, costs and expenses arising out of or in connection with the transportation of my household goods.",
-  "I further confirm that I have read and understood the terms and conditions of this undertaking and agree to be bound by them.",
-];
-const PROHIBITED_ITEMS = [
-  "Lighters, matchsticks", "Flammable liquids", "Toxic substances", "Corrosives", "Alcohol", "Lithium batteries",
-  "Flammable gas", "E-cigarettes", "Infectious substances", "Radioactive materials", "Explosives / ammunition", "Power banks",
-];
-const ID_LABELS: Record<"aadhaar" | "passport" | "licence", string> = { aadhaar: "Aadhar Card", passport: "Passport", licence: "Licence" };
+const FALLBACK: Catalog = { cities: CITIES.map((c) => ({ name: c.name, ap: c.ap ?? null })), airports: {}, sectors: [] };
 
 interface Draft {
-  uc: UseCase; mode: Mode;
+  uc: UseCase;
   from: string; to: string; fromOther: string; toOther: string;
-  pickAddr: string; dropAddr: string;
+  pickAddr: string; dropAddr: string; terminal: string;
   date: string; pickupDate: string; deliveryDate: string; slot: string; flight: string; flightTime: string;
   bags: number; oversize: number;
   name: string; mobile: string; email: string; note: string;
 }
 
 interface OtpState {
-  channel: "mobile" | "email";
-  sent: boolean; exp: number; token: string; entered: string; sentTo?: string;
-  demo?: string; verifiedAt: string | null; err: string | null; busy: boolean;
+  channel: "mobile" | "email"; sent: boolean; exp: number; token: string; entered: string; sentTo?: string;
+  demo?: string; err: string | null; busy: boolean;
 }
-const OTP0: OtpState = { channel: "mobile", sent: false, exp: 0, token: "", entered: "", verifiedAt: null, err: null, busy: false };
+const OTP0: OtpState = { channel: "mobile", sent: false, exp: 0, token: "", entered: "", err: null, busy: false };
+
+interface Result {
+  id: string; priced: boolean;
+  instant: { holdUntil: string; holdMinutes: number } | null; instantReason: string | null; paid?: boolean;
+  price: null | { total: number; base: number; oversize: number; gst: number; billed: number; rule: string; validUntil: string | null };
+}
+
+const norm = (s: string) => s.trim().toLowerCase();
 
 export default function Wizard() {
   const [step, setStep] = useState(0);
-  const [today, setToday] = useState("");
+  const now = useNow();
+  const today = now ? new Date(now).toISOString().slice(0, 10) : "";
+  const [cat, setCat] = useState<Catalog>(FALLBACK);
   const [d, setD] = useState<Draft>({
-    uc: "d2a", mode: "air", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
-    pickAddr: "", dropAddr: "", date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "",
+    uc: "d2a", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
+    pickAddr: "", dropAddr: "", terminal: "",
+    date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "",
     bags: 2, oversize: 0, name: "", mobile: "", email: "", note: "",
   });
-  /* dates come from the clock, which prerender forbids — set them on mount */
-  useEffect(() => {
-    const now = Date.now();
-    setToday(new Date(now).toISOString().slice(0, 10));
-    setD((p) => (p.date ? p : { ...p, date: new Date(now + 4 * 86400000).toISOString().slice(0, 10) }));
-  }, []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
-  /** Same-day pickup isn't operationally possible — a captain needs to be
-   *  assigned and routed. Earliest bookable date is 24h after "now", i.e.
-   *  tomorrow relative to `today`. */
+  /* default travel date: 4 days out, once the browser clock is known */
+  useOnChange(now ? "dated" : "", () => {
+    if (now) setD((p) => (p.date ? p : { ...p, date: new Date(now + 4 * 86400000).toISOString().slice(0, 10) }));
+  });
+  useEffect(() => {
+    void fetch("/api/catalog").then((r) => r.json()).then((j: Catalog) => { if (j.cities?.length) setCat(j); }).catch(() => {});
+  }, []);
+
+  const svc = SERVICES.find((s) => s.uc === d.uc)!;
   const minDate = useMemo(() => {
     if (!today) return "";
     const d2 = new Date(`${today}T00:00:00`);
@@ -96,44 +81,52 @@ export default function Wizard() {
     return d2.toISOString().slice(0, 10);
   }, [today]);
   const minDateLabel = minDate ? new Date(`${minDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "";
-  const todayLabel = today ? new Date(`${today}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
-  /** Flight/train/sailing-aware pickup planning — auto-fills the suggested
-   *  date/slot, same "keep tracking until the customer types their own
-   *  value" pattern as the admin team-quote form. */
-  const plan = useMemo(
-    () => computeTravelPlan(d.mode, d.uc === "a2d", d.date, d.flightTime),
-    [d.mode, d.uc, d.date, d.flightTime]
-  );
-  const autoRef = useRef({ pickupDate: "", slot: "" });
-  useEffect(() => {
-    if (plan.suggestedPickupDate && (!d.pickupDate || d.pickupDate === autoRef.current.pickupDate)) {
-      autoRef.current.pickupDate = plan.suggestedPickupDate;
-      if (d.pickupDate !== plan.suggestedPickupDate) set("pickupDate", plan.suggestedPickupDate);
-    }
-    if (plan.suggestedSlot && (!d.slot || d.slot === autoRef.current.slot)) {
-      autoRef.current.slot = plan.suggestedSlot;
-      if (d.slot !== plan.suggestedSlot) set("slot", plan.suggestedSlot);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan.suggestedPickupDate, plan.suggestedSlot]);
+  /* flight / train / sailing-aware pickup planning (team feature, kept) */
+  const plan = useMemo(() => computeTravelPlan(svc.mode, d.uc === "a2d", d.date, d.flightTime), [svc.mode, d.uc, d.date, d.flightTime]);
+  usePlanAutofill(plan, d, setD);
 
-  const fromName = d.from === "other" ? d.fromOther || "Other city" : d.from;
-  const toName = d.to === "other" ? d.toOther || "Other city" : d.to;
-  const isOther = d.from === "other" || d.to === "other";
+  const fromName = d.from === "other" ? d.fromOther.trim() : d.from;
+  const toName = d.to === "other" ? d.toOther.trim() : d.to;
+
+  /* the airport end of an air service: pick the airport (+ terminal) */
+  const airportCity = svc.airportEnd === "from" ? d.from : svc.airportEnd === "to" ? d.to : null;
+  const apCode = airportCity && airportCity !== "other" ? cat.cities.find((c) => c.name === airportCity)?.ap ?? null : null;
+  const airport = apCode ? cat.airports[apCode] : undefined;
+  const airportLabel = airport ? `${airport.name}${d.terminal ? ` · ${d.terminal}` : ""}` : "";
+  useOnChange(`${airportLabel}|${svc.airportEnd ?? ""}`, () => {
+    if (!airport) return;
+    if (svc.airportEnd === "to") set("dropAddr", airportLabel);
+    if (svc.airportEnd === "from") set("pickAddr", airportLabel);
+  });
+  useOnChange(apCode ?? "", () => set("terminal", ""));
+
+  /* is this sector on the rate chart? (informational — the server decides) */
+  const onChart = useMemo(() => {
+    if (!fromName || !toName || d.from === "other" || d.to === "other") return false;
+    return cat.sectors.some((s) => (norm(s.from) === norm(fromName) && norm(s.to) === norm(toName)) || (s.both && norm(s.from) === norm(toName) && norm(s.to) === norm(fromName)));
+  }, [cat.sectors, fromName, toName, d.from, d.to]);
+
+  /* instant confirmation for this route + date (informational — the server
+   * re-checks, including how many instant places are left that day) */
+  const instantHint = useMemo(() => {
+    if (!onChart || !now) return null;
+    const sec = cat.sectors.find((s) => (norm(s.from) === norm(fromName) && norm(s.to) === norm(toName)) || (s.both && norm(s.from) === norm(toName) && norm(s.to) === norm(fromName)));
+    if (!sec?.instant?.enabled) return null;
+    const day = d.pickupDate || d.date;
+    if (!day) return null;
+    const ist = new Date(now + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const route = { from: sec.from, to: sec.to, dir: sec.both ? "both" as const : "one" as const, r1: 0, r2: 0, addl: 0, instant: sec.instant };
+    return instantCheck(route, { date: day, bags: d.bags, oversize: d.oversize }, ist, DEFAULT_INSTANT, 0);
+  }, [onChart, now, cat.sectors, fromName, toName, d.pickupDate, d.date, d.bags, d.oversize]);
+
   const mobileOk = /^\+?[\d\s-]{10,15}$/.test(d.mobile.trim());
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email.trim());
 
-  /** instant client preview (display only — the signed figure rules) */
-  const preview = useMemo(
-    () => (isOther ? { error: "RATE_ON_REQUEST" as const } : quote({ fromName, toName, bags: d.bags, oversize: d.oversize, mode: d.mode, date: d.date })),
-    [fromName, toName, d.bags, d.oversize, d.mode, d.date, isOther]
-  );
-  const ror = "error" in preview;
-
-  /* ---------- booking-time OTP (mobile or email, server-issued) ---------- */
+  /* ---------- OTP, then the server saves the booking and releases the price ---------- */
   const [otp, setOtp] = useState<OtpState>(OTP0);
-  const otpDest = otp.channel === "email" ? d.email.trim() : d.mobile.trim();
+  const [result, setResult] = useState<Result | null>(null);
+  useOnChange(`${d.mobile}|${d.email}`, () => setOtp(OTP0));
 
   async function sendOtp(channel: "mobile" | "email") {
     const to = channel === "email" ? d.email.trim() : d.mobile.trim();
@@ -146,389 +139,82 @@ export default function Wizard() {
     } catch { setOtp((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
   }
 
-  async function verifyOtp() {
+  async function verifyAndSubmit() {
     setOtp((p) => ({ ...p, busy: true, err: null }));
     try {
-      const to = otp.channel === "email" ? d.email.trim().toLowerCase() : d.mobile.trim();
-      // the server normalised the destination when issuing — send what it echoed
-      const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify", to: otp.sentTo ?? to, code: otp.entered, exp: otp.exp, token: otp.token }) });
+      const r = await fetch("/api/booking", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          otp: { to: otp.sentTo, code: otp.entered.trim(), exp: otp.exp, token: otp.token, channel: otp.channel },
+          draft: {
+            uc: d.uc, name: d.name, mobile: d.mobile, email: d.email,
+            fromName, toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
+            date: d.date, pickupDate: d.pickupDate, deliveryDate: d.deliveryDate, slot: d.slot,
+            flight: d.flight, flightTime: d.flightTime, bags: d.bags, oversize: d.oversize, note: d.note,
+          },
+        }),
+      });
       const j = await r.json();
-      if (j.error) setOtp((p) => ({ ...p, busy: false, err: "That code didn't match or has expired — check and try again, or resend." }));
-      else setOtp((p) => ({ ...p, busy: false, verifiedAt: j.at }));
+      if (j.error) {
+        setOtp((p) => ({ ...p, busy: false, err: j.error === "OTP_INVALID" ? "That code didn't match or has expired — check it, or resend." : (j.detail ?? "Could not save your booking — please try again.") }));
+        return;
+      }
+      setResult({ id: j.id, priced: j.priced, price: j.price, instant: j.instant ?? null, instantReason: j.instantReason ?? null });
     } catch { setOtp((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
   }
 
-  /* if the contact details change after verification, the proof is void */
-  useEffect(() => { setOtp(OTP0); }, [d.mobile, d.email]);
-
-  /** server-signed quote */
-  const [signed, setSigned] = useState<SignedQuote | null>(null);
-  const [quoteErr, setQuoteErr] = useState(false);
-  const fetchSigned = useCallback(async () => {
-    if (ror) return;
-    setQuoteErr(false);
-    try {
-      const r = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromName, toName, bags: d.bags, oversize: d.oversize, mode: d.mode, date: d.date }),
-      });
-      const j = await r.json();
-      if (!j.error) setSigned(j as SignedQuote); else setQuoteErr(true);
-    } catch { setQuoteErr(true); }
-  }, [ror, fromName, toName, d.bags, d.oversize, d.mode, d.date]);
-  useEffect(() => { if (step === 6) void fetchSigned(); }, [step, fetchSigned]);
-
-  /* ---------- payment → booking created at once; Aadhaar follows ---------- */
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [live, setLive] = useState<Booking | null>(null);
-  const [payBusy, setPayBusy] = useState(false);
-  const [payErr, setPayErr] = useState<string | null>(null);
-  useEffect(() => {
-    if (!booking) return;
-    return watchBooking(booking.id, setLive);
-  }, [booking]);
-
-  /** Creates the booking the moment the customer reaches the final step —
-   *  there is no payment gateway, so "booking created" and "payment
-   *  captured" are no longer the same event. For a rate-on-request route
-   *  there's nothing to pay yet (team calls with the rate); otherwise the
-   *  booking is created with pay.status "pending" and the UPI QR appears
-   *  right away, against this booking's own reference and locked amount. */
-  async function createPendingBooking() {
-    if (payBusy) return;
-    setPayBusy(true); setPayErr(null);
-    try {
-      const id = newBookingId();
-      const fromCity = CITIES.find((c) => c.name === fromName);
-      const toCity = CITIES.find((c) => c.name === toName);
-      const total = ror ? 0 : signed?.total ?? 0;
-      const now = nowIso();
-      const doc: Booking = {
-        id, created: now, status: "submitted",
-        uc: d.uc, ucName: SERVICES.find((s) => s.uc === d.uc)?.title ?? d.uc, mode: d.mode,
-        from: fromName, to: toName, pickAddr: d.pickAddr.trim(), dropAddr: d.dropAddr.trim(),
-        zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
-        date: d.date, pickupDate: d.pickupDate || d.date, deliveryDate: d.deliveryDate || null, flightTime: d.flightTime || null, ref: d.flight.trim().toUpperCase(), slot: d.slot,
-        bags: d.bags, oversize: d.oversize, billed: ror ? Math.max(d.bags + d.oversize, 1) : signed?.billed ?? d.bags,
-        traveller: { name: d.name.trim(), mobile: d.mobile.trim(), email: d.email.trim(), res: "in" },
-        payer: null, note: d.note.trim(), source: "website · next",
-        quote: ror
-          ? { qid: null, total: 0, breakdown: { ror: true } }
-          : { qid: signed!.qid, total, breakdown: signed!, validUntil: signed!.validUntil, signature: signed!.signature },
-        /* Aadhaar is NOT done yet — it follows payment verification + the
-         * indemnity undertaking, and gates pickup */
-        identity: { ok: false, at: "", method: "UIDAI Aadhaar OTP · pending (required before pickup)", score: 0 },
-        indemnity: null,
-        pay: ror ? null : { mode: "full", amount: total, status: "pending", gateway: `UPI (manual) · ${UPI_ID}`, at: now },
-        admin: {},
-        events: [
-          { at: now, by: "customer", text: `Booking confirmed with ${otp.channel} OTP (${otp.channel === "email" ? d.email.trim() : d.mobile.trim()})${otp.verifiedAt ? ` at ${otp.verifiedAt}` : ""}` },
-          { at: now, by: "customer", text: ror ? "Booking request · RATE ON REQUEST · Aadhaar verification pending" : `Booking created · UPI QR shown for ${inr(total)} against signed quote ${signed!.qid} · awaiting payment` },
-        ],
-      };
-      const saved = await createBooking(doc);
-      setBooking(saved);
-      /* Fire-and-forget — the internal team alert must never block the
-       * customer from seeing their QR / confirmation screen. */
-      void fetch("/api/inquiry-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: saved.id }) }).catch(() => {});
-    } catch {
-      setPayErr("Something went wrong creating your booking. Please try again.");
-    } finally { setPayBusy(false); }
-  }
-  useEffect(() => {
-    if (step === 7 && !booking && !payBusy) void createPendingBooking();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  /* ---------- customer self-reports payment; admin still verifies ---------- */
-  const [utr, setUtr] = useState("");
-  const [claimBusy, setClaimBusy] = useState(false);
-  const [claimErr, setClaimErr] = useState<string | null>(null);
-  async function submitPaymentClaim() {
-    if (!booking || claimBusy) return;
-    const cur = (live ?? booking).pay;
-    if (!cur) return;
-    setClaimBusy(true); setClaimErr(null);
-    try {
-      const now = nowIso();
-      const next = await updateBooking(
-        booking.id,
-        { pay: { ...cur, status: "submitted", utr: utr.trim() || undefined, submittedAt: now } },
-        `Customer marked payment as completed${utr.trim() ? ` · UTR ${utr.trim()}` : ""} — awaiting admin verification`
-      );
-      setLive(next);
-    } catch {
-      setClaimErr("Could not save that — check your connection and try again.");
-    } finally { setClaimBusy(false); }
-  }
-  /** After a rejection: show the QR again so the customer can retry. */
-  async function retryPayment() {
-    if (!booking || claimBusy) return;
-    const cur = (live ?? booking).pay;
-    if (!cur) return;
-    setClaimBusy(true); setClaimErr(null);
-    try {
-      const now = nowIso();
-      const next = await updateBooking(
-        booking.id,
-        { pay: { mode: cur.mode, amount: cur.amount, status: "pending", gateway: cur.gateway, at: now } },
-        "Customer is retrying payment after rejection"
-      );
-      setLive(next); setUtr("");
-    } catch {
-      setClaimErr("Could not save that — check your connection and try again.");
-    } finally { setClaimBusy(false); }
-  }
-
-  /* ---------- indemnity undertaking (verbatim bond letter) ---------- */
-  const [ind, setInd] = useState<{ idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place: string; agree: boolean }>(
-    { idType: "aadhaar", idNumber: "", signature: "", place: "", agree: false }
-  );
-  /* the signature field defaults to the traveller's name, but stays
-   * editable, and tracks their name until they've typed their own */
-  const sigAutoRef = useRef("");
-  useEffect(() => {
-    if (!ind.signature || ind.signature === sigAutoRef.current) {
-      sigAutoRef.current = d.name;
-      if (ind.signature !== d.name) setInd((p) => ({ ...p, signature: d.name }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.name]);
-  const [indBusy, setIndBusy] = useState(false);
-  const [indErr, setIndErr] = useState<string | null>(null);
-  /** By this point the booking is usually "accepted" (payment verified),
-   *  which update_booking_customer refuses by design — customers can't
-   *  edit a confirmed booking through that RPC. /api/indemnity runs with
-   *  the service role instead, same reasoning as /api/verify below. */
-  async function acceptIndemnity() {
-    if (!booking || indBusy || !ind.agree || !ind.idNumber.trim() || !ind.signature.trim()) return;
-    setIndBusy(true); setIndErr(null);
-    try {
-      if (backend === "local") {
-        const next = await updateBooking(
-          booking.id,
-          { indemnity: { acceptedAt: nowIso(), idType: ind.idType, idNumber: ind.idNumber.trim(), signature: ind.signature.trim(), place: ind.place.trim() || undefined } },
-          `Indemnity undertaking signed by "${ind.signature.trim()}" · ${ind.idType} ${ind.idNumber.trim()}`
-        );
-        setLive(next);
-        return;
-      }
-      const r = await fetch("/api/indemnity", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: booking.id, idType: ind.idType, idNumber: ind.idNumber.trim(), signature: ind.signature.trim(), place: ind.place.trim() }),
-      });
-      const j = await r.json();
-      if (j.error) { setIndErr(j.detail ?? "Could not save that — try again."); return; }
-      setLive((p) => (p ? { ...p, indemnity: j.indemnity } : p));
-    } catch {
-      setIndErr("Could not save that — check your connection and try again.");
-    } finally { setIndBusy(false); }
-  }
-
-  /* ---------- post-payment Aadhaar (inline, same as /verify/<id>) ---------- */
-  const [aad, setAad] = useState({ code: "", busy: false, err: null as string | null, locked: false });
-  async function verifyAadhaar() {
-    if (!booking || aad.locked) return;
-    setAad((p) => ({ ...p, busy: true, err: null }));
-    try {
-      if (backend === "local") {
-        if (aad.code.trim() !== AAD_DEMO) { setAad((p) => ({ ...p, busy: false, err: "That OTP didn't match — try again." })); return; }
-        const next = await updateBooking(booking.id, { identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } },
-          "Identity verified · UIDAI Aadhaar OTP (post-payment, pre-pickup)");
-        setLive(next);
-        setAad({ code: "", busy: false, err: null, locked: false });
-        return;
-      }
-      /* Attempt counting + the 2-attempt lock both live server-side (see
-       * /api/verify) — persisted on the booking, not just this tab's
-       * state, so a refresh can't reset the count. */
-      const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: booking.id, otp: aad.code }) });
-      const j = await r.json();
-      if (j.error === "LOCKED") { setAad((p) => ({ ...p, busy: false, locked: true, err: "Too many incorrect attempts — paused for your security. Our team will reach out to verify you directly." })); return; }
-      if (j.error) { setAad((p) => ({ ...p, busy: false, err: j.error === "WRONG_OTP" ? "That OTP didn't match — check the code UIDAI sent and try again." : j.error })); return; }
-      setAad({ code: "", busy: false, err: null, locked: false });
-      setLive((p) => (p ? { ...p, identity: { ok: true, at: nowIso(), method: "UIDAI Aadhaar OTP · DigiLocker (demo)", score: 0.97 } } : p));
-    } catch { setAad((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
-  }
-
-  /* ---------- step validity ---------- */
   const canNext = [
     true,
-    (!!d.pickAddr.trim() || d.uc === "a2d") && (!isOther || (d.from !== "other" || !!d.fromOther.trim()) && (d.to !== "other" || !!d.toOther.trim())),
+    !!fromName && !!toName && norm(fromName) !== norm(toName) && !!d.pickAddr.trim() && !!d.dropAddr.trim(),
     !!d.slot && !!d.date && d.date >= minDate,
     d.bags + d.oversize > 0,
-    d.name.trim().length > 1 && mobileOk,
-    !!otp.verifiedAt,
-    ror || (!!signed && !quoteErr),
+    d.name.trim().length > 1 && mobileOk && (!d.email.trim() || emailOk),
   ][step] ?? true;
 
-  if (booking) {
-    const st = live ?? booking;
-    const verified = !!st.identity?.ok;
-    const pay = st.pay;
-    const paymentDone = !pay || pay.status === "captured";
-    const indemnityDone = !!st.indemnity;
-    const stages = ["submitted", "accepted", "assigned", "picked_up", "in_transit", "delivered"];
-    const idx = stages.indexOf(st.status);
+  /* ================= after submission: price (or inquiry) on screen ================= */
+  if (result) {
     return (
-      <Card className="mx-auto max-w-2xl">
+      <Card className="mx-auto max-w-2xl anim-in">
         <div className="text-center">
-          {paymentDone ? (
-            <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-green-50 text-2xl text-green-700">✓</div>
-          ) : (
-            <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-amber-50 text-2xl text-amber-600">…</div>
-          )}
-          <h2 className="font-display text-2xl font-extrabold">{paymentDone ? "Booking confirmed" : "Almost there — pay to confirm"}</h2>
-          <p className="mt-1 text-sm text-muted">
-            Reference <b className="font-mono">{booking.id}</b>{paymentDone
-              ? " — live status below updates as our team progresses your booking."
-              : " — not confirmed yet. Pay using the QR below, then our team verifies it."}
-          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">Reference {result.id}</p>
+          <h2 className="mt-1 font-display text-2xl font-extrabold">{result.paid ? "Booking confirmed ✓" : result.instant ? "⚡ Pay now to confirm instantly" : result.priced ? "Your price" : "Request received"}</h2>
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-          {["Booked", "Accepted", "Captain", "Picked up", "In transit", "Delivered"].map((s, i) => (
-            <div key={s} className={`rounded-lg p-2 text-center text-[11px] ${i <= idx ? "bg-green-50 text-green-800" : "bg-paper text-muted"}`}>{s}</div>
+        {result.priced && result.price ? (
+          <div className="mt-4 rounded-2xl bg-ink p-5 text-center text-cream">
+            <p className="font-mono text-[11px] opacity-75">Sector rate chart · GST 5% included</p>
+            <p className="font-display text-4xl font-extrabold">{inr(result.price.total)}</p>
+            <p className="mt-1 text-xs opacity-80">{result.price.rule} · {result.price.billed} piece(s) billed</p>
+            <div className="mx-auto mt-3 grid max-w-xs gap-1 text-left text-xs">
+              <div className="flex justify-between border-b border-white/15 py-1"><span className="opacity-80">Base</span><span className="font-mono">{inr(result.price.base)}</span></div>
+              {result.price.oversize > 0 && <div className="flex justify-between border-b border-white/15 py-1"><span className="opacity-80">Oversize</span><span className="font-mono">{inr(result.price.oversize)}</span></div>}
+              <div className="flex justify-between py-1"><span className="opacity-80">GST 5%</span><span className="font-mono">{inr(result.price.gst)}</span></div>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
+            <b>{fromName} → {toName} is a new sector</b> — it isn&apos;t on our rate chart yet, so no price is shown. Your request is with our team, who will share the rate with you shortly.
+          </p>
+        )}
+        {result.instant && result.price && !result.paid && (
+          <div className="mt-4 grid gap-2">
+            <OnlinePay bookingId={result.id} kind="full" amount={result.price.total} fallbackHint="or pay later from My bookings" onPaid={() => setResult((r) => (r ? { ...r, paid: true } : r))} />
+            <p className="text-center text-xs text-muted">Held for you for {result.instant.holdMinutes} minutes. Not paid by then? No problem — our team confirms it and sends the payment details.</p>
+          </div>
+        )}
+        {result.paid && <p className="mt-4 rounded-xl bg-green-50 p-3 text-center text-sm text-green-900"><b>Paid and confirmed.</b> Your invoice and the pre-pickup steps are on their way by WhatsApp and email.</p>}
+        {!result.instant && result.priced && result.instantReason && <p className="mt-3 rounded-xl bg-paper p-3 text-xs text-muted">Instant confirmation wasn&apos;t available for this booking: {result.instantReason}</p>}
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {(result.instant
+            ? [["1", "Pay now", "Card, UPI or netbanking — secured by Razorpay"], ["2", "Confirmed instantly", "No waiting for approval on this route"], ["3", "Verify & go", "Quick identity check, then sealed pickup"]]
+            : [["1", "Team review", "We approve your booking — usually within the hour"], ["2", "Pay", "Payment details by WhatsApp, email and in your dashboard"], ["3", "Verify & go", "Quick identity check, then sealed pickup"]]).map(([n, t, s]) => (
+            <div key={n} className="rounded-xl bg-paper p-3 text-center">
+              <span className="mx-auto mb-1 flex size-6 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">{n}</span>
+              <b className="block text-[13px]">{t}</b><span className="text-xs text-muted">{s}</span>
+            </div>
           ))}
         </div>
-
-        {/* STAGE 1 — UPI QR payment (static QR, no gateway; admin verifies) */}
-        {!paymentDone && pay && (
-          <div className="mt-4 rounded-xl border border-line bg-paper/60 p-4">
-            {pay.status === "rejected" && (
-              <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-900">
-                <b>Payment not verified</b> — {pay.rejectedNote || "our team couldn't match this to a payment received."} Please try again below.
-                <Button size="sm" variant="outline" className="mt-2" disabled={claimBusy} onClick={() => void retryPayment()}>{claimBusy ? "Resetting…" : "Show QR again"}</Button>
-              </p>
-            )}
-            {pay.status === "pending" && (
-              <>
-                <p className="text-sm font-bold text-ink">Pay by UPI to confirm your booking</p>
-                <div className="mt-3 flex flex-col items-center gap-2 rounded-xl bg-white p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={upiQrUrl(pay.amount, booking.id)} alt="UPI QR code" className="size-[200px]" />
-                  <p className="font-display text-xl font-extrabold text-ink">{inr(pay.amount)}</p>
-                  <p className="text-center text-xs text-muted">{UPI_PAYEE}<br />UPI ID: <span className="font-mono">{UPI_ID}</span><br />Reference: <span className="font-mono">{booking.id}</span></p>
-                </div>
-                <p className="mt-3 text-xs text-muted">Scan this QR code using any UPI app to complete your payment. Please verify the company name before paying.</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                  <Input className="w-48" value={utr} onChange={(e) => setUtr(e.target.value)} placeholder="UPI transaction ref / UTR (optional)" />
-                  <Button disabled={claimBusy} onClick={() => void submitPaymentClaim()}>{claimBusy ? "Saving…" : "I Have Completed Payment"}</Button>
-                </div>
-                {claimErr && <p className="mt-2 text-sm text-red-700">{claimErr}</p>}
-              </>
-            )}
-            {pay.status === "submitted" && (
-              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-                <b>Payment submitted — awaiting verification.</b> Our team checks this against what we received{pay.utr ? <> (ref <span className="font-mono">{pay.utr}</span>)</> : ""} and confirms your booking shortly.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* STAGE 2 — indemnity undertaking, shown as the actual bond letter, signed digitally */}
-        {paymentDone && !indemnityDone && (
-          <div className="mt-4">
-            <p className="mb-2 text-sm font-bold text-amber-900">One step left: read and digitally sign the undertaking below</p>
-            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              {/* masthead — matches the issued bond letter */}
-              <div className="flex items-center justify-between bg-[#EA580C] px-5 py-3 text-white">
-                <div className="flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/images/logo-icon.png" alt="" className="h-8 w-auto" />
-                  <span className="font-display text-base font-extrabold tracking-tight">BAGDROP</span>
-                </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">Digital undertaking</span>
-              </div>
-
-              <div className="p-5">
-                <h3 className="mb-3 text-center font-display text-base font-bold text-ink underline underline-offset-4">
-                  Undertaking for Moving Baggage Goods &amp; Household Goods
-                </h3>
-
-                <div className="space-y-2.5 text-[13px] leading-relaxed text-stone-700">
-                  <p>
-                    I, <b className="text-ink">{ind.signature.trim() || d.name.trim() || "the undersigned"}</b>, hereby confirm that I hold{" "}
-                    {ID_LABELS[ind.idType]} no. <b className="text-ink">{ind.idNumber.trim() || "__________"}</b>, and have engaged Bagdrop Logistics
-                    Solutions for the purpose of moving my household goods.
-                  </p>
-                  {INDEMNITY_PARAGRAPHS.map((p, i) => <p key={i}>{p}</p>)}
-                </div>
-
-                <div className="mt-3 rounded-lg bg-paper/60 p-3">
-                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-faint">Items not allowed with Bagdrop</p>
-                  <p className="text-[11px] leading-relaxed text-stone-600">
-                    {PROHIBITED_ITEMS.join(" · ")}. <b className="text-red-700">Alcohol is strictly prohibited in your baggage.</b>
-                  </p>
-                </div>
-
-                <p className="mt-4 mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">Fill in any one of the IDs above</p>
-                <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
-                  <Field label="ID type">
-                    <Select value={ind.idType} onChange={(e) => setInd((p) => ({ ...p, idType: e.target.value as typeof ind.idType }))}>
-                      <option value="aadhaar">Aadhaar</option>
-                      <option value="passport">Passport</option>
-                      <option value="licence">Driving Licence</option>
-                    </Select>
-                  </Field>
-                  <Field label="ID number"><Input value={ind.idNumber} onChange={(e) => setInd((p) => ({ ...p, idNumber: e.target.value }))} /></Field>
-                </div>
-
-                <div className="mt-4 border-t border-dashed border-line pt-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">Sign digitally</p>
-                  <div className="grid gap-x-3 gap-y-3 sm:grid-cols-[1.3fr_0.7fr]">
-                    <Field label="Signature — type your full legal name">
-                      <Input value={ind.signature} onChange={(e) => setInd((p) => ({ ...p, signature: e.target.value }))} placeholder="Your full name" />
-                    </Field>
-                    <Field label="Place (optional)">
-                      <Input value={ind.place} onChange={(e) => setInd((p) => ({ ...p, place: e.target.value }))} placeholder={fromName} />
-                    </Field>
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-faint">Date: {todayLabel || d.date}</p>
-                </div>
-
-                <label className="mt-3 flex items-start gap-2 text-xs text-stone-700">
-                  <input type="checkbox" className="mt-0.5" checked={ind.agree} onChange={(e) => setInd((p) => ({ ...p, agree: e.target.checked }))} />
-                  I have read and understood the terms and conditions of this undertaking, and agree to be bound by them.
-                </label>
-
-                <Button className="mt-3" disabled={indBusy || !ind.agree || !ind.idNumber.trim() || !ind.signature.trim()} onClick={() => void acceptIndemnity()}>
-                  {indBusy ? "Signing…" : "Sign & Continue"}
-                </Button>
-                {indErr && <p className="mt-2 text-sm text-red-700">{indErr}</p>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STAGE 3 — Aadhaar gate, after payment + indemnity, before pickup */}
-        {paymentDone && indemnityDone && (
-          !verified ? (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-bold text-amber-900">One step left before pickup: Aadhaar verification</p>
-              {aad.locked ? (
-                <p className="mt-1 text-xs text-amber-900/80">We&apos;ve paused further attempts after {MAX_AADHAAR_ATTEMPTS} incorrect codes, for your security — our team will verify you directly and be in touch shortly.</p>
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-amber-900/80">UIDAI sends an OTP to your Aadhaar-linked mobile. Your bags are picked up only after this is done — do it now, or later at <span className="font-mono">bagdrop.co/verify/{booking.id}</span> (we&apos;ve sent you the link too). <span className="font-mono">(demo: {AAD_DEMO})</span></p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                    <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={aad.code} onChange={(e) => setAad((p) => ({ ...p, code: e.target.value }))} placeholder="UIDAI OTP" />
-                    <Button disabled={aad.busy || aad.code.trim().length !== 6} onClick={() => void verifyAadhaar()}>{aad.busy ? "Checking…" : "Verify now"}</Button>
-                  </div>
-                </>
-              )}
-              {aad.err && <p className="mt-2 text-sm text-red-700">{aad.err}</p>}
-            </div>
-          ) : (
-            <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Identity verified</b> · UIDAI Aadhaar OTP · pickup is released.</p>
-          )
-        )}
-
-        <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
-          {st.status === "accepted" && `Confirmed · captain ${String((st.admin as { captain?: string }).captain ?? "to be assigned")} · pickup ${st.slot} on ${st.date}.`}
-          {st.status === "submitted" && (st.quote.breakdown.ror ? "Request received — our team will call you with the rate for this route." : paymentDone ? "With Bagdrop operations — you will hear from us within the hour." : "Pay by UPI above to confirm this booking.")}
-          {["assigned", "picked_up", "in_transit", "delivered"].includes(st.status) && `Status: ${st.status.replace("_", " ")}.`}
-        </p>
+        <a href="/account" className="mt-4 block"><Button size="lg" className="w-full">Open my dashboard →</Button></a>
+        {!result.instant && <p className="mt-2 text-center text-xs text-muted">No payment is taken until the team approves your booking.</p>}
       </Card>
     );
   }
@@ -536,242 +222,196 @@ export default function Wizard() {
   return (
     <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_300px]">
       <Card>
-        {/* stepper */}
+        <div className="mb-2 flex items-baseline justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">Step {step + 1} of {STEPS.length} · {STEPS[step]}</span>
+          <span className="text-[11px] text-faint">price shown after verification</span>
+        </div>
         <ol className="mb-6 flex gap-1.5">
-          {STEPS.map((s, i) => (
-            <li key={s} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-brand" : "bg-line"}`} title={s} />
-          ))}
+          {STEPS.map((s, i) => <li key={s} className={`h-1 flex-1 rounded-full transition-colors duration-300 ${i <= step ? "bg-brand" : "bg-line"}`} title={s} />)}
         </ol>
 
-        {step === 0 && (
-          <>
-            <H>Choose your service</H>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-              {SERVICES.map((s) => (
-                <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => { set("uc", s.uc); set("mode", s.mode); }} title={s.title} sub={s.sub} />
-              ))}
-            </div>
-          </>
-        )}
+        <div key={step} className="anim-in">
+          {step === 0 && (
+            <>
+              <H>Choose your service</H>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                {SERVICES.map((s) => <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => setD((p) => ({ ...p, uc: s.uc, pickAddr: "", dropAddr: "", terminal: "" }))} title={s.title} sub={s.sub} />)}
+              </div>
+            </>
+          )}
 
-        {step === 1 && (
-          <>
-            <H>Pickup &amp; delivery</H>
-            <div className="grid gap-x-4 sm:grid-cols-2">
-              <Field label="Pickup city">
-                <Select value={d.from} onChange={(e) => set("from", e.target.value)}>
-                  {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
-                  <option value="other">Others · tell us the city</option>
-                </Select>
-              </Field>
-              <Field label="Delivery city">
-                <Select value={d.to} onChange={(e) => set("to", e.target.value)}>
-                  {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
-                  <option value="other">Others · tell us the city</option>
-                </Select>
-              </Field>
-              {d.from === "other" && (
-                <Field label="Your pickup city"><Input value={d.fromOther} onChange={(e) => set("fromOther", e.target.value)} placeholder="Type the city" /></Field>
-              )}
-              {d.to === "other" && (
-                <Field label="Your delivery city"><Input value={d.toOther} onChange={(e) => set("toOther", e.target.value)} placeholder="Type the city" /></Field>
-              )}
-              <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} placeholder="Flat, building, area or pincode" /></Field>
-              <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} placeholder="Hotel, home, terminal" /></Field>
-            </div>
-            {isOther && (
-              <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
-                <b>Route not on our rate chart yet</b> — book anyway. No payment is taken now; our team gets in touch with the rate and the pickup plan.
-              </p>
-            )}
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <H>When are you travelling?</H>
-            <div className="grid gap-x-4 sm:grid-cols-2">
-              <Field label={d.mode === "air" ? "Flight number" : "Reference (optional)"}>
-                <Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" />
-              </Field>
-              <Field label="Pickup Date">
-                <Input
-                  type="date" value={d.date} min={minDate}
-                  title="Pickup needs at least 24 hours' notice from booking time"
-                  onChange={(e) => set("date", e.target.value)}
-                />
-                <p className="mt-1 text-[11px] text-muted">Needs 24 hours&apos; notice — earliest pickup is {minDateLabel || "tomorrow"}.</p>
-              </Field>
-              <Field label="Delivery Date (optional)">
-                <Input type="date" value={d.deliveryDate} min={d.date || minDate} onChange={(e) => set("deliveryDate", e.target.value)} />
-              </Field>
-            </div>
-            {plan.usesFlightTime && (
-              <div className="mb-3">
-                <Field label={d.uc === "a2d" ? (d.mode === "air" ? "Flight arrival time" : "Arrival time") : d.mode === "air" ? "Flight departure time" : d.mode === "rail" ? "Train departure time" : "Sailing time"}>
-                  <Input type="time" value={d.flightTime} onChange={(e) => set("flightTime", e.target.value)} />
+          {step === 1 && (
+            <>
+              <H>Pickup &amp; delivery</H>
+              <div className="grid gap-x-4 sm:grid-cols-2">
+                <Field label="Pickup city">
+                  <Select value={d.from} onChange={(e) => setD((p) => ({ ...p, from: e.target.value, pickAddr: svc.airportEnd === "from" ? "" : p.pickAddr }))}>
+                    {cat.cities.map((c) => <option key={c.name}>{c.name}</option>)}
+                    <option value="other">Others · tell us the city</option>
+                  </Select>
                 </Field>
-                <p className="mt-1.5 text-xs text-muted">{plan.cutoffNote}</p>
-              </div>
-            )}
-            <Field label={`Preferred pickup time${plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (evening before)` : ""}`}>
-              <Select value={d.slot} onChange={(e) => set("slot", e.target.value)}>
-                <option value="">— Select time —</option>
-                {SLOTS.filter((s) => isSlotFeasible(s.label, plan, d.pickupDate || d.date)).map((s) => (
-                  <option key={s.label} value={s.label}>{s.label}{s.label === plan.suggestedSlot ? " · suggested" : ""}</option>
-                ))}
-              </Select>
-            </Field>
-          </>
-        )}
+                <Field label="Delivery city">
+                  <Select value={d.to} onChange={(e) => setD((p) => ({ ...p, to: e.target.value, dropAddr: svc.airportEnd === "to" ? "" : p.dropAddr }))}>
+                    {cat.cities.map((c) => <option key={c.name}>{c.name}</option>)}
+                    <option value="other">Others · tell us the city</option>
+                  </Select>
+                </Field>
+                {d.from === "other" && <Field label="Your pickup city"><Input value={d.fromOther} onChange={(e) => set("fromOther", e.target.value)} placeholder="Type the city" /></Field>}
+                {d.to === "other" && <Field label="Your delivery city"><Input value={d.toOther} onChange={(e) => set("toOther", e.target.value)} placeholder="Type the city" /></Field>}
 
-        {step === 3 && (
-          <>
-            <H>Bags &amp; pieces</H>
-            {(["bags", "oversize"] as const).map((k) => (
-              <div key={k} className="mb-3 flex items-center justify-between rounded-xl border border-line p-3.5">
-                <div>
-                  <b className="font-display">{k === "bags" ? "Bags" : "Oversize"}</b>
-                  <p className="text-xs text-muted">{k === "bags" ? "Suitcase, duffel, backpack · up to 32 kg each" : "Golf, surfboard, cycle, anything over 32 kg"}</p>
+                {svc.airportEnd === "from" && airport ? (
+                  <AirportField label="Pickup airport" airport={airport} terminal={d.terminal} onTerminal={(t) => set("terminal", t)} />
+                ) : (
+                  <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} placeholder={svc.airportEnd === "from" ? "Airport and terminal" : "Flat, building, area or pincode"} /></Field>
+                )}
+                {svc.airportEnd === "to" && airport ? (
+                  <AirportField label="Delivery airport" airport={airport} terminal={d.terminal} onTerminal={(t) => set("terminal", t)} />
+                ) : (
+                  <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} placeholder={svc.airportEnd === "to" ? "Airport and terminal" : "Hotel, home, terminal"} /></Field>
+                )}
+              </div>
+              {fromName && toName && norm(fromName) === norm(toName) && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">Pickup and delivery cities must be different.</p>}
+              {fromName && toName && norm(fromName) !== norm(toName) && (
+                onChart
+                  ? <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>{fromName} → {toName} is on our rate chart.</b> Your exact price appears right after you verify your contact.</p>
+                  : <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900"><b>New sector</b> — {fromName} → {toName} isn&apos;t on our rate chart yet. Book anyway: your request goes to our team as an inquiry and they share the rate with you. No price is shown and nothing is charged now.</p>
+              )}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <H>Travel details</H>
+              <div className="grid gap-x-4 sm:grid-cols-2">
+                <Field label={svc.mode === "air" ? "Flight number" : "Reference (optional)"}><Input value={d.flight} onChange={(e) => set("flight", e.target.value)} placeholder="6E 5219" /></Field>
+                <Field label="Pickup date">
+                  <Input type="date" value={d.date} min={minDate} onChange={(e) => set("date", e.target.value)} />
+                  <p className="mt-1 text-[11px] text-muted">Needs 24 hours&apos; notice — earliest pickup is {minDateLabel || "tomorrow"}.</p>
+                </Field>
+                <Field label="Delivery date (optional)"><Input type="date" value={d.deliveryDate} min={d.date || minDate} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
+              </div>
+              {plan.usesFlightTime && (
+                <div className="mb-3">
+                  <Field label={d.uc === "a2d" ? (svc.mode === "air" ? "Flight arrival time" : "Arrival time") : svc.mode === "air" ? "Flight departure time" : svc.mode === "rail" ? "Train departure time" : "Sailing time"}>
+                    <Input type="time" value={d.flightTime} onChange={(e) => set("flightTime", e.target.value)} />
+                  </Field>
+                  <p className="mt-1.5 text-xs text-muted">{plan.cutoffNote}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" onClick={() => set(k, Math.max(0, d[k] - 1))}>−</Button>
-                  <span className="w-7 text-center font-display text-xl font-extrabold">{d[k]}</span>
-                  <Button variant="outline" size="sm" onClick={() => set(k, d[k] + 1)}>+</Button>
+              )}
+              <Field label={`Preferred pickup time${plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (evening before)` : ""}`}>
+                <Select value={d.slot} onChange={(e) => set("slot", e.target.value)}>
+                  <option value="">— Select time —</option>
+                  {SLOTS.filter((s) => isSlotFeasible(s.label, plan, d.pickupDate || d.date)).map((s) => <option key={s.label} value={s.label}>{s.label}{s.label === plan.suggestedSlot ? " · suggested" : ""}</option>)}
+                </Select>
+              </Field>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <H>Bags &amp; pieces</H>
+              {(["bags", "oversize"] as const).map((k) => (
+                <div key={k} className="mb-3 flex items-center justify-between rounded-xl border border-line p-3.5">
+                  <div>
+                    <b className="font-display">{k === "bags" ? "Bags" : "Oversize"}</b>
+                    <p className="text-xs text-muted">{k === "bags" ? "Suitcase, duffel, backpack · up to 32 kg each" : "Golf, surfboard, cycle, anything over 32 kg"}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button variant="outline" size="sm" onClick={() => set(k, Math.max(0, d[k] - 1))}>−</Button>
+                    <span className="w-7 text-center font-display text-xl font-extrabold">{d[k]}</span>
+                    <Button variant="outline" size="sm" onClick={() => set(k, Math.min(k === "bags" ? 50 : 20, d[k] + 1))}>+</Button>
+                  </div>
                 </div>
+              ))}
+              <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><b>Never pack</b> liquor, cash, jewellery, documents, medicines you need in transit, lighters, power banks or loose lithium batteries. The captain checks and seals each bag with you at pickup.</p>
+            </>
+          )}
+
+          {step === 4 && (
+            <>
+              <H>Traveller details</H>
+              <div className="grid gap-x-4 sm:grid-cols-2">
+                <Field label="Full name (as on your ID)"><Input value={d.name} onChange={(e) => set("name", e.target.value)} /></Field>
+                <Field label="Mobile"><Input value={d.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="+91 98XXX XXXXX" inputMode="tel" /></Field>
+                <Field label="Email (for payment details)"><Input value={d.email} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
+                <Field label="Anything we should know"><Input value={d.note} onChange={(e) => set("note", e.target.value)} placeholder="Gate code, fragile item inside" /></Field>
               </div>
-            ))}
-            <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-              <b>Please do not pack</b> · cash, jewellery, passports, medicines you need in transit, loose lithium batteries. Our captain checks and seals each bag with you at pickup.
-            </p>
-          </>
-        )}
+              {d.mobile.trim().length > 0 && !mobileOk && <p className="text-sm text-red-700">That mobile number doesn&apos;t look right — 10 digits, +91 optional.</p>}
+              {d.email.trim().length > 0 && !emailOk && <p className="text-sm text-red-700">That email doesn&apos;t look right.</p>}
+            </>
+          )}
 
-        {step === 4 && (
-          <>
-            <H>Traveller details</H>
-            <div className="grid gap-x-4 sm:grid-cols-2">
-              <Field label="Full name (as on the ID you verify with)"><Input value={d.name} onChange={(e) => set("name", e.target.value)} /></Field>
-              <Field label="Mobile"><Input value={d.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="+91 98XXX XXXXX" inputMode="tel" /></Field>
-              <Field label="Email (optional)"><Input value={d.email} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
-              <Field label="Anything we should know"><Input value={d.note} onChange={(e) => set("note", e.target.value)} placeholder="Gate code, fragile item inside" /></Field>
-            </div>
-            {d.mobile.trim().length > 0 && !mobileOk && <p className="text-sm text-red-700">That mobile number doesn&apos;t look right — 10 digits, +91 optional.</p>}
-          </>
-        )}
-
-        {step === 5 && (
-          <>
-            <H>Verify your contact</H>
-            <p className="mb-4 text-sm text-muted">A one-time code confirms your booking contact. Choose where we send it — the code is valid for 10 minutes.</p>
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <Tile selected={otp.channel === "mobile"} onClick={() => !otp.verifiedAt && sendOtp("mobile")} title="WhatsApp / SMS" sub={d.mobile.trim() || "your mobile"} />
-              <Tile selected={otp.channel === "email"} onClick={() => !otp.verifiedAt && (emailOk ? sendOtp("email") : setOtp((p) => ({ ...p, err: "Add a valid email on the previous step to use email OTP." })))} title="Email" sub={d.email.trim() || "add email on previous step"} />
-            </div>
-            {otp.sent && !otp.verifiedAt && (
-              <div className="flex flex-wrap items-center gap-2.5">
-                <Input className="w-36 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp.entered} onChange={(e) => setOtp((p) => ({ ...p, entered: e.target.value, err: null }))} placeholder="••••••" />
-                <Button disabled={otp.busy || otp.entered.trim().length !== 6} onClick={() => void verifyOtp()}>{otp.busy ? "Checking…" : "Verify"}</Button>
-                <Button variant="ghost" size="sm" disabled={otp.busy} onClick={() => void sendOtp(otp.channel)}>Resend</Button>
+          {step === 5 && (
+            <>
+              <H>Verify to see your price</H>
+              <p className="mb-4 text-sm text-muted">A one-time code confirms your contact. Once verified, your booking goes to our team and {onChart ? "your price appears on screen" : "your inquiry is logged"}. The code is valid for 10 minutes.</p>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <Tile selected={otp.channel === "mobile" && otp.sent} onClick={() => !otp.busy && void sendOtp("mobile")} title="WhatsApp / SMS" sub={d.mobile.trim() || "your mobile"} />
+                <Tile selected={otp.channel === "email" && otp.sent} onClick={() => !otp.busy && (emailOk ? void sendOtp("email") : setOtp((p) => ({ ...p, err: "Add a valid email on the previous step to use email OTP." })))} title="Email" sub={d.email.trim() || "add email on previous step"} />
               </div>
-            )}
-            {otp.sent && !otp.verifiedAt && (
-              <p className="mt-2 text-xs text-muted">Code sent to {otpDest}.{otp.demo ? <span className="font-mono"> (demo: {otp.demo})</span> : null}</p>
-            )}
-            {otp.verifiedAt && <p className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Confirmed</b> · {otp.channel} verified · your booking is made against this contact.</p>}
-            {otp.err && <p className="mt-2 text-sm text-red-700">{otp.err}</p>}
-          </>
-        )}
-
-        {step === 6 && (
-          <>
-            <H>{ror ? "Rate on request" : "Your locked price"}</H>
-            {ror ? (
-              <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
-                This route is not on our rate chart yet. Continue: no payment is taken, and the team confirms the rate before anything moves.
-              </p>
-            ) : quoteErr ? (
-              <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">Could not fetch your locked price — <Button size="sm" variant="outline" onClick={() => void fetchSigned()}>try again</Button></p>
-            ) : signed ? (
-              <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
-                <b>Locked</b> · {signed.qid} · {inr(signed.total)} until {new Date(signed.validUntil).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · signature {signed.signature.slice(0, 10)}… <Badge tone="ok">server-signed</Badge>
-              </p>
-            ) : (
-              <p className="text-sm text-muted">Locking your price…</p>
-            )}
-          </>
-        )}
-
-        {step === 7 && (
-          <>
-            <H>{ror ? "Submitting your request" : "Preparing your payment"}</H>
-            <p className="mb-4 text-sm text-muted">
-              {ror
-                ? "No payment now — the team calls with the rate for your route. Aadhaar verification follows before pickup."
-                : "Your booking reference is created now, then you'll see a UPI QR code for this exact amount — scan it, pay, and tell us. Our team verifies the payment before the booking is confirmed."}
-            </p>
-            {payErr ? (
-              <>
-                <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900">{payErr}</p>
-                <Button size="lg" className="mt-3 w-full" disabled={payBusy} onClick={() => void createPendingBooking()}>{payBusy ? "Retrying…" : "Try again"}</Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted">{payBusy || !ror ? "One moment…" : ""}</p>
-            )}
-          </>
-        )}
+              {otp.sent && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Input className="w-36 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp.entered} onChange={(e) => setOtp((p) => ({ ...p, entered: e.target.value, err: null }))} placeholder="••••••" />
+                    <Button disabled={otp.busy || otp.entered.trim().length !== 6} onClick={() => void verifyAndSubmit()}>{otp.busy ? "Checking…" : onChart ? "Verify & see price" : "Verify & send inquiry"}</Button>
+                    <Button variant="ghost" size="sm" disabled={otp.busy} onClick={() => void sendOtp(otp.channel)}>Resend</Button>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">Code sent to {otp.channel === "email" ? d.email.trim() : d.mobile.trim()}.{otp.demo ? <span className="font-mono"> (demo: {otp.demo})</span> : null}</p>
+                </>
+              )}
+              {otp.err && <p className="mt-2 text-sm text-red-700">{otp.err}</p>}
+            </>
+          )}
+        </div>
 
         <div className="mt-6 flex justify-between gap-3">
           {step > 0 ? <Button variant="outline" onClick={() => setStep(step - 1)}>Back</Button> : <span />}
-          {step < 7 && <Button className="flex-1" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue</Button>}
+          {step < 5 && <Button className="flex-1" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue</Button>}
         </div>
       </Card>
 
-      {/* summary */}
       <aside>
         <Card className="lg:sticky lg:top-6">
           <h3 className="mb-2 font-display text-sm font-bold">Your booking</h3>
           {([
-            ["Service", SERVICES.find((s) => s.uc === d.uc)?.title],
-            ["Route", `${fromName} → ${toName}`],
-            ["Pickup date", `${d.date}${d.flight ? ` · ${d.flight.toUpperCase()}` : ""}`],
-            ["Pickup time", d.slot || "—"],
-            ["Delivery date", d.deliveryDate || "—"],
+            ["Service", svc.title],
+            ["Route", `${fromName || "—"} → ${toName || "—"}`],
+            ["Pickup", `${d.date || "—"}${d.slot ? ` · ${d.slot}` : ""}`],
             ["Pieces", `${d.bags} bags${d.oversize ? ` + ${d.oversize} oversize` : ""}`],
             ["Traveller", d.name || "—"],
-            ["Contact", otp.verifiedAt ? `verified · ${otp.channel}` : "verify at step 6"],
           ] as const).map(([k, v]) => (
-            <div key={k} className="flex justify-between border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+            <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
               <span className="text-muted">{k}</span><span className="text-right">{v}</span>
             </div>
           ))}
-          {/* Price is deliberately NOT shown here — it is revealed at the
-            * "Your locked price" step, server-signed. The side card carries
-            * trust content instead (see /sidecard-options.html). */}
-          {step >= 6 && !ror && !("error" in preview) ? (
-            <div className="relative mt-3 overflow-hidden rounded-xl bg-ink p-4 text-cream">
-              <p className="font-mono text-[11px] opacity-75">GST 5% included · server-signed</p>
-              <p className="font-display text-3xl font-extrabold">{inr(preview.total)}</p>
-              <p className="text-xs opacity-75">{inr(preview.perBag)} per piece · {preview.billed} billed</p>
-            </div>
-          ) : (
-            <div className="mt-3 rounded-xl bg-ink p-4 text-cream">
-              <p className="font-mono text-[11px] opacity-75">{ror ? "Rate on request" : "Transparent pricing"}</p>
-              <p className="mt-1 text-[13px] leading-relaxed">
-                {ror
-                  ? "Our team calls with the rate for this route — no payment is taken now."
-                  : "Your exact price is revealed before payment — GST 5% included, no hidden charges, locked for 24 hours."}
-              </p>
-              <div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                {["Sealed at pickup", "Scan-tracked", "Insured"].map((t) => (
-                  <span key={t} className="rounded-lg bg-white/10 px-1 py-1.5">{t}</span>
-                ))}
-              </div>
+          <div className="mt-3 rounded-xl bg-ink p-4 text-cream">
+            <p className="font-mono text-[11px] opacity-75">{onChart ? "On the rate chart" : "New sector · inquiry"}</p>
+            <p className="mt-1 text-[13px] leading-relaxed">{onChart ? "Your exact price appears after you verify your contact — GST 5% included, no hidden charges." : "Our team prices new sectors personally and gets back to you — nothing is charged now."}</p>
+          </div>
+          {instantHint && (
+            <div className={`mt-2 rounded-xl p-3 text-[13px] ${instantHint.ok ? "bg-green-50 text-green-900" : "bg-paper text-muted"}`}>
+              {instantHint.ok
+                ? <><b>⚡ Instant confirmation</b> — this date confirms the moment you pay, right after you verify. No waiting for approval.</>
+                : <><b>Team confirmation</b> — {instantHint.reason}</>}
             </div>
           )}
         </Card>
       </aside>
     </div>
+  );
+}
+
+function AirportField({ label, airport, terminal, onTerminal }: { label: string; airport: { name: string; terminals?: string[] }; terminal: string; onTerminal: (t: string) => void }) {
+  return (
+    <Field label={label}>
+      <div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">{airport.name}</div>
+      {airport.terminals?.length ? (
+        <Select className="mt-1.5" value={terminal} onChange={(e) => onTerminal(e.target.value)}>
+          <option value="">Terminal (if known)</option>
+          {airport.terminals.map((t) => <option key={t}>{t}</option>)}
+        </Select>
+      ) : null}
+    </Field>
   );
 }
 

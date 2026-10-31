@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { issueOtp, checkOtp, cleanMobile, cleanEmail } from "@/lib/otp";
 import { sendWhatsApp, sendEmail } from "@/lib/automation";
+import { DEMO_ALLOWED } from "@/lib/demoMode";
 
 /** Booking-time OTP — the customer confirms their mobile OR email before any
  *  money moves. Stateless (HMAC token, see src/lib/otp.ts), with a small
@@ -42,6 +43,8 @@ export async function POST(req: Request) {
         : await sendWhatsApp(to, text);
       // stub mode (no provider keys yet) → hand the demo code back so the
       // flow still completes on localhost; with real keys `demo` is absent.
+      // On a live deployment a stub send is a failure, never a free code.
+      if (res.stub && !DEMO_ALLOWED) return NextResponse.json({ error: "OTP_NOT_CONFIGURED", detail: "We can't send codes right now — please WhatsApp or call us and we'll book you in." }, { status: 503 });
       return NextResponse.json({ ok: true, to, exp, token, ...(res.stub ? { demo: code } : {}) });
     } catch (e) {
       return NextResponse.json({ error: "SEND_FAILED", detail: e instanceof Error ? e.message : String(e) }, { status: 502 });
