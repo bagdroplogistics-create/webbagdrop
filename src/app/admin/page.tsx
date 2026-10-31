@@ -20,6 +20,7 @@ import Inbox from "./Inbox";
 import IdentityAndCompliance from "./IdentityAndCompliance";
 import Integrations from "./Integrations";
 import Inspector from "./Inspector";
+import LiveTracking from "./LiveTracking";
 import LRAndTrips from "./LRAndTrips";
 import PartnersAndApi from "./PartnersAndApi";
 import Pricing from "./Pricing";
@@ -62,6 +63,7 @@ export default function AdminPage() {
       {tab === "lr" && <LRAndTrips search={search} />}
       {tab === "opsx" && <Operations />}
       {tab === "insp" && <Inspector />}
+      {tab === "live" && <LiveTracking />}
       {tab === "dash" && <Executive openModule={(k) => setTab((k === "wed" ? "wed" : k) as ModuleKey)} />}
       {tab === "wed" && <Weddings onOpenBooking={() => setTab("ship")} />}
       {tab === "cli" && <Clients />}

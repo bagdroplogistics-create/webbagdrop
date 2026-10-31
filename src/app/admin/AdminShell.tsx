@@ -121,7 +121,7 @@ export type ModuleKey =
   | "crm" | "price" | "id" | "fin" | "part"
   | "rules"
   | "integ" | "sec" | "data"
-  | "dash" | "opsx" | "wed" | "ads" | "rep" | "insp" | "cli";
+  | "dash" | "opsx" | "wed" | "ads" | "rep" | "insp" | "cli" | "live";
 
 interface NavItem { key: ModuleKey; name: string; badge?: string; badgeTone?: "live" | "count"; noHighlight?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
@@ -135,6 +135,7 @@ const GROUPS: NavGroup[] = [
       { key: "lr", name: "LR & trips", badge: "live", badgeTone: "live" },
       { key: "opsx", name: "Operations", badge: "live", badgeTone: "live" },
       { key: "insp", name: "Tracking inspector", badge: "live", badgeTone: "live" },
+      { key: "live", name: "Live tracking", badge: "live", badgeTone: "live" },
       { key: "exc", name: "Exceptions", badge: "live", badgeTone: "live" },
       { key: "wed", name: "Weddings & events", badge: "live", badgeTone: "live" },
       { key: "evt", name: "Bulk & manifest tools", badge: "live", badgeTone: "live" },
