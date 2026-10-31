@@ -11,6 +11,7 @@
  *     (/account). Nothing on this page writes to the database directly. */
 import { useEffect, useMemo, useState } from "react";
 import { useNow } from "@/lib/useNow";
+import { withBase } from "@/lib/basePath";
 import { useOnChange, usePlanAutofill } from "@/lib/stateSync";
 import { CITIES, inr } from "@/lib/pricing";
 import { SERVICES } from "@/lib/services";
@@ -213,7 +214,7 @@ export default function Wizard() {
             </div>
           ))}
         </div>
-        <a href="/account" className="mt-4 block"><Button size="lg" className="w-full">Open my dashboard →</Button></a>
+        <a href={withBase("/account")} className="mt-4 block"><Button size="lg" className="w-full">Open my dashboard →</Button></a>
         {!result.instant && <p className="mt-2 text-center text-xs text-muted">No payment is taken until the team approves your booking.</p>}
       </Card>
     );
