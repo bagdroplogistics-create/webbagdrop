@@ -8,7 +8,8 @@
  *  maths (cost per booking, margin, target-margin prices). */
 import { GST_RATE, quote, type Masters } from "./pricing";
 import { targetCost, type CostModel } from "./opsModel";
-import type { City, RouteRate, Zone } from "./types";
+import type { City, InstantAll, InstantRule, RouteRate, Zone } from "./types";
+import { addDays, effectiveInstant, instantCheck, noticeDays, type InstantDefaults } from "./instant";
 
 export type Issue = { level: "error" | "warn"; lane?: string; msg: string };
 
@@ -26,12 +27,62 @@ export function priceFor(r: RouteRate, bags: number, oversize = 0, oversizeRate 
   return "error" in q ? NaN : q.total;
 }
 
+/* ---------------- both directions ---------------- */
+/** Every route is listed once per direction: Vadodara → Mumbai and, right
+ *  under it, Mumbai → Vadodara, each with its own prices. Used by CSV
+ *  import/export and the "add return routes" tool — not required reading
+ *  for the main route chart, which keeps a "both" route as one record. */
+export const returnOf = (r: RouteRate, note?: string): RouteRate => ({ ...r, from: r.to, to: r.from, dir: "one", ...(note !== undefined ? { note } : {}) });
+export const hasReturn = (routes: RouteRate[], r: Pick<RouteRate, "from" | "to">) =>
+  routes.some((x) => key(x) === key({ from: r.to, to: r.from }) || (x.dir === "both" && key(x) === key(r)));
+
+/** Splits each two-way row into its two directions (same prices) and adds a
+ *  return for every one-way route that has none, copying its prices with a
+ *  note to check them. Returns sit right under their route. */
+export function withReturns(routes: RouteRate[]): { routes: RouteRate[]; split: number; added: string[] } {
+  const out: RouteRate[] = [], done = new Set<string>(), added: string[] = [];
+  let split = 0;
+  const oneWay = routes.flatMap((r) => (r.dir === "both" ? (split++, [{ ...r, dir: "one" as const }, returnOf(r)]) : [r]));
+  for (const r of oneWay) {
+    if (done.has(key(r))) continue;
+    out.push(r); done.add(key(r));
+    const back = oneWay.find((x) => key(x) === key({ from: r.to, to: r.from }));
+    if (back) { if (!done.has(key(back))) { out.push(back); done.add(key(back)); } }
+    else { out.push(returnOf(r, `Return of ${r.from} → ${r.to} — check the price`)); done.add(key({ from: r.to, to: r.from })); added.push(`${r.to} → ${r.from}`); }
+  }
+  return { routes: out, split, added };
+}
+
 /* ---------------- hard rules + warnings ---------------- */
+/** The same checks for any instant rule (a route's own rule or the master default rule). */
+function instantRuleIssues(i: InstantRule, err: (m: string) => void, warn: (m: string) => void) {
+  if (i.minNoticeDays != null && (!isInt(i.minNoticeDays) || i.minNoticeDays < 1 || i.minNoticeDays > 60)) err("Instant: minimum notice must be 1–60 days.");
+  if (i.from && !isoDate(i.from)) err("Instant: the 'from' date is not a valid date.");
+  if (i.to && !isoDate(i.to)) err("Instant: the 'to' date is not a valid date.");
+  if (i.from && i.to && i.from > i.to) err("Instant: the window ends before it starts.");
+  if ((i.blackout ?? []).some((d) => !isoDate(d))) err("Instant: a blackout date is not a valid date.");
+  if (i.weekdays && (i.weekdays.length === 0 || i.weekdays.some((w) => !isInt(w) || w < 0 || w > 6))) err("Instant: choose at least one weekday.");
+  if (i.dailyCap != null && (!isInt(i.dailyCap) || i.dailyCap < 1)) err("Instant: daily capacity must be 1 or more.");
+  if (i.maxBags != null && (!isInt(i.maxBags) || i.maxBags < 1)) err("Instant: maximum bags must be 1 or more.");
+  if (!i.dailyCap) warn("Instant: no daily capacity set — every qualifying booking is confirmed automatically.");
+}
+
 export function validateCard(o: {
   routes: RouteRate[]; oversizeRate: number; cities: City[];
   live?: { routes: RouteRate[]; oversizeRate: number }; costModel?: CostModel;
+  instantAll?: InstantAll | null;
+  /** Require every route to have a return listed (either "both" or an
+   *  explicit reverse "one" route). Off by default — the live chart has
+   *  intentionally one-way-only routes (e.g. Mumbai → Goa) that predate
+   *  this check; turning it on here would start blocking unrelated
+   *  publishes on the existing Pricing engine screen. Pass true only from
+   *  a caller that's deliberately enforcing full return-route coverage. */
+  requireReturns?: boolean;
 }): Issue[] {
   const out: Issue[] = [];
+  if (o.instantAll?.enabled) {
+    instantRuleIssues(o.instantAll.rule ?? { enabled: true }, (msg) => out.push({ level: "error", lane: "Instant booking (all routes)", msg }), (msg) => out.push({ level: "warn", lane: "Instant booking (all routes)", msg }));
+  }
   const cityNames = new Set(o.cities.map((c) => norm(c.name)));
   const liveByKey = new Map((o.live?.routes ?? []).map((r) => [key(r), r]));
   const seen = new Map<string, string>();
@@ -99,19 +150,16 @@ export function validateCard(o: {
       if (m2 < target) warn(`2-bag margin ${m2}% is below the ${target}% target.`);
     }
 
-    /* instant booking settings */
-    const i = r.instant;
-    if (i?.enabled) {
-      if (i.minNoticeDays != null && (!isInt(i.minNoticeDays) || i.minNoticeDays < 1 || i.minNoticeDays > 60)) err("Instant: minimum notice must be 1–60 days.");
-      if (i.from && !isoDate(i.from)) err("Instant: the 'from' date is not a valid date.");
-      if (i.to && !isoDate(i.to)) err("Instant: the 'to' date is not a valid date.");
-      if (i.from && i.to && i.from > i.to) err("Instant: the window ends before it starts.");
-      if ((i.blackout ?? []).some((d) => !isoDate(d))) err("Instant: a blackout date is not a valid date.");
-      if (i.weekdays && (i.weekdays.length === 0 || i.weekdays.some((w) => !isInt(w) || w < 0 || w > 6))) err("Instant: choose at least one weekday.");
-      if (i.dailyCap != null && (!isInt(i.dailyCap) || i.dailyCap < 1)) err("Instant: daily capacity must be 1 or more.");
-      if (i.maxBags != null && (!isInt(i.maxBags) || i.maxBags < 1)) err("Instant: maximum bags must be 1 or more.");
-      if (!i.dailyCap) warn("Instant: no daily capacity set — every qualifying booking is confirmed automatically.");
+    /* instant booking settings: the route's own rule is checked when it is the one in force */
+    const own = o.instantAll ? r.instantMode === "own" : !!r.instant?.enabled;
+    if (r.instantMode && !["default", "own", "off"].includes(r.instantMode)) err("Instant: choose default, own rule or off.");
+    if (own) {
+      if (!r.instant) err("Instant: this route is set to its own rule but has none — set the rule or choose the default.");
+      else instantRuleIssues(r.instant, err, warn);
     }
+
+    /* every route is listed both ways — only enforced when explicitly requested (see requireReturns doc above) */
+    if (o.requireReturns && r.dir !== "both" && r.from?.trim() && r.to?.trim() && !hasReturn(o.routes, r)) err(`No return route — add ${r.to} → ${r.from} (Add the return routes does it).`);
   }
   return out;
 }
@@ -143,21 +191,38 @@ export function engineSelfTest(): string[] {
 export type Change = { kind: "added" | "removed" | "changed"; lane: string; fields: { field: string; from: string; to: string }[] };
 const FIELDS: [keyof RouteRate, string][] = [["dir", "direction"], ["r1", "1 bag"], ["r2", "2 bags"], ["addl", "extra bag"], ["bulkMin", "bulk from"], ["bulkRate", "bulk rate"], ["note", "note"]];
 const show = (v: unknown) => (v == null || v === "" ? "—" : typeof v === "number" ? inr(v) : String(v));
+const ruleText = (i: InstantRule | null | undefined) => !i ? "off" : [`on · ${i.minNoticeDays ?? "default"}d notice`, i.from || i.to ? `${i.from ?? "…"}–${i.to ?? "…"}` : "", i.dailyCap ? `${i.dailyCap}/day` : "", i.maxBags ? `≤${i.maxBags} bags` : "", i.allowOversize ? "oversize ok" : "", i.blackout?.length ? `${i.blackout.length} blackout` : "", i.weekdays?.length ? `${i.weekdays.length} weekdays` : ""].filter(Boolean).join(" · ");
+const modeText = (r: RouteRate) => r.instantMode === "default" ? "ON (standard rule)" : r.instantMode === "own" ? `ON, own limits: ${ruleText(r.instant ? { ...r.instant, enabled: true } : null)}` : "OFF (team approval)";
+const allText = (a: InstantAll | null | undefined) => !a ? "per-route (no master switch)" : !a.enabled ? "OFF — every booking needs team approval" : `ON · default ${ruleText({ ...a.rule, enabled: true })}`;
 const instantText = (r: RouteRate) => {
   const i = r.instant;
   if (!i?.enabled) return "off";
   return [`on · ${i.minNoticeDays ?? "default"}d notice`, i.from || i.to ? `${i.from ?? "…"}–${i.to ?? "…"}` : "", i.dailyCap ? `${i.dailyCap}/day` : "", i.maxBags ? `≤${i.maxBags} bags` : "", i.blackout?.length ? `${i.blackout.length} blackout` : "", i.weekdays?.length ? `${i.weekdays.length} weekdays` : ""].filter(Boolean).join(" · ");
 };
 
-export function diffCards(live: RouteRate[], draft: RouteRate[], liveOversize?: number, draftOversize?: number): Change[] {
+export function diffCards(live: RouteRate[], draft: RouteRate[], liveOversize?: number, draftOversize?: number, liveAll?: InstantAll | null, draftAll?: InstantAll | null): Change[] {
   const out: Change[] = [];
-  const L = new Map(live.map((r) => [key(r), r])), D = new Map(draft.map((r) => [key(r), r]));
+  if (draftAll !== undefined && JSON.stringify(liveAll ?? null) !== JSON.stringify(draftAll ?? null)) {
+    out.push({ kind: "changed", lane: "Instant booking (all routes)", fields: [{ field: "master switch", from: allText(liveAll), to: allText(draftAll) }] });
+  }
+  /* direction by direction: a two-way row prices both directions, so splitting it
+   * into one row per direction is a listing change, not a new price */
+  type Dir = RouteRate & { both?: boolean };
+  const expand = (rs: RouteRate[]): Dir[] => rs.flatMap((r) => (r.dir === "both" ? [{ ...r, dir: "one" as const, both: true }, { ...returnOf(r), both: true }] : [r]));
+  const L = new Map(expand(live).map((r) => [key(r), r])), D = new Map(expand(draft).map((r) => [key(r), r]));
+  const listed = new Set<string>();
   for (const [k, d] of D) {
     const l = L.get(k);
     if (!l) { out.push({ kind: "added", lane: laneName(d), fields: [{ field: "prices", from: "—", to: `${inr(d.r1)} / ${inr(d.r2)} / +${inr(d.addl)}` }, ...(d.instant?.enabled ? [{ field: "instant", from: "—", to: instantText(d) }] : [])] }); continue; }
-    const fields = FIELDS.filter(([f]) => (l[f] ?? null) !== (d[f] ?? null)).map(([f, label]) => ({ field: label, from: show(l[f]), to: show(d[f]) }));
-    if (JSON.stringify(l.instant ?? null) !== JSON.stringify(d.instant ?? null)) fields.push({ field: "instant", from: instantText(l), to: instantText(d) });
+    const fields = FIELDS.filter(([f]) => f !== "dir" && (l[f] ?? null) !== (d[f] ?? null)).map(([f, label]) => ({ field: label, from: show(l[f]), to: show(d[f]) }));
+    if (draftAll) {
+      if ((l.instantMode ?? "off") !== (d.instantMode ?? "off") || (d.instantMode === "own" && JSON.stringify(l.instant ?? null) !== JSON.stringify(d.instant ?? null))) fields.push({ field: "instant", from: modeText(l), to: modeText(d) });
+    } else if (JSON.stringify(l.instant ?? null) !== JSON.stringify(d.instant ?? null)) fields.push({ field: "instant", from: instantText(l), to: instantText(d) });
     if (fields.length) out.push({ kind: "changed", lane: laneName(d), fields });
+    else if (l.both && !d.both) {
+      const pair = [norm(l.from), norm(l.to)].sort().join("|");
+      if (!listed.has(pair)) { listed.add(pair); out.push({ kind: "changed", lane: `${l.from} ↔ ${l.to}`, fields: [{ field: "listing", from: "one two-way row", to: "a row for each direction (same prices)" }] }); }
+    }
   }
   for (const [k, l] of L) if (!D.has(k)) out.push({ kind: "removed", lane: laneName(l), fields: [] });
   if (liveOversize != null && draftOversize != null && liveOversize !== draftOversize) out.push({ kind: "changed", lane: "Oversize add-on", fields: [{ field: "per piece", from: inr(liveOversize), to: inr(draftOversize) }] });
@@ -190,4 +255,47 @@ export function targetPrices(r: Pick<RouteRate, "from" | "to" | "dir">, model: C
   const at = (cost: number) => ceil50(cost / k);
   const perBag = model.defaults.perBag ?? DEFAULT_PER_BAG_COST;
   return { r1: at(laneCost(model, r, 1)), r2: at(laneCost(model, r, 2)), addl: at(perBag) };
+}
+
+/* ---------------- test quotes: what customers will actually pay ---------------- */
+export interface TestQuote {
+  lane: string; bags: number; oversize: number;
+  live: number | null; draft: number | null;            // totals incl. GST; null = rate on request
+  liveInstant: boolean; draftInstant: boolean;           // for a pickup just past the notice period, nobody else booked
+}
+const SAMPLES: [number, number][] = [[1, 0], [2, 0], [3, 0], [5, 0], [2, 1]];
+
+/** Prices every route on both charts for sample bookings, with the instant
+ *  decision for a date just past the notice period. Publishing requires
+ *  these to have been reviewed for the exact draft being published. */
+export function testQuotes(o: {
+  live: { routes: RouteRate[]; oversizeRate: number; instantAll: InstantAll | null };
+  draft: { routes: RouteRate[]; oversizeRate: number; instantAll: InstantAll | null };
+  defaults: InstantDefaults; today: string;
+}): TestQuote[] {
+  /* compare direction by direction: a two-way row prices both directions, so it is
+   * expanded first — otherwise splitting it would look like a new lane being priced */
+  const oneWay = (rs: RouteRate[]) => rs.flatMap((r) => (r.dir === "both" ? [{ ...r, dir: "one" as const }, returnOf(r)] : [r]));
+  const lanes = new Map<string, { l?: RouteRate; d?: RouteRate }>();
+  for (const r of oneWay(o.live.routes)) if (!lanes.has(key(r))) lanes.set(key(r), { l: r });
+  for (const r of oneWay(o.draft.routes)) { const cur = lanes.get(key(r)) ?? {}; if (!cur.d) lanes.set(key(r), { ...cur, d: r }); }
+  const out: TestQuote[] = [];
+  const instantFor = (r: RouteRate | undefined, all: InstantAll | null, bags: number, oversize: number) => {
+    const rule = effectiveInstant(r, all);
+    if (!r || !rule) return false;
+    const date = addDays(o.today, noticeDays(rule, o.defaults) + 1);
+    return instantCheck(r, { date, bags, oversize }, o.today, o.defaults, 0, all).ok;
+  };
+  for (const { l, d } of lanes.values()) {
+    const lane = laneName((d ?? l)!);
+    for (const [bags, oversize] of SAMPLES) {
+      const lp = l ? priceFor(l, bags, oversize, o.live.oversizeRate) : NaN, dp = d ? priceFor(d, bags, oversize, o.draft.oversizeRate) : NaN;
+      out.push({
+        lane, bags, oversize,
+        live: Number.isFinite(lp) ? lp : null, draft: Number.isFinite(dp) ? dp : null,
+        liveInstant: instantFor(l, o.live.instantAll, bags, oversize), draftInstant: instantFor(d, o.draft.instantAll, bags, oversize),
+      });
+    }
+  }
+  return out;
 }

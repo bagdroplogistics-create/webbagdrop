@@ -13,6 +13,8 @@ export interface City {
   name: string;
   zone: Zone;
   ap?: string;
+  /** more airports serving the city, after the main one (`ap`) — e.g. Mumbai: NMI */
+  aps?: string[];
 }
 
 /** One row of the official rate chart: ₹ per booking, GST 5% extra. */
@@ -29,7 +31,19 @@ export interface RouteRate {
   /** Instant booking: when on, a qualifying booking is auto-approved and
    *  confirmed the moment it is paid — no team review (src/lib/instant.ts). */
   instant?: InstantRule | null;
+  /** Under the master instant switch (InstantAll): follow the default rule,
+   *  use this route's own rule (`instant`), or keep the route on team
+   *  approval. Optional — a chart with no master switch yet (today's live
+   *  chart) ignores this and keeps using `instant` exactly as before. */
+  instantMode?: "default" | "own" | "off";
 }
+
+/** The master instant-booking switch for the whole chart, with the default
+ *  rule every route follows unless it has its own rule or is switched off.
+ *  Switch off → every booking waits for team approval. Optional/nullable —
+ *  when absent (today's live chart), every route falls back to its own
+ *  `instant` rule exactly as before (see effectiveInstant in instant.ts). */
+export interface InstantAll { enabled: boolean; rule: InstantRule }
 
 export interface InstantRule {
   enabled: boolean;
