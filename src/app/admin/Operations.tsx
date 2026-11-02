@@ -28,6 +28,8 @@ import {
 } from "@/lib/opsModel";
 import type { Booking } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import MovesCalendar from "./MovesCalendar";
+import BagTagsPanel from "./BagTagsPanel";
 
 const OPS_PASSCODE = "2026";
 const ACTIVE = ["accepted", "assigned", "picked_up", "in_transit"];
@@ -38,7 +40,7 @@ export default function Operations() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [model, setModel] = useState<CostModel>(DEFAULT_COST_MODEL);
   const [err, setErr] = useState<string | null>(null);
-  const [desk, setDesk] = useState<"ship" | "day" | "vend" | "cost" | "auto">("ship");
+  const [desk, setDesk] = useState<"ship" | "day" | "moves" | "vend" | "cost" | "auto">("ship");
   const [selId, setSelId] = useState<string | null>(null);
 
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
@@ -76,7 +78,7 @@ export default function Operations() {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {([["ship", "Shipments"], ["day", "Day planner"], ["vend", `Vendors · ${vendors.length}`], ["cost", "Cost model"], ["auto", "Automation"]] as const).map(([k, n]) => (
+        {([["ship", "Shipments"], ["day", "Day planner"], ["moves", "Moves calendar"], ["vend", `Vendors · ${vendors.length}`], ["cost", "Cost model"], ["auto", "Automation"]] as const).map(([k, n]) => (
           <button key={k} onClick={() => setDesk(k)}
             className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${desk === k ? "bg-ink text-white" : "bg-paper text-ink hover:bg-stone-200"}`}>{n}</button>
         ))}
@@ -117,6 +119,7 @@ export default function Operations() {
           </div>
         )}
         {desk === "day" && <DayPlanner bookings={bookings} onOpen={(id) => { setSelId(id); setDesk("ship"); }} />}
+        {desk === "moves" && <MovesCalendar bookings={bookings} model={model} onOpen={(id) => { setSelId(id); setDesk("ship"); }} />}
         {desk === "vend" && <Vendors vendors={vendors} onSaved={loadMasters} />}
         {desk === "cost" && <CostDesk model={model} onSaved={loadMasters} />}
         {desk === "auto" && <AutomationDesk />}
@@ -288,6 +291,10 @@ function ShipmentDesk({ b, vendors, model, onSave, onScore }: {
           {scanMsg && <p className={`mt-2 text-xs ${scanMsg.startsWith("✓") ? "text-green-700" : scanMsg.startsWith("•") ? "text-muted" : "text-red-600"}`}>{scanMsg}</p>}
         </div>
       </div>
+
+      {/* airline-grade plates, seals, stickers, photos and the Move Pass — complements the
+       * route-code tags above (src/lib/bagTags.ts): different system, same shipment. */}
+      <div className="mt-4"><BagTagsPanel b={b} /></div>
 
       {/* legs & vendors */}
       <h4 className="mt-4 mb-1.5 font-display text-[13px] font-bold">Legs &amp; assignment</h4>
