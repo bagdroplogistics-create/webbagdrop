@@ -59,7 +59,7 @@ export default function HandoverBoard() {
   const v = HANDOVERS[venue];
 
   return (
-    <Section id="handovers" tone="paper">
+    <Section id="handovers" tone="canvas">
       <SectionHeading kicker="Live board" title="Every terminal." accent="One handover." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-navy text-white">

@@ -7,7 +7,6 @@ import Hero from "@/components/landing/Hero";
 import HowItWorks from "@/components/landing/HowItWorks";
 import { MotionGate } from "@/components/landing/motion";
 import PainPoints from "@/components/landing/PainPoints";
-import ReviewsMarquee from "@/components/landing/ReviewsMarquee";
 import SiteFooter from "@/components/landing/SiteFooter";
 import SiteHeader from "@/components/landing/SiteHeader";
 import StatsCities from "@/components/landing/StatsCities";
@@ -31,7 +30,6 @@ export default function Home() {
       <HowItWorks />
       <BookingSection />
       <Testimonials />
-      <ReviewsMarquee />
       <FAQSection />
       <ClosingCta />
       <SiteFooter />
