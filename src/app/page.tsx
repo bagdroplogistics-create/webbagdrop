@@ -10,7 +10,6 @@ import PainPoints from "@/components/landing/PainPoints";
 import ReviewsMarquee from "@/components/landing/ReviewsMarquee";
 import SiteFooter from "@/components/landing/SiteFooter";
 import SiteHeader from "@/components/landing/SiteHeader";
-import Solutions from "@/components/landing/Solutions";
 import StatsCities from "@/components/landing/StatsCities";
 import Testimonials from "@/components/landing/Testimonials";
 import TrackDemo from "@/components/landing/TrackDemo";
@@ -27,7 +26,6 @@ export default function Home() {
       <CitiesStrip />
       <UseCases />
       <PainPoints />
-      <Solutions />
       <HandoverBoard />
       <TrackDemo />
       <HowItWorks />
