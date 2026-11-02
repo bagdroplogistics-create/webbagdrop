@@ -17,7 +17,7 @@ export default function TrackDemo() {
   const pct = (step / (total - 1)) * 100;
 
   return (
-    <Section id="track" tone="canvas">
+    <Section id="track" tone="paper">
       <SectionHeading kicker="Track your bags" title="From your door" accent="to delivered." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-white">
