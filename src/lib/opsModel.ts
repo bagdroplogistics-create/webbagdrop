@@ -44,6 +44,17 @@ export function portCode(city: string): string {
   return known[city] ?? city.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase().padEnd(3, "X");
 }
 
+/** Pieces are counted at actuals — one oversize item is one piece — so the
+ *  count always tallies with the tags; size is flagged as XL instead.
+ *  pcsLabel(4, 1) → "5 pcs (1 XL)". */
+export const pcsLabel = (bags: number, oversize: number, unit = "pcs") =>
+  `${bags + oversize} ${unit}${oversize ? ` (${oversize} XL)` : ""}`;
+
+/** Tags are numbered regular bags first, then the oversize items — so piece
+ *  n is XL when n is past the regular bag count. Used by the bag-tag/seal
+ *  identity system (src/lib/bagTags.ts). */
+export const isXlPiece = (b: { bags: number }, n: number) => n > b.bags;
+
 /** Generate the shipment's tags ONCE, at print time. BD-AMD-BOM-7F3K2-1-C */
 export function generateTags(b: Booking, count: number): string[] {
   const base = `${portCode(b.from)}${portCode(b.to)}${b.id.replace(/[^A-Z0-9]/gi, "").slice(-5).toUpperCase()}`;
@@ -105,6 +116,12 @@ export function targetCost(model: CostModel, lane: string): { total: number; leg
 /* ================= the per-shipment ops state (lives on booking.ops) ================= */
 export interface OpsState {
   tags?: string[];                      // generated once, at print
+  /** airline-grade per-bag records: licence plate, seal, weight, photo (src/lib/bagTags.ts) */
+  bags?: import("./bagTags").BagRecord[];
+  /** pickup check-in by the captain: signature + when */
+  checkin?: { at: string; by: string; signature?: string; bags: number };
+  /** delivery claim check: pass scanned, every tag scanned, OTP verified */
+  claim?: { otpHash?: string; otpAt?: string; tries?: number; sends?: number; passAt?: string; scanned?: string[]; doneAt?: string };
   printedAt?: string;
   milestones?: Partial<Record<MilestoneKey, { at: string; by: string; note?: string }>>;
   scans?: Partial<Record<MilestoneKey, string[]>>;
