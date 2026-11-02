@@ -8,9 +8,11 @@
  *  `requireAdmin` (used by every /api/admin/* route) verifies that token.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { ACTOR_HEADER, can, type Actor, type Perm } from "./access";
+import { requiredSecret } from "./secrets";
 
-const SESSION_SECRET = process.env.ADMIN_SECRET_KEY ?? "dev-admin-key-change-me";
+const SESSION_SECRET = requiredSecret("ADMIN_SECRET_KEY", "dev-admin-key-change-me");
 const COOKIE = "bagdrop_admin";
 const SESSION_HOURS = 12;
 
@@ -20,7 +22,7 @@ function sign(payload: string): string {
 
 export function checkAdminKey(key: string): boolean {
   const a = Buffer.from(sign(key));
-  const b = Buffer.from(sign(process.env.ADMIN_SECRET_KEY ?? "dev-admin-key-change-me"));
+  const b = Buffer.from(sign(requiredSecret("ADMIN_SECRET_KEY", "dev-admin-key-change-me")));
   // constant-time compare of two HMACs of equal length, not of the raw key
   return a.length === b.length && timingSafeEqual(a, b) && key.length > 0;
 }
@@ -31,21 +33,38 @@ export function makeSessionToken(): string {
   return `${payload}:${sign(payload)}`;
 }
 
-function verifySessionToken(token: string): boolean {
+/** A team member's session: their user id and account version (a password
+ *  reset, disable or "sign out everywhere" bumps it and ends the session). */
+export function makeUserToken(id: string, ver: number): string {
+  const expires = Date.now() + SESSION_HOURS * 3600_000;
+  const payload = `user:${id}:${ver}:${expires}`;
+  return `${payload}:${sign(payload)}`;
+}
+
+export type Session = { kind: "owner" } | { kind: "user"; id: string; ver: number };
+export function parseSessionToken(token: string | undefined): Session | null {
+  if (!token) return null;
   const parts = token.split(":");
-  if (parts.length !== 3) return false;
-  const [tag, expiresStr, sig] = parts;
-  const payload = `${tag}:${expiresStr}`;
-  if (sign(payload) !== sig) return false;
-  const expires = Number(expiresStr);
-  return tag === "admin" && Number.isFinite(expires) && expires > Date.now();
+  const sig = parts.pop() ?? "";
+  const payload = parts.join(":");
+  const a = Buffer.from(sign(payload)), b = Buffer.from(sig);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  const expires = Number(parts.at(-1));
+  if (!Number.isFinite(expires) || expires <= Date.now()) return null;
+  if (parts.length === 2 && parts[0] === "admin") return { kind: "owner" };
+  if (parts.length === 4 && parts[0] === "user" && /^[a-z0-9-]{4,40}$/.test(parts[1])) return { kind: "user", id: parts[1], ver: Number(parts[2]) };
+  return null;
+}
+function verifySessionToken(token: string): boolean {
+  return parseSessionToken(token) !== null;
 }
 
 export const ADMIN_COOKIE = COOKIE;
 export const ADMIN_COOKIE_MAX_AGE = SESSION_HOURS * 3600;
 
 /** For use inside API route handlers (App Router). Throws nothing; returns
- *  true/false so callers decide the response. */
+ *  true/false so callers decide the response. proxy.ts has already checked
+ *  the account is active and allowed this request (src/lib/access.ts). */
 export async function isAdminRequest(): Promise<boolean> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
@@ -79,4 +98,20 @@ export function verifyBoardToken(token: string): string | null {
  *  isAdminRequest() above — not just a presence check. */
 export function verifyCookieValue(token: string | undefined): boolean {
   return !!token && verifySessionToken(token);
+}
+
+/** Who is making this request — set by proxy.ts on every /api/admin call
+ *  (never taken from the browser). Null outside an admin request. */
+export async function currentActor(): Promise<Actor | null> {
+  const raw = (await headers()).get(ACTOR_HEADER);
+  if (!raw) return null;
+  try { return JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Actor; } catch { return null; }
+}
+/** The name to write into history lines ("by"), e.g. "Priya Shah". */
+export async function actorName(): Promise<string> {
+  return (await currentActor())?.name ?? "BAGDROP OS admin";
+}
+/** True when the signed-in person has this permission (owner key: always). */
+export async function actorCan(p: Perm): Promise<boolean> {
+  return can((await currentActor())?.grants, p);
 }
