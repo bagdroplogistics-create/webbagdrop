@@ -12,7 +12,7 @@
  *      when the booking has oversize pieces);
  *    · the route's daily instant capacity for that date isn't used up.
  *  Anything else goes through team approval exactly as before. */
-import type { Booking, InstantRule, RouteRate } from "./types";
+import type { Booking, InstantAll, InstantRule, RouteRate } from "./types";
 
 export interface InstantDefaults { minNoticeDays: number; holdMinutes: number }
 export const DEFAULT_INSTANT: InstantDefaults = { minNoticeDays: 5, holdMinutes: 30 };
@@ -45,10 +45,25 @@ export function instantDateCheck(rule: InstantRule | null | undefined, date: str
   return { ok: true };
 }
 
+/** The rule that actually applies to a route.
+ *   · chart has no master switch yet (older charts): the route's own rule, as before;
+ *   · paused (master switch OFF): none — every booking goes to team approval;
+ *   · otherwise each route's own switch: ON = the standard rule, ON with own
+ *     limits = its own rule, OFF or not set = none (team approval). */
+export function effectiveInstant(route: RouteRate | undefined, all: InstantAll | null | undefined): InstantRule | null {
+  if (!route) return null;
+  if (!all) return route.instant?.enabled ? route.instant : null;
+  if (!all.enabled) return null;
+  const mode = route.instantMode ?? "off"; // a route is instant only when switched ON
+  if (mode === "off") return null;
+  if (mode === "own") return route.instant ? { ...route.instant, enabled: true } : null;
+  return { ...all.rule, enabled: true };
+}
+
 /** The full check for one booking. `taken` = instant bookings already
- *  holding a place on this route and pickup date. */
-export function instantCheck(route: RouteRate | undefined, req: { date: string; bags: number; oversize: number }, today: string, d: InstantDefaults, taken: number): InstantResult {
-  const rule = route?.instant;
+ *  holding a place on this route and pickup date. `all` = the chart's master switch. */
+export function instantCheck(route: RouteRate | undefined, req: { date: string; bags: number; oversize: number }, today: string, d: InstantDefaults, taken: number, all?: InstantAll | null): InstantResult {
+  const rule = effectiveInstant(route, all);
   const dated = instantDateCheck(rule, req.date, today, d);
   if (!dated.ok) return dated;
   if (rule!.maxBags && req.bags + req.oversize > rule!.maxBags) return { ok: false, code: "TOO_MANY_BAGS", reason: `Instant booking covers up to ${rule!.maxBags} bags on this route.` };

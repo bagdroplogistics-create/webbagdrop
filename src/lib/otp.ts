@@ -5,8 +5,10 @@
  *  provider is configured; verification recomputes the HMAC, so a tampered
  *  code, destination or expiry can never pass. Codes die after 10 minutes. */
 import { createHmac, timingSafeEqual, randomInt } from "node:crypto";
+import { requiredSecret } from "./secrets";
+import { serviceClient } from "./supabaseAdmin";
 
-const SECRET = (process.env.ADMIN_SECRET_KEY ?? "dev-admin-key") + ":otp:v1";
+const SECRET = requiredSecret("ADMIN_SECRET_KEY", "dev-admin-key") + ":otp:v1";
 export const OTP_TTL_MS = 10 * 60 * 1000;
 
 function mac(payload: string): string {
@@ -25,6 +27,23 @@ export function checkOtp(to: string, code: string, exp: number, token: string): 
   let got: Buffer;
   try { got = Buffer.from(token, "hex"); } catch { return false; }
   return want.length === got.length && timingSafeEqual(want, got);
+}
+
+/** checkOtp with a guess limit: after OTP_MAX_TRIES wrong codes against one
+ *  issued code, that code is dead (even the right digits) and the person
+ *  asks for a new one — so a 6-digit code can't be guessed in its 10 minutes.
+ *  Tries are counted in a settings row per issued code ("otpfail:<token>"). */
+export const OTP_MAX_TRIES = 5;
+export async function checkOtpLimited(to: string, code: string, exp: number, token: string): Promise<boolean> {
+  if (!token || !/^[0-9a-f]{64}$/i.test(String(token))) return false;
+  const sb = serviceClient();
+  const id = `otpfail:${String(token).slice(0, 40)}`;
+  const { data } = sb ? await sb.from("settings").select("doc").eq("id", id).maybeSingle() : { data: null };
+  const tries = (data?.doc as { n?: number } | null)?.n ?? 0;
+  if (tries >= OTP_MAX_TRIES) return false;
+  if (checkOtp(to, code, exp, token)) return true;
+  if (sb) await sb.from("settings").upsert({ id, doc: { n: tries + 1, exp }, status: "otpfail", created: new Date().toISOString() });
+  return false;
 }
 
 /** Normalisers shared by the OTP route and the wizard's server paths. */

@@ -4,18 +4,20 @@
 import type { Masters } from "./pricing";
 import type { CostModel } from "./opsModel";
 import type { Issue } from "./pricingRules";
-import type { Benchmark, DraftCard, LogEntry } from "./pricingSettings";
+import type { Approver, Benchmark, DraftCard, LogEntry, ScheduledCard } from "./pricingSettings";
+import type { TestQuote } from "./pricingRules";
 import type { InstantDefaults } from "./instant";
-import type { RouteRate } from "./types";
+import type { InstantAll, RouteRate } from "./types";
 
 export interface PricingState {
-  live: { routes: RouteRate[]; version: number; publishedAt: string | null; note: string | null; by: string | null; instantDefaults: InstantDefaults; rev: number | null };
+  live: { routes: RouteRate[]; version: number; publishedAt: string | null; note: string | null; by: string | null; instantDefaults: InstantDefaults; instantAll: InstantAll | null; rev: number | null };
   draft: DraftCard | null; draftRev: number | null;
+  scheduled: ScheduledCard | null; approvers: Approver[]; reviewedDraftRev: number | null;
   log: LogEntry[];
   benchmarks: Record<string, Benchmark>;
   masters: Masters; costModel: CostModel; selfTest: string[];
 }
-export type ApiResult = { ok: boolean; status: number; error?: string; detail?: string; issues?: Issue[]; version?: number };
+export type ApiResult = { ok: boolean; status: number; error?: string; detail?: string; issues?: Issue[]; version?: number; scheduled?: string; quotes?: TestQuote[]; draftRev?: number; lockedQuotes?: number };
 
 export async function getPricing(): Promise<PricingState> {
   const r = await fetch("/api/admin/pricing", { cache: "no-store" });
