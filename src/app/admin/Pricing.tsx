@@ -11,15 +11,16 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { useNow } from "@/lib/useNow";
 import { useSyncedState } from "@/lib/stateSync";
-import { DEFAULT_MASTERS, ZONES, inr, quote, type Masters } from "@/lib/pricing";
+import { DEFAULT_MASTERS, ZONES, inr, type Masters } from "@/lib/pricing";
 import { getPricing, pricingAction, saveCostModel, type ApiResult, type PricingState } from "@/lib/pricingApi";
 import { diffCards, exGst, laneCost, laneName, marginAt, priceFor, targetPrices, validateCard, type Issue } from "@/lib/pricingRules";
 import { instantCalendar, instantTaken, onRoute, WEEKDAYS, type CalendarState } from "@/lib/instant";
 import { actualCost, opsOf, type CostModel } from "@/lib/opsModel";
 import { isPaid } from "@/lib/payState";
 import { watchAdminBookings } from "@/lib/adminApi";
-import type { Booking, City, InstantRule, Mode, RouteRate, Zone } from "@/lib/types";
+import type { Booking, City, InstantAll, InstantRule, RouteRate, Zone } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { Approvers, BulkChange, Calculator, CsvTools, InstantMaster, PublishFlow, ScheduledChange } from "./PricingTools";
 
 const EMPTY_ROUTE: RouteRate = { from: "", to: "", dir: "both", r1: 0, r2: 0, addl: 0, bulkMin: null, bulkRate: null, note: "" };
 const DAY = 86_400_000;
@@ -46,18 +47,19 @@ export default function Pricing() {
 /* ============================== the engine ============================== */
 function Engine({ data, bookings, now, reload }: { data: PricingState; bookings: Booking[]; now: number; reload: () => Promise<void> }) {
   const { live, draft, masters, costModel } = data;
-  const base = draft ? { routes: draft.routes, oversizeRate: draft.oversizeRate } : { routes: live.routes, oversizeRate: masters.oversizeRate };
+  const base = draft ? { routes: draft.routes, oversizeRate: draft.oversizeRate, instantAll: draft.instantAll !== undefined ? draft.instantAll : live.instantAll } : { routes: live.routes, oversizeRate: masters.oversizeRate, instantAll: live.instantAll };
   const [work, setWork] = useSyncedState(base.routes);
   const [oversize, setOversize] = useSyncedState(base.oversizeRate);
+  const [instantAll, setInstantAll] = useSyncedState<InstantAll | null>(base.instantAll);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [openInstant, setOpenInstant] = useState<number | null>(null);
   const [wizard, setWizard] = useState<Partial<RouteRate> | null>(null);
   const today = istDay(now);
 
-  const dirty = JSON.stringify(work) !== JSON.stringify(base.routes) || oversize !== base.oversizeRate;
-  const issues = useMemo(() => validateCard({ routes: work, oversizeRate: oversize, cities: masters.cities, live: { routes: live.routes, oversizeRate: masters.oversizeRate }, costModel }), [work, oversize, masters, live.routes, costModel]);
-  const changes = useMemo(() => diffCards(live.routes, work, masters.oversizeRate, oversize), [live.routes, work, masters.oversizeRate, oversize]);
+  const dirty = JSON.stringify(work) !== JSON.stringify(base.routes) || oversize !== base.oversizeRate || JSON.stringify(instantAll ?? null) !== JSON.stringify(base.instantAll ?? null);
+  const issues = useMemo(() => validateCard({ routes: work, oversizeRate: oversize, cities: masters.cities, live: { routes: live.routes, oversizeRate: masters.oversizeRate }, costModel, instantAll }), [work, oversize, masters, live.routes, costModel, instantAll]);
+  const changes = useMemo(() => diffCards(live.routes, work, masters.oversizeRate, oversize, live.instantAll, instantAll), [live.routes, work, masters.oversizeRate, oversize, live.instantAll, instantAll]);
   const errors = issues.filter((i) => i.level === "error"), warnings = issues.filter((i) => i.level === "warn");
 
   async function run(fn: () => Promise<ApiResult>, okText: string) {
@@ -69,7 +71,7 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
     if (r.error === "STALE") await reload();
     return false;
   }
-  const saveDraft = () => run(() => pricingAction("saveDraft", { routes: work, oversizeRate: oversize, rev: data.draftRev }), "Draft saved — nothing is live until you publish.");
+  const saveDraft = () => run(() => pricingAction("saveDraft", { routes: work, oversizeRate: oversize, instantAll, rev: data.draftRev }), "Draft saved — nothing is live until you publish.");
   const set = (i: number, patch: Partial<RouteRate>) => setWork((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   return (
@@ -170,11 +172,19 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
           onChange={(rule) => set(openInstant, { instant: rule })} onClose={() => setOpenInstant(null)} />
       )}
 
-      {/* ---------- review & publish ---------- */}
-      {changes.length > 0 && (
-        <ReviewPublish changes={changes} errors={errors} warnings={warnings} live={live.routes} work={work} costModel={costModel} busy={busy} dirty={dirty}
-          onPublish={async (note, ok) => { if (dirty && !(await saveDraft())) return; await run(() => pricingAction("publish", { note, confirm: ok }), "Published — the new prices are live for every new quote."); }} />
-      )}
+      {/* ---------- bulk tools: instant master switch, bulk %, CSV ---------- */}
+      <InstantMaster all={instantAll} routes={work} defaults={live.instantDefaults} onChange={setInstantAll} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <BulkChange routes={work} cities={[...new Set(masters.cities.map((c) => c.name))]} onApply={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
+        <CsvTools routes={work} masters={masters} liveRoutes={live.routes} onImport={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
+      </div>
+
+      <ScheduledChange data={data} busy={busy} run={run} />
+
+      {/* ---------- review & publish (two-person approval when 2+ approvers are set) ---------- */}
+      <PublishFlow data={data} changes={changes} errors={errors} warnings={warnings} dirty={dirty} busy={busy} run={run} saveDraft={saveDraft} />
+
+      <Approvers data={data} busy={busy} run={run} />
 
       <InstantDefaultsCard defaults={live.instantDefaults} onSave={(d) => void run(() => pricingAction("instantDefaults", d), "Instant booking defaults saved.")} />
 
@@ -187,7 +197,7 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
         onRollback={(v, note) => void run(() => pricingAction("rollback", { version: v, note, confirm: true }), `Rolled back — version ${v}'s prices are live again as a new version.`)} />
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <QuoteSimulator live={{ ...masters, routes: live.routes }} draft={changes.length ? { ...masters, routes: work, oversizeRate: oversize } : null} />
+        <Calculator masters={masters} live={{ routes: live.routes, all: live.instantAll }} draft={changes.length ? { routes: work, all: instantAll, oversizeRate: oversize } : null} defaults={live.instantDefaults} bookings={bookings} now={now} today={today} />
         <CitiesEditor extraCities={masters.cities.slice(DEFAULT_MASTERS.cities.length)} onSave={(c) => void run(() => pricingAction("cities", { cities: c }), "Cities saved.")} />
       </div>
       <p className="text-xs text-faint">The old regional zone matrix is retired: a lane that isn&apos;t on the chart above is “rate on request” everywhere — website, partner desk, team quotes and imports.</p>
@@ -218,58 +228,6 @@ function IssueList({ issues }: { issues: Issue[] }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-/* ============================== review & publish ============================== */
-function ReviewPublish({ changes, errors, warnings, live, work, costModel, busy, dirty, onPublish }: {
-  changes: ReturnType<typeof diffCards>; errors: Issue[]; warnings: Issue[]; live: RouteRate[]; work: RouteRate[]; costModel: CostModel; busy: boolean; dirty: boolean;
-  onPublish: (note: string, confirmWarnings: boolean) => Promise<void>;
-}) {
-  const [note, setNote] = useState("");
-  const [ok, setOk] = useState(false);
-  const preview = changes.filter((c) => c.kind !== "removed").map((c) => ({ c, now: work.find((r) => laneName(r) === c.lane), was: live.find((r) => laneName(r) === c.lane) })).filter((x) => x.now);
-  return (
-    <Card>
-      <h3 className="mb-2 font-display text-sm font-bold">Review &amp; publish <span className="font-normal text-faint">{changes.length} change{changes.length === 1 ? "" : "s"} against live version</span></h3>
-      <ul className="mb-3 space-y-1 text-xs">
-        {changes.map((c, k) => (
-          <li key={k}><Badge tone={c.kind === "added" ? "ok" : c.kind === "removed" ? "bad" : "info"}>{c.kind}</Badge> <b>{c.lane}</b>{c.fields.length ? ": " : ""}{c.fields.map((f) => `${f.field} ${f.from} → ${f.to}`).join(" · ")}</li>
-        ))}
-      </ul>
-      {preview.length > 0 && (
-        <div className="mb-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-xs">
-            <thead><tr className="border-b border-line text-left text-[10px] uppercase tracking-wider text-faint"><th className="py-1 pr-2">Lane · price incl. GST</th>{[1, 2, 4, 6].map((n) => <th key={n} className="pr-2">{n} bag{n > 1 ? "s" : ""}</th>)}<th>Margin 1 · 2</th></tr></thead>
-            <tbody>
-              {preview.map(({ c, now, was }) => (
-                <tr key={c.lane} className="border-b border-dashed border-line last:border-0">
-                  <td className="py-1 pr-2 font-semibold">{c.lane}</td>
-                  {[1, 2, 4, 6].map((n) => {
-                    const a = was ? priceFor(was, n) : NaN, b = priceFor(now!, n);
-                    return <td key={n} className="pr-2 tabular-nums">{was && a !== b ? <><s className="text-faint">{inr(a)}</s> </> : null}<b>{inr(b)}</b></td>;
-                  })}
-                  <td className="tabular-nums">{marginAt(now!, 1, costModel)}% · {marginAt(now!, 2, costModel)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {errors.length > 0 && <p className="mb-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-900"><b>{errors.length} error{errors.length === 1 ? "" : "s"} must be fixed before publishing</b> (listed under the route chart).</p>}
-      {warnings.length > 0 && errors.length === 0 && (
-        <label className="mb-2 flex items-start gap-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">
-          <input type="checkbox" className="mt-0.5" checked={ok} onChange={(e) => setOk(e.target.checked)} />
-          <span>I have checked the {warnings.length} warning{warnings.length === 1 ? "" : "s"} listed under the route chart and want to publish anyway.</span>
-        </label>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label="What changed and why (goes in the version history)"><Input className="w-96 max-w-full" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Diwali season rates for Mumbai lanes" /></Field>
-        <Button disabled={busy || errors.length > 0 || note.trim().length < 3 || (warnings.length > 0 && !ok)} onClick={() => void onPublish(note.trim(), ok)}>
-          {busy ? "Publishing…" : dirty ? "Save & publish" : "Publish to live"}
-        </Button>
-      </div>
-    </Card>
   );
 }
 
@@ -586,29 +544,6 @@ function CitiesEditor({ extraCities, onSave }: { extraCities: City[]; onSave: (c
           const next = [...list, draft]; setList(next); onSave(next); setDraft({ name: "", zone: "MUM", ap: "" });
         }}>Add</Button>
       </div>
-    </Card>
-  );
-}
-
-function QuoteSimulator({ live, draft }: { live: Masters; draft: Masters | null }) {
-  const [from, setFrom] = useState(live.routes[0]?.from ?? "");
-  const [to, setTo] = useState(live.routes[0]?.to ?? "");
-  const [bags, setBags] = useState(2);
-  const [oversize, setOversize] = useState(0);
-  const run = (m: Masters) => quote({ fromName: from, toName: to, bags, oversize, mode: "road" as Mode }, m);
-  const show = (q: ReturnType<typeof run>) => ("error" in q ? <span className="text-muted">Rate on request</span> : <><b className="font-display text-lg">{inr(q.total)}</b> <span className="text-muted">· {q.rule}</span></>);
-  const names = [...new Set(live.cities.map((c) => c.name))];
-  return (
-    <Card>
-      <h3 className="mb-2 font-display text-sm font-bold">Quote simulator <span className="font-normal text-faint">the same engine customers are priced on</span></h3>
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <Field label="From"><Select value={from} onChange={(e) => setFrom(e.target.value)}>{names.map((n) => <option key={n}>{n}</option>)}</Select></Field>
-        <Field label="To"><Select value={to} onChange={(e) => setTo(e.target.value)}>{names.map((n) => <option key={n}>{n}</option>)}</Select></Field>
-        <Field label="Bags"><Input type="number" value={bags} onChange={(e) => setBags(Number(e.target.value))} /></Field>
-        <Field label="Oversize"><Input type="number" value={oversize} onChange={(e) => setOversize(Number(e.target.value))} /></Field>
-      </div>
-      <p className="text-sm">Live: {show(run(live))}</p>
-      {draft && <p className="mt-1 text-sm">Draft: {show(run(draft))}</p>}
     </Card>
   );
 }
