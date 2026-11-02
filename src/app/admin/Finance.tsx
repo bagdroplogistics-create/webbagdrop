@@ -15,6 +15,7 @@ import type { Booking, DocRecord } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import { useProductionLeads } from "@/lib/useProductionLeads";
 import DocumentView from "./DocumentView";
+import GatewayRecon from "./GatewayRecon";
 
 const PROD_CAPTURED_STATUSES = ["confirmed", "pickup_scheduled", "picked_up", "in_transit", "out_for_delivery", "delivered", "completed"];
 const dayKey = (iso: string) => (iso || "").slice(0, 10);
@@ -30,7 +31,7 @@ interface StatementRow {
 }
 interface LedgerEntry { id: string; kind: string; amount: number; date: string; label: string }
 
-type Tab = "overview" | "payments" | "invoices" | "credit" | "bank";
+type Tab = "overview" | "payments" | "invoices" | "credit" | "bank" | "gateway";
 
 export default function Finance() {
   const [all, setAll] = useState<Booking[]>([]);
@@ -48,7 +49,7 @@ export default function Finance() {
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap gap-1.5">
-        {([["overview", "CFO overview"], ["payments", `Payments to verify${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"]] as [Tab, string][]).map(([k, n]) => (
+        {([["overview", "CFO overview"], ["payments", `Payments to verify${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"], ["gateway", "Gateway (Razorpay)"]] as [Tab, string][]).map(([k, n]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "text-white" : "hover:opacity-80"}`}
             style={tab === k ? { background: "var(--a-navy)" } : { background: "var(--a-surface-2)", color: "var(--a-muted)" }}>{n}</button>
@@ -60,6 +61,7 @@ export default function Finance() {
         {tab === "invoices" && <Invoices all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
         {tab === "credit" && <CreditNotes bookings={all} />}
         {tab === "bank" && <BankRecon />}
+        {tab === "gateway" && <GatewayRecon />}
       </div>
     </div>
   );
