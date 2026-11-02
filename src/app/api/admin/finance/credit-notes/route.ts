@@ -4,6 +4,7 @@ import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { financialYear } from "@/lib/docs";
 import type { Booking } from "@/lib/types";
+import { istToday } from "@/lib/services";
 
 /** Credit notes — Zoho-Books-style, with an EXPIRY DATE. Issued against a
  *  booking/customer, numbered race-safe (CN series), stored in the settings
@@ -36,7 +37,7 @@ export async function GET() {
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
   const notes = await load(sb);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
   /* live expiry view even between sweeps */
   for (const n of notes) if (n.status === "active" && n.expiresAt < today) n.status = "expired";
   return NextResponse.json({ notes: notes.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)) });
@@ -58,7 +59,7 @@ async function handlePOST(req: Request) {
   if (b.action === "issue") {
     const amount = Math.round(Number(b.amount) || 0);
     if (!b.customer?.trim() || amount <= 0) return NextResponse.json({ error: "MISSING_FIELDS", detail: "Customer and a positive amount are required." }, { status: 400 });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istToday();
     if (!b.expiresAt || b.expiresAt <= today) return NextResponse.json({ error: "BAD_EXPIRY", detail: "Expiry must be a future date." }, { status: 400 });
     const { data: no, error } = await sb.rpc("next_doc_no", { p_type: "CN", p_fy: financialYear() });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -90,7 +91,7 @@ async function handlePOST(req: Request) {
 
   if (b.action === "apply") {
     if (n.status !== "active") return NextResponse.json({ error: "NOT_ACTIVE", detail: `Credit note is ${n.status} — only active notes can be applied.` }, { status: 409 });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istToday();
     if (n.expiresAt < today) { n.status = "expired"; await save(sb, notes); return NextResponse.json({ error: "EXPIRED", detail: `Expired on ${n.expiresAt}.` }, { status: 409 }); }
     n.status = "applied"; n.appliedAt = new Date().toISOString(); n.appliedNote = b.note;
     await save(sb, notes);

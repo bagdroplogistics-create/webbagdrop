@@ -6,6 +6,8 @@
  *  so none of this touches the booking site's own brand tokens. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLoad } from "@/lib/useLoad";
+import { canView, MODULES, type Grants } from "@/lib/access";
+import { MeProvider, PasswordForm, useSignOut, type Me } from "./session";
 
 /* ---------- notifications bell — every platform event, live ---------- */
 interface NotifRow { kind: string; key: string; to?: string; template?: string; text?: string; subject?: string; status: string; stub?: boolean; createdAt: string }
@@ -174,16 +176,38 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-const ALL_ITEMS = GROUPS.flatMap((g) => g.items);
-
 const FONTS =
   "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap";
 
-export default function AdminShell({
-  tab, setTab, search, onSearchChange, children,
-}: { tab: ModuleKey; setTab: (k: ModuleKey) => void; search: string; onSearchChange: (s: string) => void; children: ReactNode }) {
+/** Modules this login can open: their View box (any key not in the
+ *  permission catalogue — forward compatibility for a module not yet
+ *  wired into access.ts — stays owner-key only). */
+const visible = (g: Grants, k: ModuleKey) => (MODULES.some((m) => m.key === k) ? canView(g, k as Parameters<typeof canView>[1]) : g === "*");
+
+export default function AdminShell(props: { tab: ModuleKey; setTab: (k: ModuleKey) => void; search: string; onSearchChange: (s: string) => void; children: ReactNode }) {
+  return <MeProvider>{(me, reload) => <Shell {...props} me={me} reload={reload} />}</MeProvider>;
+}
+
+function Shell({
+  tab, setTab, search, onSearchChange, children, me, reload,
+}: { tab: ModuleKey; setTab: (k: ModuleKey) => void; search: string; onSearchChange: (s: string) => void; children: ReactNode; me: Me; reload: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
-  const current = ALL_ITEMS.find((i) => i.key === tab) ?? ALL_ITEMS[0];
+  const [pwOpen, setPwOpen] = useState(false);
+  const signOut = useSignOut();
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => visible(me.grants, i.key)) })).filter((g) => g.items.length);
+  const allowed = groups.flatMap((g) => g.items);
+  const current = allowed.find((i) => i.key === tab) ?? allowed[0];
+  /* a module this login can't open: go to the first one it can */
+  useEffect(() => { if (current && current.key !== tab) setTab(current.key); }, [current, tab, setTab]);
+
+  if (!current) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center text-sm">
+        <p><b>{me.name}</b>, your login has no modules ticked yet. Ask a manager to give you access in Security &amp; audit → Users.</p>
+        <button className="cursor-pointer underline" onClick={() => void signOut()}>Sign out</button>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-os flex min-h-screen">
@@ -214,7 +238,7 @@ export default function AdminShell({
         </div>
 
         <nav>
-          {GROUPS.map((g) => (
+          {groups.map((g) => (
             <div key={g.label}>
               <div className="px-2 pb-1 pt-3 text-[10px] uppercase tracking-wider" style={{ fontFamily: "var(--a-mono)", color: "#6E7D99" }}>{g.label}</div>
               {g.items.map((item, i) => (
@@ -246,9 +270,12 @@ export default function AdminShell({
         </nav>
 
         <div className="mt-3.5 border-t p-2.5 text-xs" style={{ borderColor: "#2A3B61", color: "#8C9AB5" }}>
-          <div className="font-semibold text-white" style={{ fontFamily: "var(--a-display)" }}>Bagdrop Ops</div>
-          <div>Admin console</div>
-          <div className="mt-0.5 text-[11px]" style={{ fontFamily: "var(--a-mono)", color: "#6E7D99" }}>live session</div>
+          <div className="font-semibold text-white" style={{ fontFamily: "var(--a-display)" }}>{me.name}</div>
+          <div>{me.owner ? "Emergency owner key — every use is logged" : me.user?.email}</div>
+          <div className="mt-1.5 flex gap-3 text-[11px]">
+            {!me.owner && <button className="cursor-pointer underline hover:text-white" onClick={() => setPwOpen((v) => !v)}>Change password</button>}
+            <button className="cursor-pointer underline hover:text-white" onClick={() => void signOut()}>Sign out</button>
+          </div>
         </div>
       </aside>
 
@@ -279,6 +306,12 @@ export default function AdminShell({
               <span className="a-live">live feed</span>
             </div>
           </div>
+          {pwOpen && (
+            <div className="mb-4 max-w-sm rounded-xl border p-4" style={{ borderColor: "var(--a-line)", background: "var(--a-surface)" }}>
+              <div className="mb-2 flex items-center justify-between"><b className="text-sm">Change your password</b><button className="cursor-pointer text-xs underline" onClick={() => setPwOpen(false)}>Close</button></div>
+              <PasswordForm onDone={() => void reload()} />
+            </div>
+          )}
           {children}
         </main>
       </div>
