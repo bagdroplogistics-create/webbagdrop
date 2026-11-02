@@ -4,13 +4,10 @@
  *  updates today, so copy says that, not "real-time GPS"). */
 
 export const NAV = [
-  { href: "#usecases", label: "Use cases" },
+  { href: "#usecases", label: "Services" },
   { href: "#why", label: "Why Bagdrop" },
-  { href: "#solutions", label: "Solutions" },
-  { href: "#handovers", label: "Handovers" },
   { href: "#track", label: "Track" },
   { href: "/about", label: "About" },
-  { href: "#faq", label: "FAQ" },
 ] as const;
 
 export const STATS = [
