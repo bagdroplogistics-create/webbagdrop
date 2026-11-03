@@ -7,10 +7,11 @@
  *  Guests cannot edit a saved booking; the team changes it in BAGDROP OS. */
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
+import { withBase } from "@/lib/basePath";
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap";
 const EVENTS: Record<string, { id: string; names: string; place: string; desk: string }> = {
-  Y2K: { id: "Y2K-WED", names: "Yashna & Yash", place: "Taj Aravali · Udaipur · 17 & 18 December 2026", desk: "/e/y2k" },
+  Y2K: { id: "Y2K-WED", names: "Yashna & Yash", place: "Taj Aravali · Udaipur · 17 & 18 December 2026", desk: withBase("/e/y2k") },
 };
 EVENTS["Y2K-WED"] = EVENTS["#Y2K"] = EVENTS.Y2K;
 
@@ -263,7 +264,7 @@ function Shell({ children, ev, canBook = true, signedIn, onSignOut }: { children
       <link rel="stylesheet" href={FONTS} />
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <nav className="mb-nav">
-        <a className="mb-brand" href={ev?.desk ?? "/"}>BAGDROP <span>#Y2K</span></a>
+        <a className="mb-brand" href={ev?.desk ?? withBase("/")}>BAGDROP <span>#Y2K</span></a>
         <div className="mb-navr">
           {ev && canBook && <a className="mb-btn mb-sm" href={`${ev.desk}?new=1#book`}>Book now</a>}
           {signedIn && <button type="button" className="mb-link" onClick={onSignOut}>Sign out</button>}
