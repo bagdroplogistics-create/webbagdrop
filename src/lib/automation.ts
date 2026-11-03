@@ -150,6 +150,15 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, the extra payment of ${d.amount} for ${d.ref} is verified. Your updated bag count is confirmed.`,
     subject: (d) => `Extra payment verified · ${d.ref}`,
   },
+  /* ---- weddings & events: guest ↔ event company / Bagdrop messaging ---- */
+  wedding_reply: {
+    wa: (d) => `Hi ${d.name}, ${d.from} replied about your bags (${d.ref}):\n"${d.text}"\nSee your bags and reply here: ${d.link}`,
+    subject: (d) => `Reply about your bags · ${d.ref}`,
+  },
+  wedding_guest_message: {
+    wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
+    subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
+  },
 };
 
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
