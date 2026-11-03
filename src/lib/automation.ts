@@ -23,6 +23,8 @@ import { isPaid } from "./payState";
 import { loadAgents } from "./partners";
 import { confirmLinkPayment, ensurePaymentLink } from "./paymentLinks";
 import { cancelPaymentLink, gatewayLinkOf, razorpayConfigured } from "./razorpay";
+import { isTrackable } from "./tracking";
+import { trackPath, passPath } from "./trackLinks";
 
 const MAX_ATTEMPTS = 5;
 
@@ -65,12 +67,12 @@ export const TEMPLATES: Record<string, T> = {
     subject: (d) => `Payment received · ${d.ref}`,
   },
   ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup is scheduled — captain assigned for ${d.date}, window ${d.slot}.`, subject: (d) => `Pickup scheduled · ${d.ref}` },
-  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} bag(s) picked up and sealed with you. Every bag is tagged and scan-tracked from here.`, subject: (d) => `Picked up & sealed · ${d.ref}` },
+  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} bag(s) picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.track ? `\nTrack live: ${d.track}` : ""}${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
   ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags are checked in at our ${d.from} hub — all pieces scanned and accounted for.`, subject: (d) => `In hub · ${d.ref}` },
-  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}.`, subject: (d) => `In transit · ${d.ref}` },
-  ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
-  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}. Bags are released only against your verified identity.`, subject: (d) => `Out for delivery · ${d.ref}` },
-  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered. ${d.pieces} bag(s), every tag scanned end to end. Thank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
+  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
+  ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
+  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}. Bags are released only against your verified identity.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
+  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered. ${d.pieces} bag(s), every tag scanned end to end. Thank you for travelling light — we'd love your feedback.${d.pass ? `\nYour Move Pass: ${d.pass}` : ""}`, subject: (d) => `Delivered · ${d.ref}` },
   quote_ready: {
     wa: (d) => `Hi ${d.name}, your Bagdrop quote for ${d.lane} is ready: ${d.amount}, locked for 24 hours.\nPay securely here: ${d.link}\nRef: ${d.ref}.`,
     subject: (d) => `Your Bagdrop quote · ${d.amount} · ${d.lane}`,
@@ -147,6 +149,15 @@ export const TEMPLATES: Record<string, T> = {
   topup_verified: {
     wa: (d) => `Hi ${d.name}, the extra payment of ${d.amount} for ${d.ref} is verified. Your updated bag count is confirmed.`,
     subject: (d) => `Extra payment verified · ${d.ref}`,
+  },
+  /* ---- weddings & events: guest ↔ event company / Bagdrop messaging ---- */
+  wedding_reply: {
+    wa: (d) => `Hi ${d.name}, ${d.from} replied about your bags (${d.ref}):\n"${d.text}"\nSee your bags and reply here: ${d.link}`,
+    subject: (d) => `Reply about your bags · ${d.ref}`,
+  },
+  wedding_guest_message: {
+    wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
+    subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
   },
 };
 
@@ -235,7 +246,7 @@ async function insertRows(rows: OutboxDoc[]): Promise<number> {
  *  /verify/BD-… becomes https://www.bagdrop.co/verify/BD-… (SITE_URL
  *  overrides the base, e.g. for a staging deployment). */
 const SITE = (process.env.SITE_URL || `https://${COMPANY.web}`).replace(/\/$/, "");
-const LINK_FIELDS = new Set(["link", "dashboard", "portal", "paylink"]);
+const LINK_FIELDS = new Set(["link", "dashboard", "portal", "paylink", "track", "pass"]);
 const absolute = (data: Record<string, string>) =>
   Object.fromEntries(Object.entries(data).map(([k, v]) => [k, LINK_FIELDS.has(k) && typeof v === "string" && v.startsWith("/") ? SITE + v : v]));
 
@@ -368,7 +379,8 @@ async function eventPass(stats: SweepStats) {
   for (const r of data ?? []) {
     const b = r.doc as Booking;
     const to = { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email };
-    const d = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: String(b.bags + b.oversize), amount: inr(b.pay?.amount ?? 0) };
+    const d: Record<string, string> = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: String(b.bags + b.oversize), amount: inr(b.pay?.amount ?? 0) };
+    if (isTrackable(b)) { d.track = trackPath(b.id); d.pass = passPath(b.id); }
     if (isPaid(b)) {
       stats.paidQueued += await notify("payment_received", to, d, `paid:${b.id}`);
       stats.opsQueued += await opsNotify(

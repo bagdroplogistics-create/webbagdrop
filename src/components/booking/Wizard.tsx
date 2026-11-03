@@ -15,25 +15,27 @@ import { withBase } from "@/lib/basePath";
 import { useOnChange, usePlanAutofill } from "@/lib/stateSync";
 import { CITIES, inr } from "@/lib/pricing";
 import { SERVICES } from "@/lib/services";
+import { cityAirportCodes } from "@/lib/airports";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import type { InstantRule, UseCase } from "@/lib/types";
 import { DEFAULT_INSTANT, instantCheck } from "@/lib/instant";
 import OnlinePay from "@/components/OnlinePay";
+import AirportPicker from "@/components/booking/AirportPicker";
 import { Button, Card, Field, Input, Select, Tile } from "@/components/ui";
 
 const STEPS = ["Service", "Route", "When", "Bags", "You", "Verify"];
 
 interface Catalog {
-  cities: { name: string; ap: string | null }[];
+  cities: { name: string; ap: string | null; aps?: string[] }[];
   airports: Record<string, { name: string; terminals?: string[] }>;
   sectors: { from: string; to: string; both: boolean; instant?: InstantRule | null }[];
 }
-const FALLBACK: Catalog = { cities: CITIES.map((c) => ({ name: c.name, ap: c.ap ?? null })), airports: {}, sectors: [] };
+const FALLBACK: Catalog = { cities: CITIES.map((c) => ({ name: c.name, ap: c.ap ?? null, aps: c.aps ?? [] })), airports: {}, sectors: [] };
 
 interface Draft {
   uc: UseCase;
   from: string; to: string; fromOther: string; toOther: string;
-  pickAddr: string; dropAddr: string; terminal: string;
+  pickAddr: string; dropAddr: string;
   date: string; pickupDate: string; deliveryDate: string; slot: string; flight: string; flightTime: string;
   bags: number; oversize: number;
   name: string; mobile: string; email: string; note: string;
@@ -60,7 +62,7 @@ export default function Wizard() {
   const [cat, setCat] = useState<Catalog>(FALLBACK);
   const [d, setD] = useState<Draft>({
     uc: "d2a", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
-    pickAddr: "", dropAddr: "", terminal: "",
+    pickAddr: "", dropAddr: "",
     date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "",
     bags: 2, oversize: 0, name: "", mobile: "", email: "", note: "",
   });
@@ -90,17 +92,11 @@ export default function Wizard() {
   const fromName = d.from === "other" ? d.fromOther.trim() : d.from;
   const toName = d.to === "other" ? d.toOther.trim() : d.to;
 
-  /* the airport end of an air service: pick the airport (+ terminal) */
-  const airportCity = svc.airportEnd === "from" ? d.from : svc.airportEnd === "to" ? d.to : null;
-  const apCode = airportCity && airportCity !== "other" ? cat.cities.find((c) => c.name === airportCity)?.ap ?? null : null;
-  const airport = apCode ? cat.airports[apCode] : undefined;
-  const airportLabel = airport ? `${airport.name}${d.terminal ? ` · ${d.terminal}` : ""}` : "";
-  useOnChange(`${airportLabel}|${svc.airportEnd ?? ""}`, () => {
-    if (!airport) return;
-    if (svc.airportEnd === "to") set("dropAddr", airportLabel);
-    if (svc.airportEnd === "from") set("pickAddr", airportLabel);
-  });
-  useOnChange(apCode ?? "", () => set("terminal", ""));
+  /* the airport end of an air service: pick the airport (+ terminal) — a
+   * city with more than one (cat.cities[].aps) gets a choice */
+  const airportCityName = svc.airportEnd === "from" ? d.from : svc.airportEnd === "to" ? d.to : null;
+  const airportCityRow = airportCityName && airportCityName !== "other" ? cat.cities.find((c) => c.name === airportCityName) : undefined;
+  const airportCodes = airportCityRow ? cityAirportCodes(airportCityRow) : [];
 
   /* is this sector on the rate chart? (informational — the server decides) */
   const onChart = useMemo(() => {
@@ -236,7 +232,7 @@ export default function Wizard() {
             <>
               <H>Choose your service</H>
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                {SERVICES.map((s) => <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => setD((p) => ({ ...p, uc: s.uc, pickAddr: "", dropAddr: "", terminal: "" }))} title={s.title} sub={s.sub} />)}
+                {SERVICES.map((s) => <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => setD((p) => ({ ...p, uc: s.uc, pickAddr: "", dropAddr: "" }))} title={s.title} sub={s.sub} />)}
               </div>
             </>
           )}
@@ -260,13 +256,13 @@ export default function Wizard() {
                 {d.from === "other" && <Field label="Your pickup city"><Input value={d.fromOther} onChange={(e) => set("fromOther", e.target.value)} placeholder="Type the city" /></Field>}
                 {d.to === "other" && <Field label="Your delivery city"><Input value={d.toOther} onChange={(e) => set("toOther", e.target.value)} placeholder="Type the city" /></Field>}
 
-                {svc.airportEnd === "from" && airport ? (
-                  <AirportField label="Pickup airport" airport={airport} terminal={d.terminal} onTerminal={(t) => set("terminal", t)} />
+                {svc.airportEnd === "from" && airportCityName && airportCodes.length > 0 ? (
+                  <AirportPicker label="Pickup airport" city={airportCityName} codes={airportCodes} airports={cat.airports} onAddress={(a) => set("pickAddr", a)} />
                 ) : (
                   <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} placeholder={svc.airportEnd === "from" ? "Airport and terminal" : "Flat, building, area or pincode"} /></Field>
                 )}
-                {svc.airportEnd === "to" && airport ? (
-                  <AirportField label="Delivery airport" airport={airport} terminal={d.terminal} onTerminal={(t) => set("terminal", t)} />
+                {svc.airportEnd === "to" && airportCityName && airportCodes.length > 0 ? (
+                  <AirportPicker label="Delivery airport" city={airportCityName} codes={airportCodes} airports={cat.airports} onAddress={(a) => set("dropAddr", a)} />
                 ) : (
                   <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} placeholder={svc.airportEnd === "to" ? "Airport and terminal" : "Hotel, home, terminal"} /></Field>
                 )}
@@ -399,20 +395,6 @@ export default function Wizard() {
         </Card>
       </aside>
     </div>
-  );
-}
-
-function AirportField({ label, airport, terminal, onTerminal }: { label: string; airport: { name: string; terminals?: string[] }; terminal: string; onTerminal: (t: string) => void }) {
-  return (
-    <Field label={label}>
-      <div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">{airport.name}</div>
-      {airport.terminals?.length ? (
-        <Select className="mt-1.5" value={terminal} onChange={(e) => onTerminal(e.target.value)}>
-          <option value="">Terminal (if known)</option>
-          {airport.terminals.map((t) => <option key={t}>{t}</option>)}
-        </Select>
-      ) : null}
-    </Field>
   );
 }
 

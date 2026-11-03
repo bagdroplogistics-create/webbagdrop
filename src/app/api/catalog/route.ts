@@ -3,7 +3,7 @@ import { AIRPORTS } from "@/lib/pricing";
 import { loadInstantDefaults, loadMasters } from "@/lib/pricingSettings";
 
 /** Live booking catalog straight from the pricing engine — every city in
- *  the location list, its airport (+ terminals), and which sectors are on
+ *  the location list, its airport(s) (+ terminals), and which sectors are on
  *  the rate chart. Deliberately NO amounts: prices are only released after
  *  the customer verifies an OTP (/api/booking). */
 export async function GET() {
@@ -11,9 +11,13 @@ export async function GET() {
   const seen = new Set<string>();
   const cities = m.cities
     .filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)))
-    .map((c) => ({ name: c.name, ap: c.ap ?? null }));
+    .map((c) => {
+      const ap = c.ap ?? null;
+      const aps = (c.aps ?? []).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x) && x !== ap);
+      return { name: c.name, ap, aps };
+    });
   const airports = Object.fromEntries(
-    [...new Set(cities.map((c) => c.ap).filter((x): x is string => !!x && !!AIRPORTS[x]))].map((code) => [code, AIRPORTS[code]]),
+    [...new Set(cities.flatMap((c) => [c.ap, ...c.aps]).filter((x): x is string => !!x && !!AIRPORTS[x]))].map((code) => [code, AIRPORTS[code]]),
   );
   /* instant-booking rules per sector (dates, notice, limits — no prices), so
    * the form can say up front whether a date confirms instantly; the server

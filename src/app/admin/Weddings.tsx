@@ -5,12 +5,21 @@
  *  build's Y2K ops desk (?ops=1) + the events seed in y2k.html; follows the
  *  LRAndTrips module pattern and the cookie-gated /api/admin/* routes. */
 import { useEffect, useMemo, useState } from "react";
-import { adminSaveBooking, watchAdminBookings } from "@/lib/adminApi";
+import { adminSaveBooking, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
 import { nowIso } from "@/lib/db";
 import { adminSaveEvent, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
 import { WEDDING_STAGES } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
+import { teamView } from "@/lib/weddingTeamView";
+
+/** Same guest-messages/rooms/returns/tags desk the event company portal
+ *  (/event) uses, for Bagdrop staff — on any event, any family. */
+const weddingOpsApi: TeamApi = async (body) => {
+  const r = await fetch("/api/admin/wedding-ops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { ok: r.ok, j: await r.json().catch(() => ({})) };
+};
 
 const STATUS_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"> = {
   submitted: "info", accepted: "info", assigned: "warn", picked_up: "warn",
@@ -333,9 +342,11 @@ function EventDetail({
   onOpenBooking?: (id: string) => void;
 }) {
   const [err, setErr] = useState("");
+  const [teamDesk, setTeamDesk] = useState(false);
   const c = deskCounts(bookings);
   const landingUrl = `/weddings?code=${encodeURIComponent(event.id)}`;
   const deskUrl = event.id === "Y2K-WED" ? "/e/y2k" : null;
+  const families = useMemo(() => bookings.map(teamView), [bookings]);
 
   async function setStage(b: Booking, tagId: string, stage: string) {
     const k = WEDDING_STAGES.indexOf(stage as (typeof WEDDING_STAGES)[number]);
@@ -365,6 +376,7 @@ function EventDetail({
           <a className="text-xs font-semibold text-brand hover:underline" href={landingUrl} target="_blank" rel="noreferrer">Landing page ↗</a>
           {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={deskUrl} target="_blank" rel="noreferrer">Wedding desk ↗</a>}
           {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={`${deskUrl}?ops=1`} target="_blank" rel="noreferrer">Ops desk ↗</a>}
+          <Button size="sm" variant="outline" onClick={() => setTeamDesk((v) => !v)}>{teamDesk ? "Hide team desk" : "Team desk"}</Button>
           <Button size="sm" variant="outline" onClick={onToggleOpen}>{event.status === "open" ? "Close event" : "Reopen event"}</Button>
         </div>
       </div>
@@ -376,6 +388,12 @@ function EventDetail({
         <Kpi label="Bags out" value={String(c.bagsOut)} hint={`${c.bagsBack} coming back`} />
         <Kpi label="No room yet" value={String(c.noRoom)} />
       </div>
+
+      {teamDesk && (
+        <div className="mb-4">
+          <TeamDesk families={families} eventId={event.id} api={weddingOpsApi} tagsBase="/api/admin/wedding-tags" onChanged={refreshBookings} />
+        </div>
+      )}
 
       {bookings.length === 0 && <p className="py-6 text-center text-sm text-muted">No guest bookings yet. They appear here as families book on the landing page or the wedding desk.</p>}
 
