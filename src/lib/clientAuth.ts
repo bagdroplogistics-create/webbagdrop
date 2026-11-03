@@ -6,10 +6,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cleanEmail, cleanMobile } from "./otp";
 import type { Booking } from "./types";
+import { requiredSecret } from "./secrets";
 
 export const CLIENT_COOKIE = "bagdrop_client";
 const TTL_MS = 14 * 24 * 3600 * 1000;
-const SECRET = () => `client:${process.env.ADMIN_SECRET_KEY ?? "dev-admin-key"}`;
+const SECRET = () => `client:${requiredSecret("ADMIN_SECRET_KEY", "dev-admin-key")}`;
 const sig = (payload: string) => createHmac("sha256", SECRET()).update(payload).digest("hex");
 
 export interface ClientIdentity { kind: "m" | "e"; value: string }

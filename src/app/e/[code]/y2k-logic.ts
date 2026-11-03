@@ -10,10 +10,9 @@
  *  a luggage photo there instead), and step 0 ("Who's booking?") drops the
  *  phone-number "Find my family" guest-list lookup to match the live
  *  page's simpler lead-guest/mobile/email/side form. Data layer:
- *   - DB.get("bookings", code)   -> getBookingDoc (/api/wedding/mine, id + lead mobile)
  *   - DB.put("bookings", ...)    -> saveWeddingBooking (server route; event
- *                                   must be open, same-mobile guard, status/
- *                                   admin stay server-authoritative)
+ *                                   must be open; create only, guests cannot
+ *                                   edit a saved booking)
  *   - DB.watchDoc(...)           -> watchBookingDoc (polls /api/wedding/mine)
  *   - ops desk DB.watch(...)     -> the cookie-gated /api/admin/bookings
  *                                   route via adminApi (sign in at /admin
@@ -21,8 +20,10 @@
  *   - the event-seed on load moved to the Admin OS Weddings module.
  */
 import { adminListBookings, adminSaveBooking } from "@/lib/adminApi";
-import { getBookingDoc, saveWeddingBooking, watchBookingDoc } from "@/lib/eventDb";
+import { saveWeddingBooking, watchBookingDoc } from "@/lib/eventDb";
 import type { Booking } from "@/lib/types";
+import { getEvent } from "@/lib/eventDb";
+import { bookingOpen, closesText } from "@/lib/weddingStatus";
 
 export function initY2k(): () => void {
   const ac = new AbortController();
@@ -41,9 +42,12 @@ export function initY2k(): () => void {
   const CONTENTS = ["Family luggage", "Bridal / groom outfits", "Wedding gifts & hampers", "Return gift boxes", "Décor material"];
   const DELIVER: [string, string][] = [["room", "Guest's room"], ["bell", "Hold at bell desk"], ["host", "Host family suite"], ["decor", "Décor team"]];
   const WEIGHTS = ["Under 10 kg", "10–20 kg", "20–32 kg", "Over 32 kg"];
-  const WINDOWS: Record<string, { label: string; dates: string[] }> = { early: { label: "Early · 10–12 Dec", dates: ["10 Dec", "11 Dec", "12 Dec"] }, express: { label: "Express · 14–15 Dec", dates: ["14 Dec", "15 Dec"] } };
+  // one pickup window: 9, 10 and 11 December (the express window is gone)
+  const WINDOWS: Record<string, { label: string; dates: string[] }> = { early: { label: "9–11 Dec", dates: ["9 Dec", "10 Dec", "11 Dec"] } };
   const SLOTS = ["Morning · 10 AM–1 PM", "Midday · 1–3 PM", "Afternoon · 3–6 PM"];
-  const RET_DATES = ["18 Dec (night)", "19 Dec", "20 Dec"];
+  // guests leave Udaipur on 18 or 19 December; return pickups follow the same two days
+  const LEAVE_DATES = ["18 Dec", "19 Dec"];
+  const RET_DATES = ["18 Dec", "19 Dec"];
   const RET_SLOTS = ["Before 9 AM", "9 AM–12 PM", "12–3 PM", "At checkout time"];
   const RET_DEST: [string, string][] = [["same", "Same as pickup address"], ["airport", "Udaipur airport, with me"], ["bom", "Mumbai airport arrival"], ["other", "A different address"]];
   const CITIES = ["Mumbai", "Thane", "Navi Mumbai", "Other city"];
@@ -61,7 +65,7 @@ export function initY2k(): () => void {
   const phoneOk = (p: any) => /^[6-9]\d{9}$/.test(String(p || "").replace(/\D/g, "").slice(-10)) && String(p).replace(/\D/g, "").length >= 10;
 
   /* ---------- State ---------- */
-  function blankMember(n: number) { return { id: "G" + pad(n), name: "", phone: "", room: "", roomFromList: false, note: "", arrDate: "16 Dec", arrTime: "", mode: "Flight", travelNo: "", depDate: "19 Dec", depTime: "" }; }
+  function blankMember(n: number) { return { id: "G" + pad(n), name: "", phone: "", room: "", roomFromList: false, note: "", depDate: "19 Dec" }; }
   function blankPickup(n: number) { return { id: "P" + n, label: n === 1 ? "Home" : "", city: "Mumbai", address: "", pincode: "", landmark: "", lift: "Lift available", contact: "", contactPhone: "", window: "early", date: "", slot: "", members: [] as string[] }; }
   function fresh(): any {
     return { family: { phone: "", lead: "", email: "", side: "", familyName: "" },
@@ -90,7 +94,7 @@ export function initY2k(): () => void {
       S.members.forEach((m: any, i: number) => {
         if (!m.name.trim()) e[`members.${i}.name`] = "Add a name.";
         if (m.phone && !phoneOk(m.phone)) e[`members.${i}.phone`] = "10-digit mobile, or leave blank.";
-        if (dayNum(m.depDate) < dayNum(m.arrDate)) e[`members.${i}.depDate`] = "Departure is before arrival.";
+        if (!LEAVE_DATES.includes(m.depDate)) e[`members.${i}.depDate`] = "Choose 18 or 19 December.";
       });
     }
     if (s === 2) {
@@ -125,7 +129,6 @@ export function initY2k(): () => void {
   }
   const softErr = (k: string) => k.endsWith(".city");
   function stepValid(s: number) { const e = errs(s); return Object.keys(e).filter((k) => !softErr(k)).length === 0; }
-  function dayNum(d: string) { return parseInt(d, 10) || 0; }
 
   /* ---------- Field builders ---------- */
   let E: Record<string, string> = {};
@@ -165,7 +168,7 @@ export function initY2k(): () => void {
   </div>`;
   }
   function rStep1() {
-    return `<h3 class="ph">Who's travelling?</h3><p class="psub">Add everyone in your family who has bags, with their own room. Travel times help us have bags in the room before they arrive.</p>
+    return `<h3 class="ph">Who's travelling?</h3><p class="psub">Add everyone in your family who has bags, with their own room and the day they leave Udaipur.</p>
   ${S.members.map((m: any, i: number) => `<div class="item">
     <div class="top"><h4>${esc(m.name || "Traveller " + (i + 1))}</h4><div style="display:flex;gap:10px;align-items:center"><span class="idchip">${m.id}</span>${S.members.length > 1 ? `<button class="x" type="button" data-act="rmMember" data-i="${i}">Remove</button>` : ""}</div></div>
     <div class="grid">
@@ -173,11 +176,7 @@ export function initY2k(): () => void {
       ${inp(`members.${i}.phone`, "Mobile", { type: "tel", im: "numeric", opt: true, ph: "For their own bag updates" })}
       ${m.roomFromList ? inp(`members.${i}.room`, "Room", { ro: true, hint: "From the host's rooming list" + (m.note ? " · " + esc(m.note) : "") })
         : inp(`members.${i}.room`, "Room", { opt: true, ph: "Leave blank if not known", hint: m.room ? "" : "No room yet? We hold bags at the bell desk and move them when the room is assigned." })}
-      ${sel(`members.${i}.mode`, "Travelling by", ["Flight", "Train", "Road"], { re: 1 })}
-      ${sel(`members.${i}.arrDate`, "Arrives Udaipur", ["15 Dec", "16 Dec", "17 Dec", "18 Dec"])}
-      ${inp(`members.${i}.arrTime`, "Arrival time", { type: "time", opt: true })}
-      ${inp(`members.${i}.travelNo`, m.mode === "Flight" ? "Flight number" : m.mode === "Train" ? "Train number" : "Vehicle / notes", { opt: true, ph: m.mode === "Flight" ? "e.g. 6E 5203" : "" })}
-      ${sel(`members.${i}.depDate`, "Leaves Udaipur", ["18 Dec", "19 Dec", "20 Dec", "21 Dec"])}
+      ${sel(`members.${i}.depDate`, "Leaves Udaipur", LEAVE_DATES)}
     </div>${err(`members.${i}.depDate`)}
   </div>`).join("")}
   <div class="adders" style="margin-top:14px"><button type="button" data-act="addMember">+ Add family member</button></div>`;
@@ -196,12 +195,6 @@ export function initY2k(): () => void {
       ${sel(`pickups.${i}.lift`, "Access", ["Lift available", "Stairs only", "Ground floor / bungalow"])}
       ${inp(`pickups.${i}.contact`, "Person handing over", { opt: true, ph: "Defaults to you" })}
       ${inp(`pickups.${i}.contactPhone`, "Their mobile", { type: "tel", im: "numeric", opt: true })}
-      <div class="f full"><span class="lab">Pickup window</span>
-        <div class="seg" style="margin-top:7px">
-          ${Object.entries(WINDOWS).map(([k, v]) => `<label><input type="radio" name="win${i}" data-b="pickups.${i}.window" data-re="1" value="${k}"${p.window === k ? " checked" : ""}><span>${v.label}</span></label>`).join("")}
-        </div>
-        <span class="hint">${p.window === "early" ? "Best for bulk luggage, gifts and décor." : "For outfits and things you need until you leave."} <span class="proto">Prototype: express window proposed</span></span>
-      </div>
       ${sel(`pickups.${i}.date`, "Date", w.dates, { ph: "Choose date" })}
       ${sel(`pickups.${i}.slot`, "Time slot", SLOTS, { ph: "Select a slot" })}
       <div class="f full${bad(`pickups.${i}.members`)}"><span class="lab">Whose bags are collected here</span>
@@ -257,8 +250,8 @@ export function initY2k(): () => void {
   function rStep5() {
     return `<h3 class="ph">Check and confirm</h3><p class="psub">You'll get this summary on WhatsApp, with an edit link.</p>
   <div class="lab" style="margin-bottom:8px">Travellers</div>
-  <div class="tbl-wrap"><table><thead><tr><th>Guest</th><th>Room</th><th>Arrives</th><th>Leaves</th><th>Bags</th></tr></thead><tbody>
-  ${S.members.map((m: any) => `<tr><td>${esc(m.name)}</td><td>${m.room ? esc(m.room) : '<span class="hint">Bell desk until assigned</span>'}</td><td>${esc(m.arrDate)} ${esc(m.arrTime)}${m.travelNo ? " · " + esc(m.travelNo) : ""}</td><td>${esc(m.depDate)}</td><td class="num">${S.bags.filter((b: any) => b.owner === m.id).length}</td></tr>`).join("")}
+  <div class="tbl-wrap"><table><thead><tr><th>Guest</th><th>Room</th><th>Leaves</th><th>Bags</th></tr></thead><tbody>
+  ${S.members.map((m: any) => `<tr><td>${esc(m.name)}</td><td>${m.room ? esc(m.room) : '<span class="hint">Bell desk until assigned</span>'}</td><td>${esc(m.depDate)}</td><td class="num">${S.bags.filter((b: any) => b.owner === m.id).length}</td></tr>`).join("")}
   </tbody></table></div>
   <div class="lab" style="margin:20px 0 8px">Pickups</div>
   <div class="tbl-wrap"><table><thead><tr><th>Address</th><th>When</th><th>Bags</th></tr></thead><tbody>
@@ -282,6 +275,8 @@ export function initY2k(): () => void {
   /* ---------- Render ---------- */
   function renderPanel() {
     const p = $("#panel")!;
+    const sum = $("#summary"); if (sum) sum.hidden = closed && mode !== "done";
+    if (closed && mode !== "done") { p.innerHTML = rClosed(); return; }
     if (mode === "done") { p.innerHTML = rDone(); drawTagCodes(p); renderSummary(); return; }
     E = showErrors ? errs(step) : {};
     const body = [rStep0, rStep1, rStep2, rStep3, rStep4, rStep5][step]();
@@ -346,11 +341,32 @@ export function initY2k(): () => void {
       for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { if ((i < 8 && j < 8) || (i > 12 && j < 8) || (i < 8 && j > 12)) continue; h = (h * 1103515245 + 12345) >>> 0; if ((h >> 16) & 1) x.fillRect(i, j, 1, 1); }
     });
   }
+  /* where the team is with this booking (polled from /api/wedding/mine): the desk never says "confirmed" before Bagdrop does */
+  function teamState(): "waiting" | "confirmed" | "closed" {
+    const s = booking?.teamStatus;
+    if (!s || ["quoted", "identified", "submitted", "revised"].includes(s)) return "waiting";
+    return ["rejected", "cancelled"].includes(s) ? "closed" : "confirmed";
+  }
+  function teamNote() {
+    const t = teamState();
+    if (t === "confirmed") return `<div class="callout" style="margin-bottom:16px"><b>Confirmed by Bagdrop.</b> The hosts are covering this, so there is nothing to pay.</div>`;
+    if (t === "closed") return `<div class="callout warn" style="margin-bottom:16px">This booking is closed. Message Bagdrop on WhatsApp if this is a mistake.</div>`;
+    return `<div class="callout" style="margin-bottom:16px"><b>Request received.</b> Bagdrop is reviewing it and will WhatsApp you the moment it is confirmed.</div>`;
+  }
+  /* bookings shut on the event's bookingCloses date (15 Nov for #Y2K): no new
+     booking, no added bags, no new return trip; the team changes bookings in BAGDROP OS */
+  let closed = false, closesOn = "";
+  function rClosed() {
+    return `<div class="conf-head"><div><div class="eyebrow">Bookings closed</div><h3 class="ph" style="margin-top:6px">Luggage bookings for #Y2K closed${closesOn ? ` on ${esc(closesOn)}` : ""}.</h3></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn sm" href="/e/y2k/my">My bags</a></div></div>
+  <div class="callout">No new bookings, extra bags or return trips can be added now. Already booked? See your bags and tags in My bags. For anything else, message Bagdrop on WhatsApp.</div>`;
+  }
   function rDone() {
     const st = booking.state, code = booking.bookingId;
     const wa = waText();
-    return `<div class="conf-head"><div><div class="eyebrow">Booking confirmed</div><h3 class="ph" style="margin-top:6px">You're all set, ${esc((st.family.lead || "").split(" ")[0])}.</h3><div class="bid">${esc(code)}</div></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost sm" type="button" data-act="edit">Edit booking</button><a class="btn sm" href="#track">Track bags</a></div></div>
+    return `<div class="conf-head"><div><div class="eyebrow">${teamState() === "confirmed" ? "Booking confirmed" : teamState() === "closed" ? "Booking closed" : "Request received"}</div><h3 class="ph" style="margin-top:6px">You're all set, ${esc((st.family.lead || "").split(" ")[0])}.</h3><div class="bid">${esc(code)}</div></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">${closed ? "" : `<button class="btn ghost sm" type="button" data-act="newBooking">New booking</button>`}<a class="btn sm" href="#track">Track bags</a><a class="btn ghost sm" href="/e/y2k/my">My bags</a></div></div>
+  ${teamNote()}
   ${booking.saved === false ? `<div class="callout warn" style="margin-bottom:16px">Saved in this browser only — the back end could not be reached. The booking syncs to Bagdrop ops when the connection returns.</div>` : ""}
   <div class="lab" style="margin-bottom:10px">Your ${st.bags.length} bag tag${st.bags.length > 1 ? "s" : ""} <em>· our agent brings these printed to your door</em></div>
   <div class="tags">${st.bags.map((b: any) => tagHTML(b, st, code)).join("")}</div>
@@ -360,7 +376,7 @@ export function initY2k(): () => void {
   }
   function waText() {
     const st = booking.state, code = booking.bookingId;
-    const lines = [`Bagdrop × #Y2K`, `Booking ${code} confirmed for ${st.family.familyName || st.family.lead}.`, ``];
+    const lines = [`Bagdrop × #Y2K`, `Booking ${code} ${teamState() === "confirmed" ? "confirmed" : "received, awaiting Bagdrop confirmation,"} for ${st.family.familyName || st.family.lead}.`, ``];
     st.pickups.forEach((p: any) => { const n = st.bags.filter((b: any) => b.pickup === p.id).length; lines.push(`Pickup ${p.label || p.id}: ${p.date}, ${p.slot} · ${n} bag${n !== 1 ? "s" : ""}`); });
     lines.push("");
     st.members.forEach((m: any) => { const n = st.bags.filter((b: any) => b.owner === m.id).length; if (n) lines.push(`${m.name}: ${n} bag${n > 1 ? "s" : ""} → ${m.room ? "Room " + m.room : "bell desk until room is assigned"}`); });
@@ -374,7 +390,7 @@ export function initY2k(): () => void {
     const box = $("#trackBox")!;
     if (!booking) { box.innerHTML = `<div class="callout">Once you book, every bag shows here with its tag and where it is right now. <a href="#book" style="margin-left:4px"><b>Book your pickup</b></a></div>`; return; }
     const st = booking.state, code = booking.bookingId, bs = booking.bagStatus || {};
-    box.innerHTML = `<p class="lede" style="margin-top:0">${esc(code)} · ${esc(st.family.familyName || st.family.lead)}</p>` +
+    box.innerHTML = `<p class="lede" style="margin-top:0">${esc(code)} · ${esc(st.family.familyName || st.family.lead)}</p>` + teamNote() +
     st.bags.map((b: any) => { const id = `${code}-${b.owner}-${b.id}`; const s = bs[id] || "Booked"; const k = STAGES.indexOf(s);
       const stages = b.ret ? STAGES : STAGES.slice(0, 6);
       return `<div class="trk"><div class="top"><div><b>${esc(memberName2(st, b.owner))}</b> · ${esc(b.colour)} ${esc((BAG_TYPES.find((x) => x[0] === b.type) || [])[1])}<div class="hint" style="font-family:var(--mono)">${esc(id)}</div></div><span class="state">${esc(s)}</span></div>
@@ -457,7 +473,9 @@ export function initY2k(): () => void {
     if (act === "retAll") { S.bags.forEach((b: any) => { b.ret = true; b.retDest = "same"; b.retDate = b.retDate || "19 Dec"; b.retSlot = b.retSlot || "At checkout time"; }); }
     if (act === "retNone") { S.bags.forEach((b: any) => b.ret = false); }
     if (act === "back") { step--; showErrors = false; renderPanel(); scrollPanel(); return; }
-    if (act === "edit") { S = JSON.parse(JSON.stringify(booking.state)); mode = "form"; step = 5; maxStep = 5; renderPanel(); scrollPanel(); return; }
+    // guests cannot edit a saved booking; they start a new one (the team changes bookings in BAGDROP OS)
+    if (act === "newBooking" && closed) { toast("Bookings are closed"); return; }
+    if (act === "newBooking") { booking = null; try { localStorage.removeItem("y2k-booking"); } catch {} S = fresh(); mode = "form"; step = 0; maxStep = 0; showErrors = false; renderPanel(); renderTrack(); scrollPanel(); return; }
     if (act === "copyWa") { const txt = $("#waText")!.textContent || ""; try { navigator.clipboard.writeText(txt).then(() => toast("Message copied"), () => selectWa()); } catch { selectWa(); } return; }
     renderPanel();
   }, { signal });
@@ -473,15 +491,19 @@ export function initY2k(): () => void {
   /* ---------- Save ---------- */
   async function confirmBooking() {
     const btn = $('#wiz button[type=submit]') as HTMLButtonElement | null; if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
-    const code = booking ? booking.bookingId : ("Y2K-F" + String(hashNum(S.family.phone || "x") % 9000 + 1000));
     if (!S.family.familyName) S.family.familyName = (S.family.lead.split(" ").slice(-1)[0] || "") + " family";
-    const doc = { bookingId: code, state: JSON.parse(JSON.stringify(S)), bagStatus: (booking && booking.bagStatus) || {}, updatedAt: new Date().toISOString(), createdAt: (booking && booking.createdAt) || new Date().toISOString() };
-    let saved = false;
-    try {
-      const prev = await getBookingDoc(code, S.family.phone).catch(() => null);
-      await saveWeddingBooking(adminDoc(doc, prev) as Booking);
-      saved = true; watchMine(code);
-    } catch { saved = false; }
+    /* every save is a NEW booking with its own random code (it used to come from the mobile, so a
+       second family on the same phone overwrote the first); a taken code is refused, so retry */
+    const ALPHA = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    const newCode = () => "Y2K-F" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (n) => ALPHA[n % ALPHA.length]).join("");
+    const now = new Date().toISOString();
+    let doc: any = null, saved = false, lastErr = "";
+    for (let tries = 0; tries < 4 && !saved; tries++) {
+      doc = { bookingId: newCode(), state: JSON.parse(JSON.stringify(S)), bagStatus: {}, updatedAt: now, createdAt: now };
+      try { await saveWeddingBooking(adminDoc(doc, null) as Booking); saved = true; watchMine(doc.bookingId); }
+      catch (e) { lastErr = e instanceof Error ? e.message : ""; if (lastErr !== "ALREADY_BOOKED") break; }
+    }
+    if (!saved && (lastErr === "BOOKING_CLOSED" || lastErr === "EVENT_NOT_OPEN")) { closed = true; applyClosed(); toast("Bookings are closed"); return; }
     booking = Object.assign(doc, { saved });
     try { localStorage.setItem("y2k-booking", JSON.stringify(booking)); } catch {}
     mode = "done"; renderPanel(); renderTrack(); scrollPanel();
@@ -489,7 +511,7 @@ export function initY2k(): () => void {
   }
   /* One document, two views: the Admin OS record carries the full wedding-desk
      state under .wedding, so the inbox, events module and this page stay in sync. */
-  function isoDate(d: any) { const p = String(d || "").match(/(\d{1,2})\s*Dec/); return p ? ("2026-12-" + String(p[1]).padStart(2, "0")) : "2026-12-16"; }
+  function isoDate(d: any) { const p = String(d || "").match(/(\d{1,2})\s*Dec/); return p ? ("2026-12-" + String(p[1]).padStart(2, "0")) : "2026-12-09"; }
   function adminDoc(doc: any, prev: any) {
     const st = doc.state, over = st.bags.filter((b: any) => b.weight === "Over 32 kg").length;
     const first = st.pickups[0] || {};
@@ -520,7 +542,13 @@ export function initY2k(): () => void {
   function watchMine(code: string) {
     if (unsubMine) unsubMine();
     unsubMine = watchBookingDoc(code, booking?.state?.family?.phone ?? "", (d: any) => {
-      if (d && d.wedding && booking) { booking.bagStatus = d.wedding.bagStatus || {}; renderTrack(); }
+      if (d && booking) {
+        if (d.wedding) booking.bagStatus = d.wedding.bagStatus || {};
+        const changed = booking.teamStatus !== d.status;
+        booking.teamStatus = d.status;
+        renderTrack();
+        if (changed && mode === "done") renderPanel();
+      }
     });
     unsubs.push(unsubMine);
   }
@@ -565,9 +593,36 @@ export function initY2k(): () => void {
   document.querySelectorAll(".reveal").forEach((el) => (revealObserver ? revealObserver.observe(el) : el.classList.add("in")));
   if (revealObserver) unsubs.push(() => revealObserver.disconnect());
 
+  /* ---------- Floating "Book now": shown once the hero (with its own button) is gone, hidden at the form ---------- */
+  const fab = $("#bookFab"), bookSec = $("#book"), heroSec = $("#top");
+  if (fab && bookSec && heroSec && "IntersectionObserver" in window) {
+    let heroIn = true, bookIn = false;
+    const fabIo = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.target === heroSec) heroIn = en.isIntersecting; else bookIn = en.isIntersecting; });
+      fab.classList.toggle("off", heroIn || bookIn);
+    }, { threshold: 0.05 });
+    fabIo.observe(heroSec); fabIo.observe(bookSec);
+    unsubs.push(() => fabIo.disconnect());
+  } else fab?.classList.remove("off");
+
+  function applyClosed() {
+    renderPanel();
+    if (closed) { fab?.remove(); document.querySelectorAll<HTMLAnchorElement>('a[href="#book"]').forEach((a) => { a.textContent = "Bookings closed"; a.setAttribute("href", "/e/y2k/my"); }); }
+  }
+  getEvent(EVENT_CODE).then((ev) => {
+    closesOn = closesText(ev);
+    closed = !ev || ev.status !== "open" || !bookingOpen(ev);
+    const lede = $("#bookLede"); if (lede && closesOn) lede.textContent = `One request for your whole family. Pickups run 9–11 December 2026 from Mumbai. Bookings ${closed ? "closed on" : "close"} ${closesOn}.`;
+    applyClosed();
+  }).catch(() => { /* the server still refuses a late booking */ });
+
   /* ---------- Boot ---------- */
+  // ?new=1 (from the guest dashboard): start a fresh family booking instead of reopening the saved one
+  if (new URLSearchParams(location.search).has("new")) { try { localStorage.removeItem("y2k-booking"); } catch {} }
   try { const raw = localStorage.getItem("y2k-booking"); if (raw) { booking = JSON.parse(raw); mode = "done"; } } catch {}
   renderPanel(); renderTrack();
+  // the panel is drawn after load, so the jump to #book / #track lands short; redo it
+  if (location.hash === "#book" || location.hash === "#track") setTimeout(() => $(location.hash)?.scrollIntoView({ block: "start" }), 60);
 
   if (booking) watchMine(booking.bookingId);
   /* ops desk: opened from the admin console with ?ops=1 — the manifest reads

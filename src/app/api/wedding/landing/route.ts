@@ -4,6 +4,7 @@ import { cleanMobile } from "@/lib/otp";
 import { kickSweep, notifyInquiryDesk } from "@/lib/automation";
 import type { BagdropEvent, Booking } from "@/lib/types";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
+import { bookingOpen, closesText } from "@/lib/weddingStatus";
 
 /** Wedding landing-page booking (/weddings?code=…), moved server-side.
  *  The browser sends only what the family typed; the event must be open,
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
   const { data: ev } = await sb.from("events").select("doc,status").eq("id", eventCode).maybeSingle();
   const EV = ev?.doc as BagdropEvent | undefined;
   if (!EV || (ev?.status ?? EV.status) !== "open") return NextResponse.json({ error: "EVENT_NOT_OPEN" }, { status: 403 });
+  if (!bookingOpen(EV)) return NextResponse.json({ error: "BOOKING_CLOSED", detail: `Bookings closed on ${closesText(EV)}.` }, { status: 403 });
 
   /* live deployments have no demo code: the booking is taken, and identity
    * stays pending for the bond + pickup gate instead of being self-certified */
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
   };
   const up = await sb.from("bookings").insert({ id, doc, status: doc.status, created: now });
   if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
-  await notifyInquiryDesk(`💍 New wedding booking · ${id} · ${family} (${lead}, +${mobile}) · ${bags} bags from ${city} · event ${EV.id}`, `Wedding booking · ${id} · ${EV.id}`, `inq:${id}`);
+  await notifyInquiryDesk(`New wedding booking · ${id} · ${family} (${lead}, +${mobile}) · ${bags} bags from ${city} · event ${EV.id}`, `Wedding booking · ${id} · ${EV.id}`, `inq:${id}`);
   kickSweep();
   return NextResponse.json({ ok: true, id, pickDay: s ? s.pickDay : EV.dates.in, retDay: s ? s.retDay : EV.dates.out });
 }
