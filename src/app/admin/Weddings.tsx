@@ -11,6 +11,7 @@ import { adminSaveEvent, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
 import { WEDDING_STAGES } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { withBase } from "@/lib/basePath";
 import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
 import { teamView } from "@/lib/weddingTeamView";
 
@@ -344,8 +345,8 @@ function EventDetail({
   const [err, setErr] = useState("");
   const [teamDesk, setTeamDesk] = useState(false);
   const c = deskCounts(bookings);
-  const landingUrl = `/weddings?code=${encodeURIComponent(event.id)}`;
-  const deskUrl = event.id === "Y2K-WED" ? "/e/y2k" : null;
+  const landingUrl = withBase(`/weddings?code=${encodeURIComponent(event.id)}`);
+  const deskUrl = event.id === "Y2K-WED" ? withBase("/e/y2k") : null;
   const families = useMemo(() => bookings.map(teamView), [bookings]);
 
   async function setStage(b: Booking, tagId: string, stage: string) {
