@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
 import { kickSweep } from "@/lib/automation";
-import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
+import { retryOnConflict } from "@/lib/bookingStore";
+import { bookingOpen, closesText } from "@/lib/weddingStatus";
 
 /** Mirrors every new Y2K booking into a Google Sheet, alongside the Admin OS,
  *  via a Google Apps Script "Web App" (see the setup doc for the script and
@@ -47,17 +48,13 @@ function notifySheet(doc: Booking) {
     .catch((e) => console.error("Y2K sheet webhook failed:", e));
 }
 
-/** Create-or-update one wedding-desk family booking. Public (guests use it),
+/** Create one wedding-desk family booking. Public (guests use it),
  *  but guarded the same way the SECURITY DEFINER RPCs guard the other
  *  customer writes — the anon key itself still has no path to the table:
  *   - the booking must reference an event that exists and is OPEN;
  *   - it must be a wedding booking (uc "wed") with the desk's state attached;
- *   - updating an existing row needs the same event code AND the same lead
- *     mobile it was created with (the desk's booking codes are short, so the
- *     id alone is not treated as a credential the way BD-… tokens are);
- *   - status / admin / created stay server-authoritative on update, so a
- *     guest edit can never un-reject or re-route a booking the ops team has
- *     already acted on.
+ *   - a code that is already saved is refused (409 ALREADY_BOOKED): guests
+ *     cannot edit a booking, only make a new one; the team edits in the OS.
  */
 async function handlePOST(req: Request) {
   let body: { doc?: Booking };
@@ -82,46 +79,30 @@ async function handlePOST(req: Request) {
   if (!event || (ev?.status ?? event.status) !== "open") {
     return NextResponse.json({ error: "EVENT_NOT_OPEN" }, { status: 403 });
   }
+  if (!bookingOpen(event)) {
+    return NextResponse.json({ error: "BOOKING_CLOSED", detail: `Bookings closed on ${closesText(event)}. Message Bagdrop for any change.` }, { status: 403 });
+  }
 
   const { data: prevRow, error: prevErr } = await sb.from("bookings").select("doc").eq("id", doc.id).maybeSingle();
   if (prevErr) return NextResponse.json({ error: prevErr.message }, { status: 500 });
-  const prev = prevRow?.doc as Booking | undefined;
-  const isNew = !prev;
+  /* guests cannot edit: a saved booking is changed only by the team in BAGDROP OS.
+   * A taken code is refused so the desk retries with a fresh one. */
+  if (prevRow) return NextResponse.json({ error: "ALREADY_BOOKED", detail: "This booking is saved. Make a new booking, or ask Bagdrop to change it." }, { status: 409 });
 
-  if (prev) {
-    const prevMobile = String(prev.traveller?.mobile ?? "").replace(/\D/g, "");
-    if (prev.eventCode !== doc.eventCode || prevMobile.slice(-10) !== mobile.slice(-10)) {
-      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-    }
-    // Server-authoritative fields survive the guest's re-save — a browser
-    // can never set its own identity, payment, documents or LR.
-    doc.status = prev.status;
-    doc.admin = prev.admin ?? {};
-    doc.created = prev.created;
-    doc.pay = prev.pay ?? null;
-    doc.identity = prev.identity ?? null;
-    doc.indemnity = prev.indemnity ?? null;
-    doc.docs = prev.docs;
-    doc.lr = prev.lr ?? null;
-  } else {
-    doc.status = "submitted";
-    doc.created = doc.created || new Date().toISOString();
-    doc.admin = {};
-    doc.pay = null;
-    doc.identity = { ok: false, at: "", method: "Pending — verified by the team before pickup", score: 0 };
-    doc.indemnity = null;
-    delete doc.docs;
-    doc.lr = null;
-  }
+  // server-authoritative fields: a browser never sets its own status, payment, identity or LR
+  doc.status = "submitted";
+  doc.created = doc.created || new Date().toISOString();
+  doc.admin = {};
+  doc.pay = null;
+  doc.identity = { ok: false, at: "", method: "Pending — verified by the team before pickup", score: 0 };
+  doc.indemnity = null;
+  delete doc.docs;
+  doc.lr = null;
 
-  if (prev) {
-    doc.rev = prev.rev;
-    await saveOrThrow(sb, doc);
-  } else {
-    const { error } = await sb.from("bookings").insert({ id: doc.id, doc, status: doc.status, created: doc.created });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  if (isNew) notifySheet(doc);
+  const { error } = await sb.from("bookings").insert({ id: doc.id, doc, status: doc.status, created: doc.created });
+  if (error?.code === "23505") return NextResponse.json({ error: "ALREADY_BOOKED" }, { status: 409 }); // same code saved a moment ago
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  notifySheet(doc);
   kickSweep();
   return NextResponse.json({ ok: true, booking: doc });
 }

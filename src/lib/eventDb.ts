@@ -3,8 +3,9 @@
  *  /e/[code]). Same security model as src/lib/db.ts — the anon key NEVER
  *  touches the bookings table directly:
  *
- *  - events:   direct anon SELECT is allowed by RLS, but only rows with
- *              status = 'open' (policy anon_read_event in supabase/schema.sql).
+ *  - events:   read through /api/event, which returns only the guest-facing
+ *              part of an OPEN event (no host mobile, team or rates); the
+ *              anon key has no access to the table (migration_004).
  *  - bookings: every read and write goes through server-only API routes
  *              (/api/wedding/mine, /booking, /track) that use the service
  *              role behind an id + lead-mobile guard — the browser has no
@@ -38,9 +39,11 @@ function lsWrite<T>(col: string, map: Record<string, T>) {
 
 export async function getEvent(code: string): Promise<BagdropEvent | null> {
   if (sb) {
-    const { data, error } = await sb.from("events").select("doc").eq("id", code).maybeSingle();
-    if (error) throw error;
-    return (data?.doc as BagdropEvent) ?? null;
+    /* the server hands back only the guest-facing part of an open event */
+    const r = await fetch(`/api/event?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`EVENT_${r.status}`);
+    return ((await r.json()).event as BagdropEvent) ?? null;
   }
   return lsMap<BagdropEvent>("events")[code] ?? null;
 }

@@ -56,8 +56,12 @@ h2.big em{font-style:italic;color:var(--label)}
 .nav.scrolled .nav-links a:not(.pill):hover{color:var(--gold-2)}
 .nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:999px;transition:background .2s,color .2s,border-color .2s}
 .nav-links .pill:hover{background:var(--gold);border-color:var(--gold);color:var(--forest)}
-.hamburger{display:none;background:none;border:0;color:inherit;cursor:pointer;padding:8px;flex-direction:column;gap:5px;width:42px;height:42px;align-items:center;justify-content:center}
-.hamburger span{width:22px;height:1.5px;background:currentColor;display:block}
+.hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:40px}
+.hero-cta .hero-book{background:var(--sand);color:var(--forest-2)}
+.hero-cta .hero-mine{background:transparent;color:var(--on-dark);border:1px solid rgba(244,238,228,.55)}
+.book-fab{position:fixed;right:18px;bottom:18px;z-index:60;display:inline-flex;align-items:center;justify-content:center;padding:15px 24px;border-radius:999px;background:var(--sand);color:var(--forest-2);border:1px solid rgba(36,41,31,.25);font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none;box-shadow:0 10px 30px rgba(36,41,31,.35);transition:opacity .25s,transform .25s}
+.book-fab.off{opacity:0;transform:translateY(12px);pointer-events:none}
+.hamburger{display:none;background:none;border:1px solid currentColor;border-radius:999px;color:inherit;cursor:pointer;padding:8px 16px;font:600 12px/1 var(--sans,Inter,sans-serif);letter-spacing:.14em;text-transform:uppercase;align-items:center;justify-content:center}
 @media (max-width:860px){.nav-links{display:none}.hamburger{display:flex}}
 .navdrawer-backdrop{position:fixed;inset:0;z-index:110;background:rgba(20,16,10,.45);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .35s ease}
 .navdrawer-backdrop.open{opacity:1;pointer-events:auto}
@@ -65,7 +69,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .navdrawer.open{transform:translateX(0)}
 .navdrawer .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
 .navdrawer .head span{font-family:var(--display);font-size:22px;letter-spacing:.04em}
-.navdrawer .close{background:rgba(255,255,255,.1);border:0;color:var(--on-dark);width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
+.navdrawer .close{background:rgba(255,255,255,.1);border:0;color:var(--on-dark);height:40px;padding:0 18px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;line-height:1}
 .navdrawer nav{display:flex;flex-direction:column;gap:4px;font-family:var(--display)}
 .navdrawer nav a{font-size:30px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none}
 .navdrawer .cta{margin-top:auto;text-align:center;background:var(--gold);color:var(--forest);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:18px;border-radius:999px;text-decoration:none}
@@ -80,7 +84,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .hero .place{font-size:12px;font-weight:500;letter-spacing:.42em;text-transform:uppercase;opacity:.9;margin-bottom:28px;padding-left:.42em}
 .names{font-family:var(--display);font-weight:400;font-size:clamp(52px,13vw,152px);line-height:.94;letter-spacing:-.01em;margin:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:clamp(14px,4vw,44px);text-shadow:0 2px 30px rgba(0,0,0,.55),0 1px 4px rgba(0,0,0,.4)}
 .names em{font-style:italic}
-.names .heart{width:clamp(28px,7vw,62px);height:auto;flex-shrink:0;color:var(--sand)}
+.names .heart{flex-shrink:0;color:var(--sand);font-style:normal}
 .date-pill{display:flex;align-items:center;gap:16px;margin-top:34px;background:rgba(20,16,10,.32);border:1px solid rgba(232,206,154,.4);backdrop-filter:blur(2px);padding:12px 24px;border-radius:999px;font-size:clamp(12px,1.6vw,15px);letter-spacing:.28em;text-transform:uppercase;font-weight:600;color:var(--sand-2);text-shadow:0 1px 3px rgba(0,0,0,.5)}
 .date-pill .ln{width:28px;height:1px;background:rgba(232,206,154,.6)}
 .count{display:flex;gap:clamp(20px,6vw,52px);margin-top:48px}
@@ -306,23 +310,23 @@ export const Y2K_HTML = `
     <a href="#celebration">Celebration</a>
     <a href="#destination">Destination</a>
     <a href="#travel">Travel</a>
-    <a class="pill" href="#book">Book Bags</a>
+    <a href="/e/y2k/my">My Bags</a>
+    <a class="pill" href="#book">Book Now</a>
   </div>
-  <button type="button" class="hamburger" id="navOpen" aria-label="Open menu">
-    <span></span><span></span><span></span>
-  </button>
+  <button type="button" class="hamburger" id="navOpen" aria-label="Open menu">Menu</button>
 </nav>
 
 <div class="navdrawer-backdrop" id="navBackdrop"></div>
 <aside class="navdrawer" id="navDrawer">
   <div class="head">
     <span>Yashna &amp; Yash</span>
-    <button type="button" class="close" id="navClose" aria-label="Close menu">&times;</button>
+    <button type="button" class="close" id="navClose" aria-label="Close menu">Close</button>
   </div>
   <nav>
     <a href="#celebration" data-nav-link>The Celebration</a>
     <a href="#destination" data-nav-link>The Destination</a>
     <a href="#travel" data-nav-link>Travel Light</a>
+    <a href="/e/y2k/my" data-nav-link>My Bags</a>
   </nav>
   <a href="#book" class="cta" data-nav-link>Book Luggage Pickup</a>
 </aside>
@@ -336,13 +340,17 @@ export const Y2K_HTML = `
   </svg>
   <div class="in">
     <div class="place">Taj Aravali · Udaipur</div>
-    <h1 class="names"><em>Yashna</em> <svg class="heart" viewBox="0 0 24 24" aria-label="and"><path d="M12 21.2s-8.2-5.1-10.4-10C-0.2 6.6 2.6 3.4 6.2 4c2 .3 3.2 1.7 3.8 3 .6-1.3 1.8-2.7 3.8-3 3.6-.6 6.4 2.6 4.6 7.2-2.2 4.9-10.4 10-10.4 10Z" fill="none" stroke="currentColor" stroke-width="1"/></svg> <em>Yash</em></h1>
+    <h1 class="names"><em>Yashna</em> <span class="heart">&amp;</span> <em>Yash</em></h1>
     <div class="date-pill"><span class="ln"></span>17 &amp; 18 December 2026<span class="ln"></span></div>
     <div class="count" aria-live="off">
       <div><b id="cd-d">--</b><span>Days</span></div>
       <div><b id="cd-h">--</b><span>Hours</span></div>
       <div><b id="cd-m">--</b><span>Minutes</span></div>
       <div><b id="cd-s">--</b><span>Seconds</span></div>
+    </div>
+    <div class="hero-cta">
+      <a class="btn hero-book" href="#book">Book now</a>
+      <a class="btn hero-mine" href="/e/y2k/my">My bags</a>
     </div>
   </div>
 </header>
@@ -426,7 +434,7 @@ export const Y2K_HTML = `
     <div class="head">
       <div class="eyebrow">04 — Reserve Your Pickup</div>
       <h2 class="big">Book your luggage pickup</h2>
-      <p class="lede">One request for your whole family. Pickups run 10–12 December 2026 from Mumbai.</p>
+      <p class="lede" id="bookLede">One request for your whole family. Pickups run 9–11 December 2026 from Mumbai. Bookings close 15 November 2026.</p>
     </div>
     <div class="desk">
       <div class="panel" id="panel"></div>
@@ -476,4 +484,5 @@ export const Y2K_HTML = `
 </footer>
 
 <div class="toast" id="toast" hidden role="status"></div>
+<a class="book-fab off" id="bookFab" href="#book">Book now</a>
 `;
