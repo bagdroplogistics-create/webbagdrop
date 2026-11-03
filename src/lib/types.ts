@@ -263,7 +263,19 @@ export interface BagdropEvent {
     celebration?: string; destination?: string;
   };
   page?: string;
+  /** last day guests can book, add bags or add a return trip (end of day IST); after it the team edits in the OS */
+  bookingCloses?: string;
+  /** the pickup dates guests may choose (YYYY-MM-DD) */
+  pickupDays?: string[];
+  /** the event company: its people sign in at /event with a WhatsApp code to their mobile.
+   *  `mobiles` mirrors people[].mobile (older events have only mobiles). */
+  team?: { company: string; mobiles: string[]; people?: { name: string; mobile: string }[] };
 }
+
+/** One message on a wedding booking: guest ↔ event company / Bagdrop. */
+export interface WeddingMessage { at: string; by: "guest" | "event" | "bagdrop"; name: string; text: string; tag?: string }
+/** A return bag taken in at the hotel (scanned and accepted). */
+export interface WeddingReturn { at: string; by: string; condition: "ok" | "damaged"; note?: string }
 
 /** The wedding desk's own record, carried on the booking under .wedding. */
 export interface WeddingDeskRecord {
@@ -272,6 +284,10 @@ export interface WeddingDeskRecord {
   bagStatus: Record<string, string>; // tag id -> Y2K stage label
   createdAt: string;
   updatedAt: string;
+  messages?: WeddingMessage[];
+  returns?: Record<string, WeddingReturn>;
+  /** tag id -> where the tag said the bag goes when it was printed (a change means reprint) */
+  printed?: Record<string, { at: string; deliver: string }>;
 }
 
 
