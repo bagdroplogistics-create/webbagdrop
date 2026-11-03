@@ -18,6 +18,7 @@ import { createEvent, patchEvent, watchEvents } from "@/lib/eventsApi";
 import { setInquiryStatus, watchInquiries } from "@/lib/crmApi";
 import type { Booking, EventSector, Inquiry, WeddingEvent } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { withBase } from "@/lib/basePath";
 
 const TYPES = [
   { v: "WED", t: "Wedding" }, { v: "MIC", t: "MICE / corporate" }, { v: "PIL", t: "Pilgrimage" },
@@ -240,7 +241,7 @@ function EventDetail({
           <p className="text-xs text-muted">{event.venue}, {event.venueCity} · {event.dates.in} → {event.dates.out}</p>
         </div>
         <div className="flex gap-2">
-          <a href={`/weddings?code=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">
+          <a href={withBase(`/weddings?code=${encodeURIComponent(event.id)}`)} target="_blank" rel="noreferrer">
             <Button size="sm" variant="outline">View guest page ↗</Button>
           </a>
           <Button size="sm" variant="outline" onClick={() => void toggleStatus()}>{event.status === "open" ? "Close event" : "Reopen"}</Button>
