@@ -19,7 +19,7 @@ import { MILESTONES, opsOf, type MilestoneKey } from "./opsModel";
 import { inspect, DEFAULT_DEPARTMENTS, type DeptContact } from "./inspector";
 import { COMPANY } from "./company";
 import type { Booking, CrmActivity, Inquiry } from "./types";
-import { isPaid } from "./payState";
+import { isHostBilled, isPaid } from "./payState";
 import { loadAgents } from "./partners";
 import { confirmLinkPayment, ensurePaymentLink } from "./paymentLinks";
 import { cancelPaymentLink, gatewayLinkOf, razorpayConfigured } from "./razorpay";
@@ -158,6 +158,15 @@ export const TEMPLATES: Record<string, T> = {
   wedding_guest_message: {
     wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
     subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
+  },
+  /* hosted wedding family: confirmed by the team, nothing to pay */
+  wedding_confirmed: {
+    wa: (d) => `Hi ${d.name}, your bags for ${d.event} are CONFIRMED by Bagdrop (booking ${d.ref}, ${d.lane}). The hosts are covering this, so there is nothing to pay. Pickup: ${d.date}${d.slot ? `, ${d.slot}` : ""}. We will message you before the captain arrives.`,
+    subject: (d) => `Bags confirmed · ${d.ref}`,
+  },
+  move_pass: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop Move Pass for ${d.ref} (${d.lane}) is ready — pickup ${d.date}${d.slot ? `, ${d.slot}` : ""}. It's your boarding pass for your bags: show it at pickup and at delivery. ${d.pass}`,
+    subject: (d) => `Your Move Pass · ${d.ref} · ${d.lane}`,
   },
 };
 
@@ -387,6 +396,14 @@ async function eventPass(stats: SweepStats) {
         `💰 Payment verified · ${b.id} · ${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway} · ${b.from} → ${b.to}${b.identity?.ok ? "" : " · Aadhaar pending (pickup locked)"}`,
         `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`,
         `ops:paid:${b.id}`);
+    }
+    /* hosted wedding family confirmed (from Shipments "Confirm booking" or an approval) → one confirmation */
+    if (isHostBilled(b) && ["accepted", "assigned"].includes(b.status)) {
+      stats.paidQueued += await notify("wedding_confirmed", to, { ...d, event: b.eventName || "the wedding" }, `wedconf:${b.id}`);
+    }
+    /* the Move Pass goes out once the move is confirmed (approved + paid / billed) */
+    if (d.pass && !opsOf(b).milestones?.pod && ["accepted", "assigned", "picked_up", "in_transit"].includes(b.status)) {
+      stats.milestoneQueued += await notify("move_pass", to, { ...d, slot: b.slot || "" }, `pass:${b.id}`);
     }
     /* paid but not yet Aadhaar-verified → one verification ask (pickup is
      * blocked server-side until identity.ok, so this closes the loop) */
