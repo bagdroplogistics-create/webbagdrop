@@ -14,12 +14,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { useOnChange } from "@/lib/stateSync";
-import { inr } from "@/lib/pricing";
+import { CITIES, inr } from "@/lib/pricing";
 import { adminApplyPatch, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
 import { isPaid } from "@/lib/payState";
+import { deskLock } from "@/lib/deskRules";
+import type { InquiryChanges } from "@/lib/inquiryEdit";
+import { SERVICES as ALL_SERVICES } from "@/lib/services";
 import type { Booking, BookingStatus } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
-import { Badge, Button, Card, Field, Input } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 
 const TONE: Record<BookingStatus, "ok" | "warn" | "bad" | "info" | "muted"> = {
   quoted: "info", identified: "info", submitted: "warn", revised: "warn",
@@ -137,6 +140,11 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const PAGE_SIZE = 10;
   const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
   const [form, setForm] = useState<{ kind: "approve" | "revise" | "hold" | "info" | "reject" | "captain" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState<InquiryChanges | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
+  const [editPriceWarn, setEditPriceWarn] = useState<string | null>(null);
 
   const [prodBusy, setProdBusy] = useState(false);
   const [prodErr, setProdErr] = useState<string | null>(null);
@@ -174,7 +182,10 @@ export default function Inbox({ search = "" }: { search?: string }) {
     setProdBusy(false);
   }
 
-  useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => setForm({ kind: null, captain: "", amount: "", reason: "" }));
+  useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => {
+    setForm({ kind: null, captain: "", amount: "", reason: "" });
+    setEditing(false); setEditDraft(null); setEditErr(null); setEditPriceWarn(null);
+  });
 
   const q = search.trim().toLowerCase();
   const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
@@ -221,6 +232,38 @@ export default function Inbox({ search = "" }: { search?: string }) {
       refreshBookings();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     setBusy(false);
+  }
+
+  /** Quote-desk "save changes only" — corrects details without re-pricing or
+   *  messaging the customer. If the edit would move the price, the server
+   *  refuses with PRICE_WOULD_CHANGE; staff use Approve/Revise price instead,
+   *  which carries the same changes to the customer. */
+  function startEdit(b: Booking) {
+    setEditing(true); setEditErr(null); setEditPriceWarn(null);
+    setEditDraft({
+      title: b.traveller.title ?? "", name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email ?? "", res: b.traveller.res,
+      uc: b.uc || undefined, from: b.from, to: b.to, pickAddr: b.pickAddr, dropAddr: b.dropAddr,
+      date: b.date, pickupDate: b.pickupDate ?? b.date, deliveryDate: b.deliveryDate ?? "", flightTime: b.flightTime ?? "", ref: b.ref, slot: b.slot,
+      bags: b.bags, oversize: b.oversize, note: b.note,
+    });
+  }
+  async function saveEdit(b: Booking) {
+    if (!editDraft) return;
+    setEditBusy(true); setEditErr(null); setEditPriceWarn(null);
+    try {
+      const r = await fetch("/api/admin/inquiry", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: b.id, changes: editDraft, rev: b.rev ?? 0 }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (j.error === "PRICE_WOULD_CHANGE") { setEditPriceWarn(j.detail as string); return; }
+        throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
+      }
+      setEditing(false); setEditDraft(null);
+      refreshBookings();
+    } catch (e) { setEditErr(e instanceof Error ? e.message : String(e)); }
+    setEditBusy(false);
   }
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
@@ -394,20 +437,32 @@ export default function Inbox({ search = "" }: { search?: string }) {
           <>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-base font-extrabold">{booking.id}</h3>
-              <Badge tone={TONE[booking.status]}>{LABEL[booking.status]}</Badge>
+              <span className="flex items-center gap-2">
+                <Badge tone={TONE[booking.status]}>{LABEL[booking.status]}</Badge>
+                {!editing && !deskLock(booking) && <Button size="sm" variant="ghost" onClick={() => startEdit(booking)}>Edit</Button>}
+              </span>
             </div>
-            {([
-              ["Traveller", `${booking.traveller.name} · ${booking.traveller.mobile}`],
-              ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
-              ["Pieces", `${booking.bags} bags${booking.oversize ? ` + ${booking.oversize} oversize` : ""}`],
-              ["Quote", booking.quote.breakdown.ror ? "Rate on request" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
-              ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "✓ verified" : booking.pay.status === "submitted" ? "⏳ proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
-              ["Identity", booking.identity?.ok ? `✓ verified · ${booking.identity.method}` : "⚠ Aadhaar pending — pickup locked"],
-            ] as const).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
-                <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
-              </div>
-            ))}
+            {editing && deskLock(booking) && <p className="mb-3 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">{deskLock(booking)}</p>}
+            {editing && editDraft && !deskLock(booking) ? (
+              <EditInquiryForm draft={editDraft} setDraft={setEditDraft} busy={editBusy} err={editErr} priceWarn={editPriceWarn}
+                onCancel={() => { setEditing(false); setEditDraft(null); setEditErr(null); setEditPriceWarn(null); }}
+                onSave={() => void saveEdit(booking)} />
+            ) : (
+              <>
+                {([
+                  ["Traveller", `${booking.traveller.name} · ${booking.traveller.mobile}`],
+                  ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
+                  ["Pieces", `${booking.bags} bags${booking.oversize ? ` + ${booking.oversize} oversize` : ""}`],
+                  ["Quote", booking.quote.breakdown.ror ? "Rate on request" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
+                  ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "✓ verified" : booking.pay.status === "submitted" ? "⏳ proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
+                  ["Identity", booking.identity?.ok ? `✓ verified · ${booking.identity.method}` : "⚠ Aadhaar pending — pickup locked"],
+                ] as const).map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+                    <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
+                  </div>
+                ))}
+              </>
+            )}
             {!booking.identity?.ok && (
               <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">
                 Client verifies at <button className="font-mono font-semibold underline" onClick={() => void navigator.clipboard?.writeText(`${location.origin}/verify/${booking.id}`)}>/verify/{booking.id}</button> (click to copy) — the link also went out on WhatsApp + email automatically.
@@ -429,6 +484,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </div>
             )}
 
+            {!editing && (
             <div className="mt-4 flex flex-wrap gap-2">
               {canDecide(booking) && (
                 <>
@@ -447,8 +503,9 @@ export default function Inbox({ search = "" }: { search?: string }) {
               {booking.status === "picked_up" && <Button size="sm" onClick={() => void act(booking, { status: "in_transit" }, `On the line haul to ${booking.to}`)}>Mark in transit</Button>}
               {booking.status === "in_transit" && <Button size="sm" onClick={() => void act(booking, { status: "delivered" }, "Delivered against OTP · invoice sent")}>Mark delivered</Button>}
             </div>
+            )}
 
-            {form.kind === "captain" && (
+            {!editing && form.kind === "captain" && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label={booking.status === "accepted" ? "Captain" : "Captain (optional)"}><Input value={form.captain} onChange={(e) => setForm((f) => ({ ...f, captain: e.target.value }))} placeholder="Ravi K" /></Field>
                 <Button size="sm" disabled={booking.status === "accepted" && !form.captain.trim()} onClick={() => void act(booking,
@@ -456,7 +513,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
                   form.captain.trim() ? `Confirmed by ops · captain ${form.captain.trim()} assigned` : "Confirmed by ops")}>{booking.status === "accepted" ? "Assign" : "Confirm"}</Button>
               </div>
             )}
-            {(form.kind === "approve" || form.kind === "revise") && (
+            {!editing && (form.kind === "approve" || form.kind === "revise") && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label={form.kind === "approve"
                   ? (booking.quote.breakdown.ror ? "Amount to approve at (₹, incl. 5% GST) — required for a new sector" : "Amount (₹, incl. 5% GST) — change only to override the chart price")
@@ -471,7 +528,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
                 </Button>
               </div>
             )}
-            {(form.kind === "hold" || form.kind === "info" || form.kind === "reject") && (
+            {!editing && (form.kind === "hold" || form.kind === "info" || form.kind === "reject") && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label={form.kind === "info" ? "Question for the client" : "Reason shown to the client"}>
                   <Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
@@ -496,6 +553,71 @@ export default function Inbox({ search = "" }: { search?: string }) {
           </>
         )}
       </Card>
+    </div>
+  );
+}
+
+/* ================= quote-desk inquiry edit ================= */
+/** Correct an inquiry's details without re-pricing or messaging the customer
+ *  (src/lib/inquiryEdit.ts, PATCH /api/admin/inquiry). A route or bag change
+ *  that would move the price is refused by the server — staff use Approve /
+ *  Revise price instead, which carries the same edit to the customer. */
+function EditInquiryForm({ draft, setDraft, busy, err, priceWarn, onCancel, onSave }: {
+  draft: InquiryChanges; setDraft: (d: InquiryChanges) => void;
+  busy: boolean; err: string | null; priceWarn: string | null;
+  onCancel: () => void; onSave: () => void;
+}) {
+  const set = <K extends keyof InquiryChanges>(k: K, v: InquiryChanges[K]) => setDraft({ ...draft, [k]: v });
+  return (
+    <div className="mb-3 rounded-xl bg-paper p-3">
+      <div className="grid gap-x-3 sm:grid-cols-2">
+        <Field label="Title"><Input value={draft.title ?? ""} onChange={(e) => set("title", e.target.value)} placeholder="Mr." /></Field>
+        <Field label="Name"><Input value={draft.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
+        <Field label="Mobile"><Input value={draft.mobile ?? ""} onChange={(e) => set("mobile", e.target.value)} /></Field>
+        <Field label="Email"><Input value={draft.email ?? ""} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
+        <Field label="Traveller is">
+          <Select value={draft.res ?? "in"} onChange={(e) => set("res", e.target.value as InquiryChanges["res"])}>
+            <option value="in">Indian resident</option>
+            <option value="intl">International</option>
+          </Select>
+        </Field>
+        <Field label="Service">
+          <Select value={draft.uc ?? ""} onChange={(e) => set("uc", e.target.value)}>
+            {ALL_SERVICES.map((s) => <option key={s.uc} value={s.uc}>{s.title}</option>)}
+          </Select>
+        </Field>
+        <Field label="Pickup city">
+          <Select value={draft.from ?? ""} onChange={(e) => set("from", e.target.value)}>
+            {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Delivery city">
+          <Select value={draft.to ?? ""} onChange={(e) => set("to", e.target.value)}>
+            {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Pickup address"><Input value={draft.pickAddr ?? ""} onChange={(e) => set("pickAddr", e.target.value)} /></Field>
+        <Field label="Delivery address"><Input value={draft.dropAddr ?? ""} onChange={(e) => set("dropAddr", e.target.value)} /></Field>
+        <Field label="Travel date"><Input type="date" value={draft.date ?? ""} onChange={(e) => set("date", e.target.value)} /></Field>
+        <Field label="Pickup date"><Input type="date" value={draft.pickupDate ?? ""} onChange={(e) => set("pickupDate", e.target.value)} /></Field>
+        <Field label="Delivery date"><Input type="date" value={draft.deliveryDate ?? ""} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
+        <Field label="Flight time"><Input type="time" value={draft.flightTime ?? ""} onChange={(e) => set("flightTime", e.target.value)} /></Field>
+        <Field label="Flight / reference"><Input value={draft.ref ?? ""} onChange={(e) => set("ref", e.target.value)} /></Field>
+        <Field label="Pickup time / slot"><Input value={draft.slot ?? ""} onChange={(e) => set("slot", e.target.value)} /></Field>
+        <Field label="Bags"><Input type="number" min={0} value={draft.bags ?? 0} onChange={(e) => set("bags", Number(e.target.value))} /></Field>
+        <Field label="Oversize"><Input type="number" min={0} value={draft.oversize ?? 0} onChange={(e) => set("oversize", Number(e.target.value))} /></Field>
+      </div>
+      <Field label="Customer note"><Input value={draft.note ?? ""} onChange={(e) => set("note", e.target.value)} /></Field>
+      {priceWarn && (
+        <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
+          {priceWarn}
+        </p>
+      )}
+      {err && <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" disabled={busy} onClick={onSave}>{busy ? "Saving…" : "Save changes"}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>Cancel</Button>
+      </div>
     </div>
   );
 }
