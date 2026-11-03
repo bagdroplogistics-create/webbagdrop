@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { canView, MODULES, type Grants } from "@/lib/access";
+import { withBase } from "@/lib/basePath";
 import { MeProvider, PasswordForm, useSignOut, type Me } from "./session";
 
 /* ---------- notifications bell — every platform event, live ---------- */
@@ -300,7 +301,7 @@ function Shell({
                 className="min-w-[220px] rounded-lg border px-3 py-2 text-[13px]"
                 style={{ borderColor: "var(--a-line)", background: "var(--a-surface)", color: "var(--a-fg)" }}
               />
-              <a href={current.key === "wed" ? "/weddings?code=Y2K-WED" : "/"} target="_blank" rel="noreferrer" className="hidden rounded-lg border px-3 py-2 text-[13px] sm:inline" style={{ borderColor: "var(--a-line)", background: "var(--a-surface)" }}>
+              <a href={withBase(current.key === "wed" ? "/weddings?code=Y2K-WED" : "/")} target="_blank" rel="noreferrer" className="hidden rounded-lg border px-3 py-2 text-[13px] sm:inline" style={{ borderColor: "var(--a-line)", background: "var(--a-surface)" }}>
                 {current.key === "wed" ? "View wedding site" : "View booking site"}
               </a>
               <NotificationsBell />
