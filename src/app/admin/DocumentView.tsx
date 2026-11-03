@@ -6,6 +6,7 @@
  *  build's print-window HTML verbatim, but the same information: company
  *  letterhead, customer/consignment details, GST breakup, doc-type terms. */
 import { useNow } from "@/lib/useNow";
+import { withBase } from "@/lib/basePath";
 import { gstSplit, SAC } from "@/lib/docs";
 import { COMPANY, inrWords } from "@/lib/company";
 import { inr } from "@/lib/pricing";
@@ -59,7 +60,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
         <div className="flex items-center justify-between bg-[#EA580C] px-5 py-2.5 text-white">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/logo-icon.png" alt="" className="h-9 w-auto" />
+            <img src={withBase("/images/logo-icon.png")} alt="" className="h-9 w-auto" />
             <div className="font-display text-xl font-extrabold leading-tight">BAGDROP<span className="block text-[8px] font-semibold tracking-[0.2em]">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</span></div>
           </div>
           <div className="text-center">
@@ -229,7 +230,7 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
         <div className="flex items-center justify-between border-b border-line bg-paper/50 px-6 py-4">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/logo-icon.png" alt="" className="h-8 w-auto" />
+            <img src={withBase("/images/logo-icon.png")} alt="" className="h-8 w-auto" />
             <span className="font-display text-base font-extrabold tracking-tight text-ink">BAGDROP</span>
           </div>
           <div className="text-right text-[11px] text-stone-500">
@@ -309,7 +310,7 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
             <div className="flex items-start justify-between px-6 pt-5">
               <div className="flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/images/logo-icon.png" alt="" className="h-14 w-auto" />
+                <img src={withBase("/images/logo-icon.png")} alt="" className="h-14 w-auto" />
               </div>
               <div className="text-right">
                 <b className="font-display text-[15px] font-extrabold text-ink">{COMPANY.name}</b>

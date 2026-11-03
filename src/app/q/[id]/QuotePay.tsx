@@ -4,6 +4,7 @@
  *  has approved the booking; proof upload happens in the client dashboard,
  *  where the client is signed in. Nothing here writes to the database. */
 import { useEffect, useState } from "react";
+import { withBase } from "@/lib/basePath";
 import { inr } from "@/lib/pricing";
 import { Badge, Button, Card } from "@/components/ui";
 import UpiPay, { type PayTo } from "@/components/UpiPay";
@@ -36,7 +37,7 @@ export default function QuotePay({ id }: { id: string }) {
       <Card className="mx-auto max-w-xl text-center">
         <h2 className="font-display text-xl font-extrabold">That link isn&apos;t valid.</h2>
         <p className="mt-2 text-sm text-muted">Ask the team to re-share it, or open your dashboard.</p>
-        <a href="/account" className="mt-3 inline-block"><Button>Open my dashboard</Button></a>
+        <a href={withBase("/account")} className="mt-3 inline-block"><Button>Open my dashboard</Button></a>
       </Card>
     );
   }
@@ -67,7 +68,7 @@ export default function QuotePay({ id }: { id: string }) {
       ) : b.canPay ? (
         <>
           <UpiPay amount={b.total} reference={b.id} payTo={payTo} />
-          <a href="/account" className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard →</Button></a>
+          <a href={withBase("/account")} className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard →</Button></a>
         </>
       ) : b.pay?.status === "submitted" ? (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><b>Payment proof received</b> — finance is verifying it.</p>

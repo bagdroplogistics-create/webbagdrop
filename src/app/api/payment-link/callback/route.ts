@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withBase } from "@/lib/basePath";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { fetchPaymentLink, razorpayConfigured, verifyPaymentLinkSignature } from "@/lib/razorpay";
 import { confirmLinkPayment } from "@/lib/paymentLinks";
@@ -14,7 +15,7 @@ import { announcePayment } from "@/lib/automation";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (k: string) => url.searchParams.get(k) ?? "";
-  const back = (state: string, id?: string) => NextResponse.redirect(new URL(`/account?pay=${state}${id ? `&booking=${encodeURIComponent(id)}` : ""}`, url.origin), 303);
+  const back = (state: string, id?: string) => NextResponse.redirect(new URL(withBase(`/account?pay=${state}${id ? `&booking=${encodeURIComponent(id)}` : ""}`), url.origin), 303);
 
   const linkId = q("razorpay_payment_link_id"), paymentId = q("razorpay_payment_id");
   if (!razorpayConfigured() || !linkId || !paymentId) return back("error");

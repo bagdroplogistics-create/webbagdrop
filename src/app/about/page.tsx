@@ -7,6 +7,7 @@ import { Icon } from "@/components/landing/Icon";
 import { Section, SectionHeading, GRID, GRID_CARD } from "@/components/landing/SectionHeading";
 import { STATS, SOLUTIONS, PROCESS_STEPS } from "@/components/landing/data";
 import { COMPANY } from "@/lib/company";
+import { withBase } from "@/lib/basePath";
 
 export const metadata: Metadata = {
   title: "About Bagdrop · Door-to-door baggage across India",
@@ -113,7 +114,7 @@ export default function About() {
           ))}
         </div>
         <a
-          href="/new-booking"
+          href={withBase("/new-booking")}
           className="mt-8 inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
         >
           Book your pickup <Icon name="arrow" size={15} />
