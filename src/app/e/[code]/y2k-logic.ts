@@ -24,6 +24,7 @@ import { saveWeddingBooking, watchBookingDoc } from "@/lib/eventDb";
 import type { Booking } from "@/lib/types";
 import { getEvent } from "@/lib/eventDb";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
+import { withBase } from "@/lib/basePath";
 
 export function initY2k(): () => void {
   const ac = new AbortController();
@@ -358,14 +359,14 @@ export function initY2k(): () => void {
   let closed = false, closesOn = "";
   function rClosed() {
     return `<div class="conf-head"><div><div class="eyebrow">Bookings closed</div><h3 class="ph" style="margin-top:6px">Luggage bookings for #Y2K closed${closesOn ? ` on ${esc(closesOn)}` : ""}.</h3></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn sm" href="/e/y2k/my">My bags</a></div></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn sm" href="${withBase("/e/y2k/my")}">My bags</a></div></div>
   <div class="callout">No new bookings, extra bags or return trips can be added now. Already booked? See your bags and tags in My bags. For anything else, message Bagdrop on WhatsApp.</div>`;
   }
   function rDone() {
     const st = booking.state, code = booking.bookingId;
     const wa = waText();
     return `<div class="conf-head"><div><div class="eyebrow">${teamState() === "confirmed" ? "Booking confirmed" : teamState() === "closed" ? "Booking closed" : "Request received"}</div><h3 class="ph" style="margin-top:6px">You're all set, ${esc((st.family.lead || "").split(" ")[0])}.</h3><div class="bid">${esc(code)}</div></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap">${closed ? "" : `<button class="btn ghost sm" type="button" data-act="newBooking">New booking</button>`}<a class="btn sm" href="#track">Track bags</a><a class="btn ghost sm" href="/e/y2k/my">My bags</a></div></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">${closed ? "" : `<button class="btn ghost sm" type="button" data-act="newBooking">New booking</button>`}<a class="btn sm" href="#track">Track bags</a><a class="btn ghost sm" href="${withBase("/e/y2k/my")}">My bags</a></div></div>
   ${teamNote()}
   ${booking.saved === false ? `<div class="callout warn" style="margin-bottom:16px">Saved in this browser only — the back end could not be reached. The booking syncs to Bagdrop ops when the connection returns.</div>` : ""}
   <div class="lab" style="margin-bottom:10px">Your ${st.bags.length} bag tag${st.bags.length > 1 ? "s" : ""} <em>· our agent brings these printed to your door</em></div>
@@ -403,7 +404,7 @@ export function initY2k(): () => void {
   function renderOps() {
     const sec = $("#ops")!; if (!isEditor) { sec.hidden = true; return; } sec.hidden = false;
     if (opsLocked) {
-      $("#opsNote")!.innerHTML = `Sign in to the <a href="/admin"><b>BAGDROP OS</b></a> in this browser first, then reload this page — the manifest reads through the admin session.`;
+      $("#opsNote")!.innerHTML = `Sign in to the <a href="${withBase("/admin")}"><b>BAGDROP OS</b></a> in this browser first, then reload this page — the manifest reads through the admin session.`;
       $("#opsKpis")!.innerHTML = "";
       $("#opsList")!.innerHTML = "";
       return;
