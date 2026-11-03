@@ -24,6 +24,15 @@ import type { Booking, BookingStatus } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 
+/** Legacy-lead fields this screen lets staff correct — the same subset the
+ *  read-only detail panel already shows, mapped server-side onto
+ *  bagdrop-web's own `leads` columns (see production-leads/[id]/route.ts). */
+interface LeadChanges {
+  name?: string; phone?: string; email?: string; fromCity?: string; toCity?: string;
+  serviceInterest?: string; travelDate?: string; pickupDate?: string; deliveryDate?: string;
+  bagsCount?: number; flightNumber?: string; notes?: string; assignedTo?: string;
+}
+
 const TONE: Record<BookingStatus, "ok" | "warn" | "bad" | "info" | "muted"> = {
   quoted: "info", identified: "info", submitted: "warn", revised: "warn",
   accepted: "ok", assigned: "ok", picked_up: "ok", in_transit: "ok",
@@ -57,6 +66,20 @@ const PROD_BOOKING_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"
   confirmed: "ok", pickup_scheduled: "ok", picked_up: "ok", in_transit: "ok",
   out_for_delivery: "ok", delivered: "ok", completed: "ok", rejected: "bad", cancelled: "bad",
 };
+/** Statuses (of the lead's linked production booking) still early enough
+ *  that staff decide/progress it from here — shared by the decision
+ *  buttons below and the details-edit lock. */
+const EARLY_BOOKING = ["inquiry", "document_collection", "pending", "review", "accepted", "quote_created", "quote_sent", "payment_pending", "payment_approved", "confirmed", "pickup_scheduled"];
+/** Why a legacy bagdrop.co lead's details can't be edited from here, or
+ *  null if they can — same spirit as deskRules.ts's deskLock() for native
+ *  bookings: locked once it's lost, or once its linked booking has moved
+ *  past the early, still-deciding stages. */
+function legacyLeadLock(l: ProductionLead): string | null {
+  if (l.status === "lost") return "This lead was marked lost — it can no longer be changed here.";
+  const bStatus = l.booking?.status;
+  if (bStatus && !EARLY_BOOKING.includes(bStatus)) return `Its booking is ${bStatus.replace(/_/g, " ")} — it can no longer be changed here.`;
+  return null;
+}
 
 interface Row {
   key: string; source: "new" | "production";
@@ -146,6 +169,12 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const [editErr, setEditErr] = useState<string | null>(null);
   const [editPriceWarn, setEditPriceWarn] = useState<string | null>(null);
 
+  const [leadEditing, setLeadEditing] = useState(false);
+  const [leadDraft, setLeadDraft] = useState<LeadChanges | null>(null);
+  const [leadEditBusy, setLeadEditBusy] = useState(false);
+  const [leadEditErr, setLeadEditErr] = useState<string | null>(null);
+  const [leadPriceWarn, setLeadPriceWarn] = useState<string | null>(null);
+
   const [prodBusy, setProdBusy] = useState(false);
   const [prodErr, setProdErr] = useState<string | null>(null);
   const [prodLoaded, setProdLoaded] = useState(false);
@@ -185,6 +214,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
   useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => {
     setForm({ kind: null, captain: "", amount: "", reason: "" });
     setEditing(false); setEditDraft(null); setEditErr(null); setEditPriceWarn(null);
+    setLeadEditing(false); setLeadDraft(null); setLeadEditErr(null); setLeadPriceWarn(null);
   });
 
   const q = search.trim().toLowerCase();
@@ -264,6 +294,38 @@ export default function Inbox({ search = "" }: { search?: string }) {
       refreshBookings();
     } catch (e) { setEditErr(e instanceof Error ? e.message : String(e)); }
     setEditBusy(false);
+  }
+
+  /** Same "correct it without re-pricing or messaging" pattern, for a lead
+   *  synced in from bagdrop.co's own database — PATCHes the real row there
+   *  via /api/admin/production-leads/[id] (src/app/api/admin/production-leads/
+   *  [id]/route.ts), which refuses a route/bag-count change that would move
+   *  an already-quoted price (PRICE_WOULD_CHANGE), same as the native edit. */
+  function startLeadEdit(l: ProductionLead) {
+    setLeadEditing(true); setLeadEditErr(null); setLeadPriceWarn(null);
+    setLeadDraft({
+      name: l.name, phone: l.phone, email: l.email ?? "", fromCity: l.fromCity ?? "", toCity: l.toCity ?? "",
+      serviceInterest: l.serviceInterest ?? "", travelDate: l.travelDate ?? "", pickupDate: l.pickupDate ?? "",
+      deliveryDate: l.deliveryDate ?? "", bagsCount: l.bagsCount ?? 0, flightNumber: l.flightNumber ?? "",
+      notes: l.notes ?? "", assignedTo: l.assignedTo ?? "",
+    });
+  }
+  async function saveLeadEdit(l: ProductionLead) {
+    if (!leadDraft) return;
+    setLeadEditBusy(true); setLeadEditErr(null); setLeadPriceWarn(null);
+    try {
+      const r = await fetch(`/api/admin/production-leads/${l.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: "lead", fields: leadDraft }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (j.error === "PRICE_WOULD_CHANGE") { setLeadPriceWarn(j.detail as string); return; }
+        throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
+      }
+      setLeadEditing(false); setLeadDraft(null);
+      await refetchLeads();
+    } catch (e) { setLeadEditErr(e instanceof Error ? e.message : String(e)); }
+    setLeadEditBusy(false);
   }
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
@@ -354,33 +416,44 @@ export default function Inbox({ search = "" }: { search?: string }) {
           <>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-base font-extrabold">{lead.leadNumber ?? lead.id.slice(0, 8)}</h3>
-              <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
+              <span className="flex items-center gap-2">
+                <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
+                {!leadEditing && !legacyLeadLock(lead) && <Button size="sm" variant="ghost" onClick={() => startLeadEdit(lead)}>Edit</Button>}
+              </span>
             </div>
             <p className="mb-3 rounded-lg px-2.5 py-2 text-xs" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>
               From bagdrop.co/admin&apos;s own database — actions below write back there for real (customer emails, invoicing included).
             </p>
             {prodErr && <p className="mb-3 rounded-lg bg-red-50 px-2.5 py-2 text-xs text-red-900">{prodErr}</p>}
-            {([
-              ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
-              ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
-              ["Service", lead.serviceInterest ?? "—"],
-              ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
-              ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
-              ["Quote", lead.booking?.totalAmount ? inr(lead.booking.totalAmount) : "—"],
-              ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
-              ["Source", lead.source ?? "—"],
-              ["Assigned to", lead.assignedTo ?? "unassigned"],
-            ] as const).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
-                <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
-              </div>
-            ))}
-            {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
+            {leadEditing && leadDraft ? (
+              <EditLeadForm draft={leadDraft} setDraft={setLeadDraft} busy={leadEditBusy} err={leadEditErr} priceWarn={leadPriceWarn}
+                onCancel={() => { setLeadEditing(false); setLeadDraft(null); setLeadEditErr(null); setLeadPriceWarn(null); }}
+                onSave={() => void saveLeadEdit(lead)} />
+            ) : (
+              <>
+                {([
+                  ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
+                  ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
+                  ["Service", lead.serviceInterest ?? "—"],
+                  ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
+                  ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
+                  ["Quote", lead.booking?.totalAmount ? inr(lead.booking.totalAmount) : "—"],
+                  ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
+                  ["Source", lead.source ?? "—"],
+                  ["Assigned to", lead.assignedTo ?? "unassigned"],
+                ] as const).map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+                    <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
+                  </div>
+                ))}
+                {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
+              </>
+            )}
 
+            {!leadEditing && (
             <div className="mt-4 flex flex-wrap gap-2">
               {(() => {
                 const PRE_CONVERT = ["new", "contacted", "qualified"];
-                const EARLY_BOOKING = ["inquiry", "document_collection", "pending", "review", "accepted", "quote_created", "quote_sent", "payment_pending", "payment_approved", "confirmed", "pickup_scheduled"];
                 const bStatus = lead.booking?.status ?? null;
                 if (PRE_CONVERT.includes(lead.status) && (!bStatus || EARLY_BOOKING.includes(bStatus))) {
                   return (
@@ -420,8 +493,9 @@ export default function Inbox({ search = "" }: { search?: string }) {
                 return null;
               })()}
             </div>
+            )}
 
-            {form.kind === "revise" && lead.booking && (
+            {!leadEditing && form.kind === "revise" && lead.booking && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label="Revised total (₹)"><Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
                 <Button size="sm" disabled={prodBusy || !form.amount}
@@ -608,6 +682,49 @@ function EditInquiryForm({ draft, setDraft, busy, err, priceWarn, onCancel, onSa
         <Field label="Oversize"><Input type="number" min={0} value={draft.oversize ?? 0} onChange={(e) => set("oversize", Number(e.target.value))} /></Field>
       </div>
       <Field label="Customer note"><Input value={draft.note ?? ""} onChange={(e) => set("note", e.target.value)} /></Field>
+      {priceWarn && (
+        <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
+          {priceWarn}
+        </p>
+      )}
+      {err && <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" disabled={busy} onClick={onSave}>{busy ? "Saving…" : "Save changes"}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+/* ================= legacy bagdrop.co lead edit ================= */
+/** Same "correct it, don't silently re-price or message the customer"
+ *  pattern as EditInquiryForm above, for a lead synced in from bagdrop.co's
+ *  own database (PATCH /api/admin/production-leads/[id]). A route or
+ *  bag-count change on an already-quoted lead is refused by the server —
+ *  staff use "Revise price" instead, which does message the customer. */
+function EditLeadForm({ draft, setDraft, busy, err, priceWarn, onCancel, onSave }: {
+  draft: LeadChanges; setDraft: (d: LeadChanges) => void;
+  busy: boolean; err: string | null; priceWarn: string | null;
+  onCancel: () => void; onSave: () => void;
+}) {
+  const set = <K extends keyof LeadChanges>(k: K, v: LeadChanges[K]) => setDraft({ ...draft, [k]: v });
+  return (
+    <div className="mb-3 rounded-xl bg-paper p-3">
+      <div className="grid gap-x-3 sm:grid-cols-2">
+        <Field label="Name"><Input value={draft.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
+        <Field label="Phone"><Input value={draft.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></Field>
+        <Field label="Email"><Input value={draft.email ?? ""} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
+        <Field label="Service"><Input value={draft.serviceInterest ?? ""} onChange={(e) => set("serviceInterest", e.target.value)} /></Field>
+        <Field label="From city"><Input value={draft.fromCity ?? ""} onChange={(e) => set("fromCity", e.target.value)} /></Field>
+        <Field label="To city"><Input value={draft.toCity ?? ""} onChange={(e) => set("toCity", e.target.value)} /></Field>
+        <Field label="Travel date"><Input type="date" value={draft.travelDate ?? ""} onChange={(e) => set("travelDate", e.target.value)} /></Field>
+        <Field label="Pickup date"><Input type="date" value={draft.pickupDate ?? ""} onChange={(e) => set("pickupDate", e.target.value)} /></Field>
+        <Field label="Delivery date"><Input type="date" value={draft.deliveryDate ?? ""} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
+        <Field label="Bags"><Input type="number" min={0} value={draft.bagsCount ?? 0} onChange={(e) => set("bagsCount", Number(e.target.value))} /></Field>
+        <Field label="Flight / reference"><Input value={draft.flightNumber ?? ""} onChange={(e) => set("flightNumber", e.target.value)} /></Field>
+        <Field label="Assigned to"><Input value={draft.assignedTo ?? ""} onChange={(e) => set("assignedTo", e.target.value)} /></Field>
+      </div>
+      <Field label="Notes"><Input value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} /></Field>
       {priceWarn && (
         <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
           {priceWarn}
