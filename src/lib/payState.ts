@@ -7,6 +7,11 @@ import type { Booking } from "./types";
 
 export const isPaid = (b: Pick<Booking, "pay">): boolean => b.pay?.status === "captured";
 
+/** A wedding/event booking the hosts are covering — payer set, nothing for
+ *  the guest to pay. Distinct from isPaid: this is "never pays", not "has
+ *  paid yet". */
+export const isHostBilled = (b: Pick<Booking, "uc" | "payer">): boolean => b.uc === "wed" && !!b.payer;
+
 /** Verified money received on this booking (0 until finance verifies). */
 export const paidAmount = (b: Pick<Booking, "pay">): number => (isPaid(b) ? b.pay!.amount : 0);
 
