@@ -103,7 +103,7 @@ function Dashboard() {
 
           {fams.length === 0 && (
             <div className="mb-card mb-center">
-              <h2 className="mb-h2">No bookings on this mobile yet</h2>
+              <h2 className="mb-h2">No bookings on this account yet</h2>
               {open ? <>
                 <p className="mb-muted">Book your family&apos;s luggage pickup in two minutes.</p>
                 <a className="mb-btn" href={`${ev.desk}?new=1#book`}>Book now</a>
@@ -212,18 +212,23 @@ function Messages({ fam, event, onSent }: { fam: Fam; event: string; onSent: () 
 }
 
 function SignIn({ onIn }: { onIn: () => void }) {
-  const [mobile, setMobile] = useState("");
+  const [channel, setChannel] = useState<"mobile" | "email">("mobile");
+  const [contact, setContact] = useState("");
   const [otp, setOtp] = useState<{ to: string; exp: number; token: string; demo?: string } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  function switchChannel(next: "mobile" | "email") {
+    setChannel(next); setContact(""); setOtp(null); setCode(""); setErr("");
+  }
+
   async function send() {
     setBusy(true); setErr("");
-    const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", channel: "mobile", to: mobile }) });
+    const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", channel, to: contact }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok) setOtp({ to: j.to, exp: j.exp, token: j.token, demo: j.demo });
-    else setErr(j.detail ?? (j.error === "BAD_MOBILE" ? "Enter the 10-digit mobile you booked with." : j.error ?? "Couldn't send the code."));
+    else setErr(j.detail ?? (j.error === "BAD_MOBILE" ? "Enter the 10-digit mobile you booked with." : j.error === "BAD_EMAIL" ? "Enter the email you booked with." : j.error ?? "Couldn't send the code."));
     setBusy(false);
   }
   async function verify() {
@@ -235,22 +240,36 @@ function SignIn({ onIn }: { onIn: () => void }) {
     setBusy(false);
   }
 
+  const ready = channel === "mobile" ? contact.replace(/\D/g, "").length >= 10 : /\S+@\S+\.\S+/.test(contact);
+
   return (
     <div className="mb-card mb-signin">
       <h2 className="mb-h2">Sign in to see your bags</h2>
-      <p className="mb-muted">Use the mobile number your family booked with. We send a 6-digit code on WhatsApp.</p>
+      <p className="mb-muted">
+        Use the {channel === "mobile" ? "mobile number" : "email"} your family booked with. We send a 6-digit code on {channel === "mobile" ? "WhatsApp" : "email"}.
+      </p>
       {!otp ? (
-        <form className="mb-row" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <input className="mb-input" inputMode="numeric" autoComplete="tel" placeholder="10-digit mobile" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/[^\d+ ]/g, ""))} />
-          <button className="mb-btn" disabled={busy || mobile.replace(/\D/g, "").length < 10}>{busy ? "Sending…" : "Send code"}</button>
-        </form>
+        <>
+          <form className="mb-row" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+            {channel === "mobile"
+              ? <input className="mb-input" inputMode="numeric" autoComplete="tel" placeholder="10-digit mobile" value={contact} onChange={(e) => setContact(e.target.value.replace(/[^\d+ ]/g, ""))} />
+              : <input className="mb-input" type="email" autoComplete="email" placeholder="you@example.com" value={contact} onChange={(e) => setContact(e.target.value)} />}
+            <button className="mb-btn" disabled={busy || !ready}>{busy ? "Sending…" : "Send code"}</button>
+          </form>
+          <p className="mb-muted mb-small">
+            Not on WhatsApp right now?{" "}
+            <button type="button" className="mb-link" onClick={() => switchChannel(channel === "mobile" ? "email" : "mobile")}>
+              {channel === "mobile" ? "Sign in with email instead" : "Sign in with mobile instead"}
+            </button>
+          </p>
+        </>
       ) : (
         <form className="mb-row" onSubmit={(e) => { e.preventDefault(); void verify(); }}>
           <input className="mb-input mb-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
           <button className="mb-btn" disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Sign in"}</button>
         </form>
       )}
-      {otp && <p className="mb-muted mb-small">Code sent.{otp.demo ? <> Test code: <b>{otp.demo}</b></> : null} <button type="button" className="mb-link" onClick={() => { setOtp(null); setCode(""); }}>Change number</button></p>}
+      {otp && <p className="mb-muted mb-small">Code sent.{otp.demo ? <> Test code: <b>{otp.demo}</b></> : null} <button type="button" className="mb-link" onClick={() => { setOtp(null); setCode(""); }}>Change {channel === "mobile" ? "number" : "email"}</button></p>}
       {err && <p className="mb-errtext">{err}</p>}
     </div>
   );
