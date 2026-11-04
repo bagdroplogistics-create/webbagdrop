@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { isPaid } from "@/lib/payState";
 import { checkOtp, cleanEmail, cleanMobile, issueOtp } from "@/lib/otp";
-import { kickSweep, notify, opsNotify, sendEmail, sendWhatsApp } from "@/lib/automation";
+import { kickSweep, notify, opsNotify, sendEmail, sendWhatsAppOtp } from "@/lib/automation";
 import { INDEMNITY_VERSION, REQUIRED_IDS, bondText, validAadhaar } from "@/lib/indemnity";
 import type { Booking } from "@/lib/types";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
@@ -215,7 +215,7 @@ async function handlePOST(req: Request) {
     if (!c.to) return NextResponse.json({ error: "NO_CONTACT" }, { status: 409 });
     const { code, exp, token } = issueOtp(c.to);
     const text = `${code} is your Bagdrop signing code for ${b.id}. Valid 10 minutes — never share it.`;
-    const res = c.channel === "email" ? await sendEmail(c.to, `${code} is your Bagdrop signing code`, text) : await sendWhatsApp(c.to, text);
+    const res = c.channel === "email" ? await sendEmail(c.to, `${code} is your Bagdrop signing code`, text) : await sendWhatsAppOtp(c.to, code, text);
     if (res.stub && !DEMO_ALLOWED) return OTP_OFF();
     return NextResponse.json({ ok: true, channel: c.channel, exp, token, ...(res.stub ? { demo: code } : {}) });
   }

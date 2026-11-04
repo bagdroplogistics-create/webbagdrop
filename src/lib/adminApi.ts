@@ -30,23 +30,27 @@ const REFRESH_EVENT = "bagdrop:bookings-changed";
 /** Ask every open booking list to refetch now (after a server-side action). */
 export function refreshBookings() { window.dispatchEvent(new Event(REFRESH_EVENT)); }
 
-export async function adminSaveBooking(doc: Booking): Promise<void> {
+/** Error from a refused save: `code` is the server's reason (STALE, IDENTITY_NOT_VERIFIED, …). */
+export class SaveRefused extends Error { constructor(public code: string, message: string) { super(message); } }
+
+/** Saves and returns the stored copy (with its new revision), so the next
+ *  change made on the same screen isn't refused as stale. */
+export async function adminSaveBooking(doc: Booking, opts: { overrideIdentityGate?: boolean } = {}): Promise<Booking> {
   if (backend === "local") {
     const map = lsRead();
     map[doc.id] = doc;
     localStorage.setItem(LS, JSON.stringify(map));
     if ("BroadcastChannel" in window) { const bc = new BroadcastChannel("bagdrop"); bc.postMessage({ id: doc.id }); bc.close(); }
-    return;
+    return doc;
   }
   const r = await fetch("/api/admin/bookings", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc, ...(opts.overrideIdentityGate ? { overrideIdentityGate: true } : {}) }),
   });
   /* refetch every open list now, so the next action uses the new revision */
   window.dispatchEvent(new Event(REFRESH_EVENT));
-  if (!r.ok) {
-    const j = await r.json().catch(() => ({} as { error?: string; detail?: string }));
-    throw new Error(j?.detail ?? j?.error ?? `HTTP_${r.status}`);
-  }
+  const j = await r.json().catch(() => ({} as { error?: string; detail?: string; booking?: Booking }));
+  if (!r.ok) throw new SaveRefused(j?.error ?? `HTTP_${r.status}`, j?.detail ?? j?.error ?? `HTTP_${r.status}`);
+  return (j?.booking as Booking) ?? doc;
 }
 
 /** Admin's own "with an appended event" convenience, mirroring the old
