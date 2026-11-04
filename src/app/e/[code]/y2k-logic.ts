@@ -199,8 +199,7 @@ export function initY2k(): () => void {
     ${inp("family.email", "Email", { type: "email", opt: true, ph: "name@example.com", ac: "email" })}
     ${sideSeg()}
   </div>
-  <div class="lab" style="margin:26px 0 10px">Pickup address</div>
-  ${addressBlock(0, "Pickup")}
+  <div style="margin-top:26px">${addressBlock(0, "Pickup")}</div>
   <div class="lab" style="margin:26px 0 10px">Your bags</div>
   ${showErrors && E.bags ? `<p class="msg">${E.bags}</p>` : ""}
   ${bagsFor("G01")}

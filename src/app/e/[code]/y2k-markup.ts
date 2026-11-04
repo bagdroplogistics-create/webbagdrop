@@ -196,7 +196,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .stepper button[disabled]{cursor:default}
 .ph{font-family:var(--display);font-size:clamp(28px,4vw,36px);font-weight:400;margin:0 0 4px;line-height:1.1}
 .psub{color:var(--body);margin:0 0 24px;font-size:15px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px;align-items:start}
 .grid.three{grid-template-columns:repeat(3,1fr)}
 .grid>*{min-width:0}
 .full{grid-column:1/-1}
