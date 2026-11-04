@@ -312,7 +312,7 @@ export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText
       template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US" }, components },
     }),
   });
-  if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 600)}`);
   return { stub: false };
 }
 
