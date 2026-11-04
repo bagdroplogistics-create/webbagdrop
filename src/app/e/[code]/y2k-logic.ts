@@ -627,7 +627,7 @@ export function initY2k(): () => void {
 
   function applyClosed() {
     renderPanel();
-    if (closed) { fab?.remove(); document.querySelectorAll<HTMLAnchorElement>('a[href="#book"]').forEach((a) => { a.textContent = "Bookings closed"; a.setAttribute("href", "/e/y2k/my"); }); }
+    if (closed) { fab?.remove(); document.querySelectorAll<HTMLAnchorElement>('a[href="#book"]').forEach((a) => { a.textContent = "Bookings closed"; a.setAttribute("href", withBase("/e/y2k/my")); }); }
   }
   getEvent(EVENT_CODE).then((ev) => {
     closesOn = closesText(ev);
