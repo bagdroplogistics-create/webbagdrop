@@ -177,6 +177,16 @@ h2.big em{font-style:italic;color:var(--label)}
 .desk{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
 @media (max-width:980px){.desk{grid-template-columns:1fr}}
 .panel{background:var(--card);border:1px solid var(--line-2);border-radius:24px;padding:clamp(20px,3.5vw,40px);box-shadow:0 30px 60px -40px rgba(58,46,28,.35);min-width:0}
+.tabs{display:flex;gap:4px;margin:0 0 26px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:10px 14px;cursor:pointer;font:600 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--label);white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.tabs button.cur{border-color:var(--ink);color:var(--ink)}
+.tabs button .num{font-family:var(--mono);font-size:11px;background:var(--sand-2);border-radius:999px;padding:2px 7px;color:var(--ink);letter-spacing:0}
+.item.member{border-color:var(--gold-2);background:var(--card)}
+.item.member>.lab{margin-top:4px}
+.item.bag{background:var(--paper)}
+.retlist{display:grid;gap:4px}
+.retline{padding:12px 0;border-bottom:1px solid var(--line)}
+.retline:last-child{border-bottom:0}
 .stepper{display:flex;gap:6px;margin:0 0 28px;padding:0;list-style:none;overflow-x:auto;scrollbar-width:none}
 .stepper li{flex:1 0 auto}
 .stepper button{width:100%;background:none;border:0;border-top:2px solid var(--line);padding:10px 4px 0;text-align:left;cursor:pointer;font:500 11px/1.3 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--stone)}
@@ -193,6 +203,7 @@ h2.big em{font-style:italic;color:var(--label)}
 @media (max-width:620px){.grid,.grid.three{grid-template-columns:1fr}}
 label.f{display:grid;gap:7px}
 label.f>span,.lab{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--label)}
+label.f>span.hint,label.f>span.msg{text-transform:none;letter-spacing:0;font-weight:400}
 label.f>span em,.lab em{font-style:normal;text-transform:none;letter-spacing:0;font-weight:400;color:var(--stone)}
 input[type=text],input[type=tel],input[type=email],input[type=number],input[type=time],select,textarea{width:100%;font:400 15px/1.3 var(--sans);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-height:46px;appearance:none}
 select{background-image:linear-gradient(45deg,transparent 50%,var(--label) 50%),linear-gradient(135deg,var(--label) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
