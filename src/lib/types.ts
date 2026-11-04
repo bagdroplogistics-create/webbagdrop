@@ -176,10 +176,13 @@ export interface Booking {
    *  "identity-docs" bucket and are only ever served as short signed links. */
   kyc?: {
     kind: "domestic" | "international";
-    status: "docs_submitted" | "docs_rejected" | "docs_approved" | "signed";
+    status: "docs_submitted" | "docs_rejected" | "docs_approved" | "signed" | "digilocker_pending";
     nationality?: string; passportNo?: string; indiaAddress?: string;
     docs?: { path: string; kind: "passport" | "visa" | "other"; name?: string; at: string }[];
     submissions?: number; note?: string; reviewedAt?: string; reviewedBy?: string;
+    /** domestic: Setu DigiLocker Aadhaar e-KYC (src/lib/setu.ts). "verified"
+     *  is the only state sign_domestic accepts once DigiLocker is configured. */
+    digilocker?: { requestId: string; status: "pending" | "verified" | "failed"; name?: string; maskedAadhaar?: string; dob?: string; verifiedAt?: string };
   } | null;
   admin: Record<string, unknown>;
   /** revision for compare-and-swap writes (src/lib/bookingStore.ts) */

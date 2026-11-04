@@ -5,9 +5,11 @@ import { serviceClient } from "@/lib/supabaseAdmin";
 import { isPaid } from "@/lib/payState";
 import { checkOtp, cleanEmail, cleanMobile, issueOtp } from "@/lib/otp";
 import { kickSweep, notify, opsNotify, sendEmail, sendWhatsAppOtp } from "@/lib/automation";
+import { COMPANY } from "@/lib/company";
 import { INDEMNITY_VERSION, REQUIRED_IDS, bondText, validAadhaar } from "@/lib/indemnity";
 import type { Booking } from "@/lib/types";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
+import { createDigilockerRequest, digilockerConfigured, getDigilockerAadhaar } from "@/lib/setu";
 
 /** Pre-pickup identity + indemnity bond (steps 6–7 of the booking flow).
  *  Reachable only once money is settled (finance-verified payment, partner
@@ -26,6 +28,7 @@ import { DEMO_ALLOWED } from "@/lib/demoMode";
  *  both the client and the BAGDROP OS compliance desk. */
 
 const DEMO_AADHAAR_OTP = process.env.AADHAAR_DEMO_OTP ?? "112233";
+const SITE = (process.env.SITE_URL || `https://${COMPANY.web}`).replace(/\/$/, "");
 const MAX_ATTEMPTS = 3;
 const MAX_SUBMISSIONS = 3;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -54,7 +57,11 @@ function view(b: Booking) {
     settled: settled(b), verified: !!b.identity?.ok, signed: !!b.indemnity?.textHash,
     signedAt: b.indemnity?.acceptedAt ?? null, method: b.identity?.ok ? b.identity.method : null,
     locked: !!admin.aadhaarLocked, attemptsLeft: Math.max(0, MAX_ATTEMPTS - (admin.aadhaarAttempts ?? 0)),
-    kyc: b.kyc ? { kind: b.kyc.kind, status: b.kyc.status, note: b.kyc.note ?? null, submissions: b.kyc.submissions ?? 0 } : null,
+    kyc: b.kyc ? {
+      kind: b.kyc.kind, status: b.kyc.status, note: b.kyc.note ?? null, submissions: b.kyc.submissions ?? 0,
+      digilocker: b.kyc.digilocker ? { status: b.kyc.digilocker.status, name: b.kyc.digilocker.name ?? null, maskedAadhaar: b.kyc.digilocker.maskedAadhaar ?? null } : null,
+    } : null,
+    digilockerAvailable: digilockerConfigured(),
     version: INDEMNITY_VERSION,
   };
 }
@@ -170,24 +177,66 @@ async function handlePOST(req: Request) {
   if (b.identity?.ok && b.indemnity?.textHash) return NextResponse.json({ ok: true, booking: view(b) }); // idempotent
   const admin = b.admin as { aadhaarAttempts?: number; aadhaarLocked?: boolean };
 
-  /* ---------- domestic step 1: request the Aadhaar OTP ---------- */
+  /* ---------- domestic step 1: start Aadhaar verification ---------- */
   if (body.action === "aadhaar_otp") {
-    if (!DEMO_ALLOWED) return ESIGN_OFF();
     if (admin.aadhaarLocked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
+    if (digilockerConfigured()) {
+      try {
+        const req = await createDigilockerRequest(`${SITE}/verify/${b.id}`);
+        const next: Booking = {
+          ...b, kyc: { ...(b.kyc ?? { kind: "domestic", status: "digilocker_pending", submissions: 0 }), kind: "domestic", digilocker: { requestId: req.id, status: "pending" } },
+        };
+        const up = await save(next);
+        if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
+        return NextResponse.json({ ok: true, method: "digilocker", url: req.url });
+      } catch (e) {
+        await issue(b, "We couldn't start your Aadhaar verification just now. Our team will call you to complete it before pickup.",
+          `DigiLocker start failed: ${e instanceof Error ? e.message : String(e)}`, "dgstart");
+        return NextResponse.json({ error: "DIGILOCKER_FAILED", detail: "Couldn't start Aadhaar verification — please try again in a moment." }, { status: 502 });
+      }
+    }
+    /* no eSign/KUA provider connected yet → the labelled demo code (off on production) */
+    if (!DEMO_ALLOWED) return ESIGN_OFF();
     if (!validAadhaar(str(body.aadhaar, 20))) return NextResponse.json({ error: "BAD_AADHAAR", detail: "That isn't a valid 12-digit Aadhaar number." }, { status: 400 });
-    /* UIDAI sends the OTP to the Aadhaar-linked mobile. Until a licensed
-     * eSign/KUA provider is connected this is the labelled demo code. */
-    return NextResponse.json({ ok: true, sent: true, demo: DEMO_AADHAAR_OTP });
+    return NextResponse.json({ ok: true, method: "demo", sent: true, demo: DEMO_AADHAAR_OTP });
   }
 
-  /* ---------- domestic step 2: sign with the Aadhaar OTP ---------- */
+  /* ---------- domestic: finish DigiLocker verification after the redirect back ---------- */
+  if (body.action === "digilocker_complete") {
+    const dg = b.kyc?.digilocker;
+    if (!dg || dg.status !== "pending") return NextResponse.json({ error: "NO_PENDING_REQUEST" }, { status: 409 });
+    try {
+      const aadhaar = await getDigilockerAadhaar(dg.requestId);
+      if (!aadhaar.verified) return NextResponse.json({ error: "NOT_VERIFIED", detail: "DigiLocker didn't confirm your Aadhaar — please try again." }, { status: 409 });
+      const next: Booking = {
+        ...b, kyc: { ...b.kyc!, digilocker: { requestId: dg.requestId, status: "verified", name: aadhaar.name, maskedAadhaar: aadhaar.maskedNumber, dob: aadhaar.dateOfBirth, verifiedAt: new Date().toISOString() } },
+      };
+      const up = await save(next);
+      if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
+      return NextResponse.json({ ok: true, name: aadhaar.name, maskedAadhaar: aadhaar.maskedNumber, dob: aadhaar.dateOfBirth });
+    } catch (e) {
+      return NextResponse.json({ error: "DIGILOCKER_FETCH_FAILED", detail: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    }
+  }
+
+  /* ---------- domestic step 2: sign — verified by DigiLocker, or the demo OTP until it's configured ---------- */
   if (body.action === "sign_domestic") {
-    if (!DEMO_ALLOWED) return ESIGN_OFF();
     if (admin.aadhaarLocked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
     const accepted = checkBoxes(body.accepted);
     if (!accepted) return NextResponse.json({ error: "BOXES_REQUIRED", detail: "Please tick every declaration to sign the bond." }, { status: 400 });
     const signature = str(body.signature, 80), place = str(body.place, 60), fragile = str(body.fragile, 300);
     if (signature.length < 3) return NextResponse.json({ error: "NEED_SIGNATURE", detail: "Type your full name as your signature." }, { status: 400 });
+
+    if (digilockerConfigured()) {
+      const dg = b.kyc?.digilocker;
+      if (!dg || dg.status !== "verified" || !dg.maskedAadhaar) {
+        return NextResponse.json({ error: "NOT_VERIFIED", detail: "Verify your Aadhaar with DigiLocker first." }, { status: 409 });
+      }
+      const idTail = dg.maskedAadhaar.replace(/\D/g, "").slice(-4) || "0000";
+      return sign(b, { accepted, fragile, signature, place, idType: "aadhaar", idTail, method: "aadhaar_otp", identityMethod: "UIDAI Aadhaar e-KYC via DigiLocker (Setu)" });
+    }
+
+    if (!DEMO_ALLOWED) return ESIGN_OFF();
     const aadhaar = str(body.aadhaar, 20).replace(/\s|-/g, "");
     if (!validAadhaar(aadhaar)) return NextResponse.json({ error: "BAD_AADHAAR", detail: "That isn't a valid 12-digit Aadhaar number." }, { status: 400 });
     if (str(body.otp, 6) !== DEMO_AADHAAR_OTP) {

@@ -4,7 +4,8 @@
  *  their Aadhaar OTP; international guests upload passport + visa, wait for
  *  the team's review, then sign with an OTP to their booking contact. All
  *  checks happen on the server (/api/kyc) — this page only collects input. */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLoad } from "@/lib/useLoad";
 import { DECLARATIONS, INDEMNITY_VERSION, PROHIBITED, REQUIRED_IDS, UNDERTAKINGS } from "@/lib/indemnity";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
@@ -14,7 +15,8 @@ interface V {
   name: string; mobile: string; email: string;
   settled: boolean; verified: boolean; signed: boolean; signedAt: string | null; method: string | null;
   locked: boolean; attemptsLeft: number;
-  kyc: { kind: "domestic" | "international"; status: string; note: string | null; submissions: number } | null;
+  kyc: { kind: "domestic" | "international"; status: string; note: string | null; submissions: number; digilocker: { status: "pending" | "verified" | "failed"; name: string | null; maskedAadhaar: string | null } | null } | null;
+  digilockerAvailable: boolean;
 }
 
 const ERR: Record<string, string> = {
@@ -23,10 +25,15 @@ const ERR: Record<string, string> = {
   BAD_AADHAAR: "That isn't a valid 12-digit Aadhaar number.",
   BOXES_REQUIRED: "Please tick every declaration to sign the bond.",
   PAYMENT_NOT_VERIFIED: "This opens once your payment is verified.",
+  NOT_VERIFIED: "Verify your Aadhaar with DigiLocker first.",
+  DIGILOCKER_FAILED: "Couldn't start Aadhaar verification — please try again in a moment.",
+  DIGILOCKER_FETCH_FAILED: "Couldn't confirm your Aadhaar with DigiLocker — please try again.",
 };
 
 export default function VerifyClient({ id }: { id: string }) {
   const bid = decodeURIComponent(id).toUpperCase();
+  const router = useRouter();
+  const params = useSearchParams();
   const [b, setB] = useState<V | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -71,10 +78,33 @@ export default function VerifyClient({ id }: { id: string }) {
     const j = await post({ id: bid, action: "aadhaar_otp", aadhaar });
     if (j) setOtpSent({ demo: j.demo });
   }
+  async function startDigilocker() {
+    const j = await post({ id: bid, action: "aadhaar_otp" });
+    if (j?.method === "digilocker" && j.url) window.location.href = j.url;
+  }
   async function signDomestic() {
     const j = await post({ id: bid, action: "sign_domestic", aadhaar, otp, signature, place, fragile, accepted: accepted() });
     if (j?.booking) setB(j.booking);
   }
+
+  /* back from DigiLocker's own consent screen: ?success=True&id=…&scope=… */
+  useEffect(() => {
+    if (!b) return;
+    const success = params.get("success");
+    if (success === null) return;
+    if (success === "True" && b.kyc?.digilocker?.status === "pending") {
+      void (async () => {
+        const j = await post({ id: bid, action: "digilocker_complete" });
+        if (j?.name) {
+          setB((prev) => prev ? { ...prev, kyc: { ...(prev.kyc as NonNullable<V["kyc"]>), digilocker: { status: "verified", name: j.name, maskedAadhaar: j.maskedAadhaar } } } : prev);
+        }
+      })();
+    } else if (success === "False") {
+      setErr(params.get("errMessage") || "DigiLocker verification didn't complete — please try again.");
+    }
+    router.replace(`/verify/${bid}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b, params]);
   async function sendIntlOtp() {
     const j = await post({ id: bid, action: "intl_otp" });
     if (j) setOtpSent({ demo: j.demo, exp: j.exp, token: j.token, channel: j.channel });
@@ -186,20 +216,43 @@ export default function VerifyClient({ id }: { id: string }) {
                 <>
                   {bond}
                   <div className="mt-4 rounded-xl bg-paper p-3">
-                    <p className="mb-2 text-sm font-semibold">Sign with Aadhaar OTP</p>
-                    <div className="flex flex-wrap items-end gap-2">
-                      <Field label="Aadhaar number"><Input className="w-52 font-mono" inputMode="numeric" maxLength={14} value={aadhaar} onChange={(e) => { setAadhaar(e.target.value.replace(/[^\d ]/g, "")); setOtpSent(null); }} placeholder="XXXX XXXX XXXX" /></Field>
-                      <Button variant="outline" disabled={busy || aadhaar.replace(/\D/g, "").length !== 12} onClick={() => void sendAadhaarOtp()}>{otpSent ? "Resend OTP" : "Send OTP"}</Button>
-                    </div>
-                    {otpSent && (
-                      <div className="mt-2 flex flex-wrap items-end gap-2">
-                        <Field label={`OTP sent to your Aadhaar-linked mobile${otpSent.demo ? ` (demo: ${otpSent.demo})` : ""}`}>
-                          <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="••••••" />
-                        </Field>
-                        <Button disabled={busy || otp.length !== 6 || !allTicked || signature.trim().length < 3} onClick={() => void signDomestic()}>{busy ? "Signing…" : "Sign the bond"}</Button>
-                      </div>
+                    {b.digilockerAvailable ? (
+                      b.kyc?.digilocker?.status === "verified" ? (
+                        <>
+                          <p className="mb-2 text-sm font-semibold">Aadhaar verified via DigiLocker</p>
+                          <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
+                            <b>{b.kyc.digilocker.name}</b> · Aadhaar {b.kyc.digilocker.maskedAadhaar} — confirmed by DigiLocker.
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-end gap-2">
+                            <Button disabled={busy || !allTicked || signature.trim().length < 3} onClick={() => void signDomestic()}>{busy ? "Signing…" : "Sign the bond"}</Button>
+                          </div>
+                          {!allTicked && <p className="mt-2 text-xs text-muted">Tick every declaration above to sign.</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p className="mb-2 text-sm font-semibold">Verify your Aadhaar</p>
+                          <p className="mb-2 text-sm text-muted">You&apos;ll be taken to DigiLocker — India&apos;s government document locker — to sign in with your Aadhaar-linked mobile OTP and share your Aadhaar. You&apos;ll land straight back here.</p>
+                          <Button disabled={busy} onClick={() => void startDigilocker()}>{busy ? "Starting…" : "Verify with DigiLocker"}</Button>
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <p className="mb-2 text-sm font-semibold">Sign with Aadhaar OTP</p>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <Field label="Aadhaar number"><Input className="w-52 font-mono" inputMode="numeric" maxLength={14} value={aadhaar} onChange={(e) => { setAadhaar(e.target.value.replace(/[^\d ]/g, "")); setOtpSent(null); }} placeholder="XXXX XXXX XXXX" /></Field>
+                          <Button variant="outline" disabled={busy || aadhaar.replace(/\D/g, "").length !== 12} onClick={() => void sendAadhaarOtp()}>{otpSent ? "Resend OTP" : "Send OTP"}</Button>
+                        </div>
+                        {otpSent && (
+                          <div className="mt-2 flex flex-wrap items-end gap-2">
+                            <Field label={`OTP sent to your Aadhaar-linked mobile${otpSent.demo ? ` (demo: ${otpSent.demo})` : ""}`}>
+                              <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="••••••" />
+                            </Field>
+                            <Button disabled={busy || otp.length !== 6 || !allTicked || signature.trim().length < 3} onClick={() => void signDomestic()}>{busy ? "Signing…" : "Sign the bond"}</Button>
+                          </div>
+                        )}
+                        {!allTicked && <p className="mt-2 text-xs text-muted">Tick every declaration above to sign. {b.attemptsLeft < 3 ? `${b.attemptsLeft} attempt(s) left.` : ""}</p>}
+                      </>
                     )}
-                    {!allTicked && <p className="mt-2 text-xs text-muted">Tick every declaration above to sign. {b.attemptsLeft < 3 ? `${b.attemptsLeft} attempt(s) left.` : ""}</p>}
                     <p className="mt-2 text-[11px] text-faint">Your Aadhaar number is checked and discarded — only the last four digits are stored.</p>
                   </div>
                 </>
