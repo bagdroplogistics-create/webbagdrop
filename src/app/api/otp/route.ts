@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { issueOtp, checkOtp, cleanMobile, cleanEmail } from "@/lib/otp";
-import { sendWhatsApp, sendEmail } from "@/lib/automation";
+import { sendWhatsAppOtp, sendEmail } from "@/lib/automation";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
 
 /** Booking-time OTP — the customer confirms their mobile OR email before any
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     try {
       const res = b.channel === "email"
         ? await sendEmail(to, `${code} is your Bagdrop code`, text)
-        : await sendWhatsApp(to, text);
+        : await sendWhatsAppOtp(to, code, text);
       // stub mode (no provider keys yet) → hand the demo code back so the
       // flow still completes on localhost; with real keys `demo` is absent.
       // On a live deployment a stub send is a failure, never a free code.
