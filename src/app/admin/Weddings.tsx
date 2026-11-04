@@ -5,7 +5,7 @@
  *  build's Y2K ops desk (?ops=1) + the events seed in y2k.html; follows the
  *  LRAndTrips module pattern and the cookie-gated /api/admin/* routes. */
 import { useEffect, useMemo, useState } from "react";
-import { adminSaveBooking, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
+import { adminSaveBooking, refreshBookings, watchAdminBookings, SaveRefused } from "@/lib/adminApi";
 import { nowIso } from "@/lib/db";
 import { adminSaveEvent, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
@@ -348,9 +348,12 @@ function EventDetail({
   const deskUrl = event.id === "Y2K-WED" ? "/e/y2k" : null;
   const families = useMemo(() => bookings.map(teamView), [bookings]);
 
-  async function setStage(b: Booking, tagId: string, stage: string) {
+  /* a bag past "Booked" needs the guest's Aadhaar; the team may override, which the server stamps on the record */
+  const [gate, setGate] = useState<{ b: Booking; tagId: string; stage: string; msg: string } | null>(null);
+  async function setStage(b: Booking, tagId: string, stage: string, override = false) {
     const k = WEDDING_STAGES.indexOf(stage as (typeof WEDDING_STAGES)[number]);
     if (k < 0 || !b.wedding) return;
+    setErr(""); setGate(null);
     const at = nowIso();
     const next: Booking = {
       ...b,
@@ -358,13 +361,17 @@ function EventDetail({
       wedding: { ...b.wedding, bagStatus: { ...b.wedding.bagStatus, [tagId]: stage }, updatedAt: at },
       events: [...b.events, { at, by: "admin", text: `Bag ${tagId.split("-").slice(-1)[0]} → ${stage} (Weddings module)` }],
     };
-    try { await adminSaveBooking(next); onBookingChanged(next); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    try { onBookingChanged(await adminSaveBooking(next, { overrideIdentityGate: override })); }
+    catch (e) {
+      if (e instanceof SaveRefused && e.code === "IDENTITY_NOT_VERIFIED") setGate({ b, tagId, stage, msg: e.message });
+      else setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function setStatus(b: Booking, status: BookingStatus) {
     const next: Booking = { ...b, status, events: [...b.events, { at: nowIso(), by: "admin", text: `Status → ${status} (Weddings module)` }] };
-    try { await adminSaveBooking(next); onBookingChanged(next); }
+    setErr("");
+    try { onBookingChanged(await adminSaveBooking(next)); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }
 
@@ -381,6 +388,15 @@ function EventDetail({
         </div>
       </div>
       {err && <p className="mb-2 text-xs text-red-700">{err}</p>}
+      {gate && (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p><b>{gate.tagId} not moved to {gate.stage}.</b> {gate.msg}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => void setStage(gate.b, gate.tagId, gate.stage, true)}>Mark it {gate.stage} anyway</Button>
+            <Button size="sm" variant="outline" onClick={() => setGate(null)}>Keep it as it was</Button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi label="Families" value={String(bookings.length)} />
@@ -394,6 +410,8 @@ function EventDetail({
           <TeamDesk families={families} eventId={event.id} api={weddingOpsApi} tagsBase="/api/admin/wedding-tags" onChanged={refreshBookings} />
         </div>
       )}
+
+      <Commercials event={event} onError={setErr} />
 
       {bookings.length === 0 && <p className="py-6 text-center text-sm text-muted">No guest bookings yet. They appear here as families book on the landing page or the wedding desk.</p>}
 
@@ -465,6 +483,97 @@ function EventDetail({
         })}
       </div>
     </Card>
+  );
+}
+
+/** The event's commercials, open to add or edit at any time: who pays, the
+ *  per-bag rate (before GST) for every pickup city, add-ons and billing
+ *  terms, and the expected volume for the estimate. Saved on the event
+ *  record, which the landing page, Bulk & manifest tools and Finance read. */
+function Commercials({ event, onError }: { event: BagdropEvent; onError: (e: string) => void }) {
+  type Row = { city: string; rate: string; pickDay: string; retDay: string };
+  const toRows = (e: BagdropEvent): Row[] => (e.sectors ?? []).map((x) => ({ city: x.city, rate: String(x.rate ?? ""), pickDay: x.pickDay ?? "", retDay: x.retDay ?? "" }));
+  const [billing, setBilling] = useState<"host" | "family">(event.billing ?? "host");
+  const [direction, setDirection] = useState<"both" | "out">(event.direction ?? "both");
+  const [rows, setRows] = useState<Row[]>(toRows(event));
+  const [r, setR] = useState({ oversize: String(event.rates?.oversize ?? ""), minBags: String(event.rates?.minBags ?? ""), slabPct: String(event.rates?.slabPct ?? ""), depositPct: String(event.rates?.depositPct ?? "") });
+  const [x, setX] = useState({ families: String(event.expected?.families ?? ""), bags: String(event.expected?.bags ?? "") });
+  const [saved, setSaved] = useState("");
+  const [open, setOpen] = useState(false);
+  const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
+  const edit = (i: number, patch: Partial<Row>) => setRows((list) => list.map((row, k) => (k === i ? { ...row, ...patch } : row)));
+  const avgRate = rows.length ? rows.reduce((a, row) => a + (Number(row.rate) || 0), 0) / rows.length : 0;
+  const estimate = (Number(x.bags) || 0) * avgRate;
+  const dirty = JSON.stringify({ billing, direction, rows, r, x }) !== JSON.stringify({ billing: event.billing ?? "host", direction: event.direction ?? "both", rows: toRows(event), r: { oversize: String(event.rates?.oversize ?? ""), minBags: String(event.rates?.minBags ?? ""), slabPct: String(event.rates?.slabPct ?? ""), depositPct: String(event.rates?.depositPct ?? "") }, x: { families: String(event.expected?.families ?? ""), bags: String(event.expected?.bags ?? "") } });
+  async function save() {
+    const list = rows.map((row) => ({ city: row.city.trim(), rate: Number(row.rate) || 0, pickDay: row.pickDay, retDay: row.retDay })).filter((row) => row.city);
+    if (list.some((row) => !(row.rate > 0))) { onError("Every pickup city needs a rate per bag above ₹0."); return; }
+    for (const k of ["slabPct", "depositPct"] as const) { const v = num(r[k]); if (v !== undefined && (v < 0 || v > 100)) { onError("Percentages are between 0 and 100."); return; } }
+    try {
+      await adminSaveEvent({ ...event, billing, direction, sectors: list,
+        rates: { oversize: num(r.oversize), minBags: num(r.minBags), slabPct: num(r.slabPct), depositPct: num(r.depositPct) },
+        expected: { families: num(x.families), bags: num(x.bags) } });
+      onError(""); setSaved("Saved"); setTimeout(() => setSaved(""), 1500);
+    } catch (e) { onError(e instanceof Error ? e.message : String(e)); }
+  }
+  const money = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
+  return (
+    <div className="mb-4 rounded-xl border border-line bg-paper p-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">Commercials</span>
+          <Badge tone={billing === "host" ? "info" : "warn"}>{billing === "host" ? "Hosts pay" : "Families pay"}</Badge>
+          <span className="text-muted">{rows.length ? `${rows.length} pickup cit${rows.length > 1 ? "ies" : "y"} · avg ${money(avgRate)}/bag before GST` : "no rates yet"}{r.oversize ? ` · oversize +${money(Number(r.oversize))}` : ""}{x.bags ? ` · est. ${money(estimate)} for ${x.bags} bags` : ""}</span>
+        </div>
+        <button type="button" className="font-semibold text-brand hover:underline" onClick={() => setOpen((v) => !v)}>{open ? "Hide" : "Add or edit"}</button>
+      </div>
+      {open && (
+        <div className="mt-3 grid gap-3">
+          <div className="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Who pays">
+              <Select value={billing} onChange={(e) => setBilling(e.target.value as "host" | "family")}>
+                <option value="host">Hosts pay (families see no price)</option>
+                <option value="family">Families pay per booking</option>
+              </Select>
+            </Field>
+            <Field label="Direction">
+              <Select value={direction} onChange={(e) => setDirection(e.target.value as "both" | "out")}>
+                <option value="both">To venue & back home</option>
+                <option value="out">To venue only</option>
+              </Select>
+            </Field>
+            <Field label="Expected families"><Input value={x.families} onChange={(e) => setX((p) => ({ ...p, families: e.target.value }))} inputMode="numeric" placeholder="e.g. 40" /></Field>
+            <Field label="Expected bags"><Input value={x.bags} onChange={(e) => setX((p) => ({ ...p, bags: e.target.value }))} inputMode="numeric" placeholder="e.g. 120" /></Field>
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between"><span className="font-semibold">Rate per bag by pickup city <span className="font-normal text-muted">· before GST (5% added on invoices)</span></span><Button size="sm" variant="outline" onClick={() => setRows((list) => [...list, { city: "", rate: "", pickDay: event.dates?.in ?? "", retDay: event.dates?.out ?? "" }])}>Add a city</Button></div>
+            {rows.length === 0 && <p className="text-muted">No pickup city yet. Add each city guests travel from, with its rate.</p>}
+            <div className="grid gap-2">
+              {rows.map((row, i) => (
+                <div key={i} className="grid items-end gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <Field label="Pickup city"><Input value={row.city} onChange={(e) => edit(i, { city: e.target.value })} placeholder="Mumbai" /></Field>
+                  <Field label="Rate per bag (₹)"><Input value={row.rate} onChange={(e) => edit(i, { rate: e.target.value })} inputMode="numeric" /></Field>
+                  <Field label="Pickup day"><Input type="date" value={row.pickDay} onChange={(e) => edit(i, { pickDay: e.target.value })} /></Field>
+                  <Field label="Return day"><Input type="date" value={row.retDay} onChange={(e) => edit(i, { retDay: e.target.value })} /></Field>
+                  <button type="button" className="mb-3 text-red-700 hover:underline" onClick={() => setRows((list) => list.filter((_, k) => k !== i))}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Oversize add-on (₹ per bag)"><Input value={r.oversize} onChange={(e) => setR((p) => ({ ...p, oversize: e.target.value }))} inputMode="numeric" placeholder="e.g. 900" /></Field>
+            <Field label="Minimum bags per family"><Input value={r.minBags} onChange={(e) => setR((p) => ({ ...p, minBags: e.target.value }))} inputMode="numeric" placeholder="e.g. 2" /></Field>
+            <Field label="Volume slab discount (%)"><Input value={r.slabPct} onChange={(e) => setR((p) => ({ ...p, slabPct: e.target.value }))} inputMode="numeric" placeholder="e.g. 5" /></Field>
+            <Field label="Advance / deposit (%)"><Input value={r.depositPct} onChange={(e) => setR((p) => ({ ...p, depositPct: e.target.value }))} inputMode="numeric" placeholder="e.g. 20" /></Field>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={!dirty} onClick={() => void save()}>Save commercials</Button>
+            {saved && <span className="text-green-700">{saved}</span>}
+            <span className="text-muted">Changes apply to new quotes and invoices from now; bookings already confirmed keep their terms.</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
