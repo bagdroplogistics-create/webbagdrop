@@ -7,9 +7,10 @@
  *  bagdrop.co/y2k page: real photography replaces the old canvas mountain
  *  art (so the ridges()/drawArt() canvas painters and their resize listener
  *  are gone), the travel section's tag-demo preview is gone (that page has
- *  a luggage photo there instead), and step 0 ("Who's booking?") drops the
- *  phone-number "Find my family" guest-list lookup to match the live
- *  page's simpler lead-guest/mobile/email/side form. Data layer:
+ *  a luggage photo there instead). The booking form (2026-11-03) is two
+ *  tabs — Booking (you, your pickup address, your bags, then family members
+ *  with their own bags) and Return (tick the bags that come back; they keep
+ *  the same tag code) — then a Confirm view. Data layer:
  *   - DB.put("bookings", ...)    -> saveWeddingBooking (server route; event
  *                                   must be open; create only, guests cannot
  *                                   edit a saved booking)
@@ -34,22 +35,21 @@ export function initY2k(): () => void {
   /* ---------- Constants ---------- */
   const WEDDING = new Date("2026-12-17T00:00:00+05:30");
   const STAGES = ["Booked", "Picked up", "At hub", "In transit", "At Taj", "In room", "Return pickup", "Delivered home"];
-  const STEP_NAMES = ["Family", "Travellers", "Pickups", "Bags", "Return", "Review"];
-  const BAG_TYPES: [string, string][] = [
-    ["large", "Large suitcase"], ["medium", "Medium suitcase"], ["cabin", "Cabin bag"], ["garment", "Garment bag"],
-    ["trunk", "Trunk / duffel"], ["gift", "Gift / hamper box"], ["decor", "Décor crate"]];
-  const COLOURS: [string, string][] = [["Black", "#1c1c1c"], ["Navy", "#23314f"], ["Grey", "#8b8d90"], ["Silver", "#cfd2d4"], ["Red", "#a3312a"], ["Maroon", "#6a1f2a"], ["Green", "#3f5b3a"], ["Blue", "#2f6db0"], ["Brown", "#6b4a2e"], ["Beige", "#d9c6a3"], ["Pink", "#d98fa3"], ["Other", "conic-gradient(#a3312a,#2f6db0,#3f5b3a,#d9c6a3,#a3312a)"]];
-  const CONTENTS = ["Family luggage", "Bridal / groom outfits", "Wedding gifts & hampers", "Return gift boxes", "Décor material"];
-  const DELIVER: [string, string][] = [["room", "Guest's room"], ["bell", "Hold at bell desk"], ["host", "Host family suite"], ["decor", "Décor team"]];
-  const WEIGHTS = ["Under 10 kg", "10–20 kg", "20–32 kg", "Over 32 kg"];
-  // one pickup window: 9, 10 and 11 December (the express window is gone)
-  const WINDOWS: Record<string, { label: string; dates: string[] }> = { early: { label: "9–11 Dec", dates: ["9 Dec", "10 Dec", "11 Dec"] } };
+  const TAB_NAMES = ["Booking", "Return"];
+  /* the two sizes guests book; the older keys stay so earlier bookings still read on tags and tracking */
+  const BAG_TYPES: [string, string][] = [["small", "Small bag"], ["large", "Large bag"],
+    ["medium", "Medium suitcase"], ["cabin", "Cabin bag"], ["garment", "Garment bag"], ["trunk", "Trunk / duffel"], ["gift", "Gift / hamper box"], ["decor", "Décor crate"]];
+  const WEIGHTS: Record<string, string[]> = { small: ["Under 10 kg", "10–15 kg"], large: ["15–23 kg", "23–32 kg"] };
+  const COLOURS = ["Black", "Navy", "Grey", "Silver", "Red", "Maroon", "Green", "Blue", "Brown", "Beige", "Pink", "White"];
+  const OTHER = "Other";
+  // one pickup window: 9, 10 and 11 December
+  const PICK_DATES = ["9 Dec", "10 Dec", "11 Dec"];
   const SLOTS = ["Morning · 10 AM–1 PM", "Midday · 1–3 PM", "Afternoon · 3–6 PM"];
   // guests leave Udaipur on 18 or 19 December; return pickups follow the same two days
-  const LEAVE_DATES = ["18 Dec", "19 Dec"];
   const RET_DATES = ["18 Dec", "19 Dec"];
   const RET_SLOTS = ["Before 9 AM", "9 AM–12 PM", "12–3 PM", "At checkout time"];
-  const RET_DEST: [string, string][] = [["same", "Same as pickup address"], ["airport", "Udaipur airport, with me"], ["bom", "Mumbai airport arrival"], ["other", "A different address"]];
+  const RET_DEST: [string, string][] = [["same", "Same as pickup address"], ["other", "A different address"]];
+  const LIFTS = ["Lift available", "No lift (stairs)"];
   const CITIES = ["Mumbai", "Thane", "Navi Mumbai", "Other city"];
   const EVENT_CODE = "Y2K-WED";
 
@@ -64,71 +64,73 @@ export function initY2k(): () => void {
   function hashNum(s: string) { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
   const phoneOk = (p: any) => /^[6-9]\d{9}$/.test(String(p || "").replace(/\D/g, "").slice(-10)) && String(p).replace(/\D/g, "").length >= 10;
 
-  /* ---------- State ---------- */
-  function blankMember(n: number) { return { id: "G" + pad(n), name: "", phone: "", room: "", roomFromList: false, note: "", depDate: "19 Dec" }; }
+
+  /* ---------- State ----------
+   * Saved as wedding.state, the same shape BAGDROP OS, the printed tags and
+   * My bags read: members (G01…), pickups (P1…, each listing whose bags it
+   * collects) and bags (B01…, owner + pickup). The lead's pickup is P1; a
+   * member who is collected elsewhere gets a pickup of their own. */
+  function blankMember(n: number) { return { id: "G" + pad(n), name: "", phone: "", room: "", roomFromList: false, note: "", depDate: "19 Dec", ownAddr: false }; }
   function blankPickup(n: number) { return { id: "P" + n, label: n === 1 ? "Home" : "", city: "Mumbai", address: "", pincode: "", landmark: "", lift: "Lift available", contact: "", contactPhone: "", window: "early", date: "", slot: "", members: [] as string[] }; }
+  function blankBag(n: number, type: string, owner: string, pickup: string) {
+    return { id: "B" + pad(n), type, owner, pickup, colour: "", colourPick: "", mark: "", weight: WEIGHTS[type]?.[type === "large" ? 1 : 0] ?? "", contents: "Family luggage",
+      deliverTo: "room", value: "", hang: false, fragile: false, ret: false, retDate: "", retSlot: "", retDest: "same", retAddress: "" };
+  }
   function fresh(): any {
+    const p1 = blankPickup(1); p1.members = ["G01"];
     return { family: { phone: "", lead: "", email: "", side: "", familyName: "" },
-      members: [blankMember(1)], pickups: [blankPickup(1)], bags: [] as any[], extraReturn: "0", retSameRoom: "room", notes: "",
+      members: [blankMember(1)], pickups: [p1], bags: [] as any[], extraReturn: "0", retSameRoom: "room", notes: "",
+      ret: { date: "", slot: "", dest: "same", address: "" },
       decl: { items: false, value: false, terms: false, consent: false }, seq: { g: 1, p: 1, b: 0 } };
   }
   let S: any = fresh();
-  let step = 0, maxStep = 0, showErrors = false;
+  let tab = 0, showErrors = false, review = false;
   let booking: any = null;     /* saved booking document (the desk's own view) */
   let mode = "form";           /* form | done */
   let isEditor = false;
   let opsDocs: any[] = [];
   let opsRaw: Record<string, Booking> = {};
+  let opsBusy = false; // a stage change is saving: the 5-second refresh waits
+  let opsRefresh: () => Promise<void> = async () => {};
   let opsLocked = false;
 
+
   /* ---------- Validation ---------- */
-  function errs(s: number) {
+  const pickupOf = (m: any) => S.pickups.find((p: any) => p.members.includes(m.id)) || S.pickups[0];
+  const leadReady = () => !!S.family.lead.trim() && phoneOk(S.family.phone);
+  function errs(t: number) {
     const e: Record<string, string> = {};
-    if (s === 0) {
+    if (t === 0) {
+      if (!S.family.lead.trim()) e["family.lead"] = "Enter your name.";
       if (!phoneOk(S.family.phone)) e["family.phone"] = "Enter a 10-digit Indian mobile number.";
-      if (!S.family.lead.trim()) e["family.lead"] = "Enter the name of the person booking.";
-      if (!S.family.side) e["family.side"] = "Choose bride's side or groom's side.";
       if (S.family.email && !/^\S+@\S+\.\S+$/.test(S.family.email)) e["family.email"] = "Check the email address.";
-    }
-    if (s === 1) {
-      S.members.forEach((m: any, i: number) => {
-        if (!m.name.trim()) e[`members.${i}.name`] = "Add a name.";
-        if (m.phone && !phoneOk(m.phone)) e[`members.${i}.phone`] = "10-digit mobile, or leave blank.";
-        if (!LEAVE_DATES.includes(m.depDate)) e[`members.${i}.depDate`] = "Choose 18 or 19 December.";
-      });
-    }
-    if (s === 2) {
+      if (!S.family.side) e["family.side"] = "Choose bride's side or groom's side.";
       S.pickups.forEach((p: any, i: number) => {
+        if (!p.members.length) return; // an address nobody is collected from is skipped
         if (p.city === "Other city") e[`pickups.${i}.city`] = "We pick up in Mumbai, Thane and Navi Mumbai. Book anyway and we'll confirm on WhatsApp.";
         if (!p.address.trim()) e[`pickups.${i}.address`] = "Add the full address.";
         if (!/^\d{6}$/.test(p.pincode)) e[`pickups.${i}.pincode`] = "6-digit pincode.";
         if (!p.date) e[`pickups.${i}.date`] = "Choose a date.";
-        if (!p.slot) e[`pickups.${i}.slot`] = "Choose a time slot.";
-        if (!p.members.length) e[`pickups.${i}.members`] = "Tick whose bags are collected here.";
-        if (p.contactPhone && !phoneOk(p.contactPhone)) e[`pickups.${i}.contactPhone`] = "10-digit mobile.";
+        if (!p.slot) e[`pickups.${i}.slot`] = "Choose a time.";
       });
-    }
-    if (s === 3) {
+      S.members.forEach((m: any, i: number) => { if (i > 0 && !m.name.trim()) e[`members.${i}.name`] = "Add their name."; });
       if (!S.bags.length) e["bags"] = "Add at least one bag.";
       S.bags.forEach((b: any, i: number) => {
-        if (!b.owner) e[`bags.${i}.owner`] = "Whose bag is this?";
-        if (!b.pickup) e[`bags.${i}.pickup`] = "Where do we collect it?";
-        if (!b.colour) e[`bags.${i}.colour`] = "Pick the closest colour.";
-        if (b.contents === "Bridal / groom outfits" && !(+b.value > 0)) e[`bags.${i}.value`] = "Declare a value for outfits.";
+        if (!b.type) e[`bags.${i}.type`] = "Small or large?";
+        if (b.colourPick === OTHER && !b.colour.trim()) e[`bags.${i}.colour`] = "Type the colour.";
+        if (b.value && !(+b.value >= 0)) e[`bags.${i}.value`] = "Amount in rupees.";
       });
     }
-    if (s === 4) {
-      S.bags.forEach((b: any, i: number) => { if (!b.ret) return;
-        if (!b.retDate) e[`bags.${i}.retDate`] = "Date";
-        if (!b.retSlot) e[`bags.${i}.retSlot`] = "Time";
-        if (b.retDest === "other" && !b.retAddress.trim()) e[`bags.${i}.retAddress`] = "Add the return address.";
-      });
+    if (t === 1 && S.bags.some((b: any) => b.ret)) {
+      if (!S.ret.date) e["ret.date"] = "Choose 18 or 19 December.";
+      if (!S.ret.slot) e["ret.slot"] = "Choose a time.";
+      if (S.ret.dest === "other" && !S.ret.address.trim()) e["ret.address"] = "Add the return address with pincode.";
     }
-    if (s === 5) { for (const k of ["items", "value", "terms", "consent"]) if (!S.decl[k]) e["decl." + k] = "Required"; }
+    if (t === 2) { for (const k of ["items", "value", "terms", "consent"]) if (!S.decl[k]) e["decl." + k] = "Required"; }
     return e;
   }
   const softErr = (k: string) => k.endsWith(".city");
-  function stepValid(s: number) { const e = errs(s); return Object.keys(e).filter((k) => !softErr(k)).length === 0; }
+  function tabValid(t: number) { const e = errs(t); return Object.keys(e).filter((k) => !softErr(k)).length === 0; }
 
   /* ---------- Field builders ---------- */
   let E: Record<string, string> = {};
@@ -148,142 +150,123 @@ export function initY2k(): () => void {
   ${o.hint ? `<span class="hint">${o.hint}</span>` : ""}${err(k)}</label>`;
   }
   function memberName(id: string) { const m = S.members.find((x: any) => x.id === id); return m ? (m.name || m.id) : "—"; }
-  function memberRoom(id: string) { const m = S.members.find((x: any) => x.id === id); return m && m.room ? m.room : ""; }
   function tagId(b: any) { const fam = bookingCode(); return `${fam}-${b.owner || "G??"}-${b.id}`; }
   function bookingCode() { return booking ? booking.bookingId : ("Y2K-F" + String(hashNum(S.family.phone || "x") % 9000 + 1000)); }
 
-  /* ---------- Step renderers ---------- */
-  function rStep0() {
-    const f = S.family;
-    return `<h3 class="ph">Who's booking?</h3><p class="psub">Start with the lead guest. You can add family members, pickups and bags in the next steps.</p>
+
+  /* ---------- Tabs ---------- */
+  function sideSeg() {
+    return `<div class="f full${bad("family.side")}"><span class="lab">Which side are you with?</span>
+    <div class="seg" style="margin-top:7px">${[["bride", "Bride's side"], ["groom", "Groom's side"]].map(([v, t]) => `<label><input type="radio" name="side" data-b="family.side" data-re="1" value="${v}"${S.family.side === v ? " checked" : ""}><span>${t}</span></label>`).join("")}</div>${err("family.side")}</div>`;
+  }
+  function addressBlock(pi: number, who: string) {
+    const p = S.pickups[pi];
+    return `<div class="grid">
+      ${inp(`pickups.${pi}.address`, `${who} address`, { full: true, ph: "Flat, building, street, area", ac: "street-address" })}
+      ${sel(`pickups.${pi}.city`, "City", CITIES)}
+      ${inp(`pickups.${pi}.pincode`, "Pincode", { im: "numeric", max: 6, ac: "postal-code" })}
+      ${sel(`pickups.${pi}.lift`, "Lift in the building", LIFTS, { hint: p.lift === LIFTS[1] ? "Our agent carries the bags down. Tell us the floor in the note if it is above the 3rd." : "" })}
+      ${inp(`pickups.${pi}.landmark`, "Landmark", { opt: true, ph: "Near…" })}
+      ${sel(`pickups.${pi}.date`, "Pickup date", PICK_DATES, { ph: "Choose a date" })}
+      ${sel(`pickups.${pi}.slot`, "Pickup time", SLOTS, { ph: "Choose a time" })}
+    </div>`;
+  }
+  function bagCard(b: any, i: number) {
+    const sizes = BAG_TYPES.slice(0, 2);
+    return `<div class="item bag"${bad(`bags.${i}.type`) ? ' style="border-color:var(--err)"' : ""}>
+    <div class="top"><h4>Bag ${i + 1}</h4><div style="display:flex;gap:10px;align-items:center"><span class="idchip">${esc(tagId(b))}</span><button class="x" type="button" data-act="rmBag" data-i="${i}">Remove</button></div></div>
+    <div class="f full"><span class="lab">Size</span>
+      <div class="seg" style="margin-top:7px">${sizes.map(([k, t]) => `<label><input type="radio" name="size${i}" data-b="bags.${i}.type" data-re="1" value="${k}"${b.type === k ? " checked" : ""}><span>${t}</span></label>`).join("")}</div>${err(`bags.${i}.type`)}</div>
+    <div class="grid">
+      ${sel(`bags.${i}.weight`, "Weight", WEIGHTS[b.type] ?? WEIGHTS.small)}
+      ${sel(`bags.${i}.colourPick`, "Colour", [...COLOURS, OTHER], { opt: true, ph: "Choose a colour", re: 1 })}
+      ${b.colourPick === OTHER ? inp(`bags.${i}.colour`, "Which colour?", { ph: "e.g. Teal with brown trim" }) : ""}
+      ${inp(`bags.${i}.mark`, "Brand", { opt: true, ph: "e.g. American Tourister" })}
+      ${inp(`bags.${i}.value`, "Declared value (Rs.)", { type: "number", im: "numeric", opt: true, ph: "For insurance, if you wish" })}
+    </div></div>`;
+  }
+  function bagsFor(owner: string) {
+    const list = S.bags.map((b: any, i: number) => [b, i]).filter(([b]: any) => b.owner === owner);
+    return `${list.map(([b, i]: any) => bagCard(b, i)).join("")}
+    <div class="adders" style="margin:${list.length ? 14 : 4}px 0 0"><button type="button" data-act="addBag" data-o="${owner}">+ Add a bag</button></div>`;
+  }
+  function rBooking() {
+    const ready = leadReady();
+    return `<h3 class="ph">Book your pickup</h3><p class="psub">Your details once, then a bag at a time. Family members with bags go below — no need to repeat your number.</p>
   <div class="grid">
-    ${inp("family.lead", "Lead guest name", { ph: "Full name", ac: "name" })}
-    ${inp("family.phone", "Mobile / WhatsApp", { type: "tel", im: "numeric", max: 13, ph: "10-digit number", ac: "tel" })}
-    ${inp("family.email", "Email", { type: "email", opt: true, ph: "your@email.com", ac: "email" })}
-    <div class="f full${bad("family.side")}"><span class="lab">You're a guest of</span>
-      <div class="seg" style="margin-top:7px">
-        <label><input type="radio" name="side" data-b="family.side" value="bride"${f.side === "bride" ? " checked" : ""}><span>Bride's side · Yashna</span></label>
-        <label><input type="radio" name="side" data-b="family.side" value="groom"${f.side === "groom" ? " checked" : ""}><span>Groom's side · Yash</span></label>
-      </div>${err("family.side")}</div>
-  </div>`;
-  }
-  function rStep1() {
-    return `<h3 class="ph">Who's travelling?</h3><p class="psub">Add everyone in your family who has bags, with their own room and the day they leave Udaipur.</p>
-  ${S.members.map((m: any, i: number) => `<div class="item">
-    <div class="top"><h4>${esc(m.name || "Traveller " + (i + 1))}</h4><div style="display:flex;gap:10px;align-items:center"><span class="idchip">${m.id}</span>${S.members.length > 1 ? `<button class="x" type="button" data-act="rmMember" data-i="${i}">Remove</button>` : ""}</div></div>
-    <div class="grid">
-      ${inp(`members.${i}.name`, "Full name", { ph: "As on ID" })}
-      ${inp(`members.${i}.phone`, "Mobile", { type: "tel", im: "numeric", opt: true, ph: "For their own bag updates" })}
-      ${m.roomFromList ? inp(`members.${i}.room`, "Room", { ro: true, hint: "From the host's rooming list" + (m.note ? " · " + esc(m.note) : "") })
-        : inp(`members.${i}.room`, "Room", { opt: true, ph: "Leave blank if not known", hint: m.room ? "" : "No room yet? We hold bags at the bell desk and move them when the room is assigned." })}
-      ${sel(`members.${i}.depDate`, "Leaves Udaipur", LEAVE_DATES)}
-    </div>${err(`members.${i}.depDate`)}
-  </div>`).join("")}
-  <div class="adders" style="margin-top:14px"><button type="button" data-act="addMember">+ Add family member</button></div>`;
-  }
-  function rStep2() {
-    return `<h3 class="ph">Where do we collect?</h3><p class="psub">Add one pickup point per address. Family members living apart can each have their own.</p>
-  ${S.pickups.map((p: any, i: number) => { const w = WINDOWS[p.window]; return `<div class="item">
-    <div class="top"><h4>${esc(p.label || "Pickup " + (i + 1))}</h4><div style="display:flex;gap:10px;align-items:center"><span class="idchip">${p.id}</span>${S.pickups.length > 1 ? `<button class="x" type="button" data-act="rmPickup" data-i="${i}">Remove</button>` : ""}</div></div>
-    <div class="grid">
-      ${inp(`pickups.${i}.label`, "Name this address", { opt: true, ph: "Home, Office, Nani's house" })}
-      ${sel(`pickups.${i}.city`, "City", CITIES, { re: 1 })}
-      ${showErrors && E[`pickups.${i}.city`] ? "" : (p.city === "Other city" ? `<div class="full callout warn">Pickups currently run in Mumbai, Thane and Navi Mumbai. Book anyway and our team will confirm what we can do on WhatsApp.</div>` : "")}
-      ${inp(`pickups.${i}.address`, "Full address", { full: true, ph: "Flat / house no., building, street, area" })}
-      ${inp(`pickups.${i}.pincode`, "Pincode", { im: "numeric", max: 6, ph: "400050" })}
-      ${inp(`pickups.${i}.landmark`, "Landmark", { opt: true, ph: "Near…" })}
-      ${sel(`pickups.${i}.lift`, "Access", ["Lift available", "Stairs only", "Ground floor / bungalow"])}
-      ${inp(`pickups.${i}.contact`, "Person handing over", { opt: true, ph: "Defaults to you" })}
-      ${inp(`pickups.${i}.contactPhone`, "Their mobile", { type: "tel", im: "numeric", opt: true })}
-      ${sel(`pickups.${i}.date`, "Date", w.dates, { ph: "Choose date" })}
-      ${sel(`pickups.${i}.slot`, "Time slot", SLOTS, { ph: "Select a slot" })}
-      <div class="f full${bad(`pickups.${i}.members`)}"><span class="lab">Whose bags are collected here</span>
-        <div class="seg" style="margin-top:7px">${S.members.map((m: any) => `<label><input type="checkbox" data-tg="pickups.${i}.members" value="${m.id}"${p.members.includes(m.id) ? " checked" : ""}><span>${esc(m.name || m.id)}</span></label>`).join("")}</div>
-        ${err(`pickups.${i}.members`)}</div>
-    </div>
-  </div>`; }).join("")}
-  <div class="adders" style="margin-top:14px"><button type="button" data-act="addPickup">+ Add another address</button></div>`;
-  }
-  function rStep3() {
-    const ownersFor = () => S.members.map((m: any) => [m.id, m.name || m.id]);
-    return `<h3 class="ph">Your bags</h3><p class="psub">Add each bag once. The colour and type print on its tag, so our team can match it at a glance among 300 others.</p>
-  <div class="adders">${BAG_TYPES.map(([k, t]) => `<button type="button" data-act="addBag" data-t="${k}">+ ${t}</button>`).join("")}</div>
+    ${inp("family.lead", "Your name", { ph: "Full name", ac: "name" })}
+    ${inp("family.phone", "Mobile", { type: "tel", im: "numeric", ph: "10-digit number", ac: "tel", hint: "Every update about these bags comes to this number on WhatsApp." })}
+    ${inp("family.email", "Email", { type: "email", opt: true, ph: "name@example.com", ac: "email" })}
+    ${sideSeg()}
+  </div>
+  <div class="lab" style="margin:26px 0 10px">Pickup address</div>
+  ${addressBlock(0, "Pickup")}
+  <div class="lab" style="margin:26px 0 10px">Your bags</div>
   ${showErrors && E.bags ? `<p class="msg">${E.bags}</p>` : ""}
-  ${!S.bags.length ? `<div class="callout">No bags yet. Tap a bag type above to add your first one.</div>` : ""}
-  ${S.bags.map((b: any, i: number) => { const t = BAG_TYPES.find((x) => x[0] === b.type); return `<div class="item">
-    <div class="top"><h4>${esc(t ? t[1] : "Bag")}</h4><div style="display:flex;gap:10px;align-items:center"><span class="idchip">${esc(tagId(b))}</span><button class="x" type="button" data-act="dupBag" data-i="${i}">Duplicate</button><button class="x" type="button" data-act="rmBag" data-i="${i}">Remove</button></div></div>
-    <div class="grid">
-      ${sel(`bags.${i}.owner`, "Belongs to", ownersFor(), { ph: "Choose person", re: 1 })}
-      ${sel(`bags.${i}.pickup`, "Collected from", S.pickups.map((p: any) => [p.id, (p.label || p.id) + (p.address ? " · " + p.address.slice(0, 28) : "")]), { ph: "Choose pickup", re: 1 })}
-      <div class="f full${bad(`bags.${i}.colour`)}"><span class="lab">Colour${b.colour ? ` <em>· ${esc(b.colour)}</em>` : ""}</span>
-        <div class="swatches" style="margin-top:7px">${COLOURS.map(([n, c]) => `<label title="${n}"><input type="radio" name="col${i}" data-b="bags.${i}.colour" data-re="1" value="${n}"${b.colour === n ? " checked" : ""}><i style="background:${c}"></i><span class="sr">${n}</span></label>`).join("")}</div>${err(`bags.${i}.colour`)}</div>
-      ${inp(`bags.${i}.mark`, "Brand or identifying mark", { opt: true, ph: "e.g. American Tourister, red ribbon on handle" })}
-      ${sel(`bags.${i}.weight`, "Approx. weight", WEIGHTS, { hint: b.weight === "Over 32 kg" ? "Bags over 32 kg need two handlers. We'll confirm on WhatsApp." : "" })}
-      ${sel(`bags.${i}.contents`, "What's inside", CONTENTS, { re: 1 })}
-      ${sel(`bags.${i}.deliverTo`, "Deliver to", DELIVER)}
-      ${inp(`bags.${i}.value`, "Declared value (Rs.)", { type: "number", im: "numeric", opt: b.contents !== "Bridal / groom outfits", ph: "e.g. 50000" })}
-      <div class="f"><span class="lab">Handling</span>
-        <label class="tick"><input type="checkbox" data-b="bags.${i}.hang"${b.hang ? " checked" : ""}> Keep hanging (no folding)</label>
-        <label class="tick"><input type="checkbox" data-b="bags.${i}.fragile"${b.fragile ? " checked" : ""}> Fragile</label>
-      </div>
-    </div>
-  </div>`; }).join("")}`;
+  ${bagsFor("G01")}
+  <div class="lab" style="margin:30px 0 10px">Family members with bags <em>· optional</em></div>
+  ${S.members.slice(1).map((m: any, k: number) => { const i = k + 1, pi = S.pickups.indexOf(pickupOf(m)); return `<div class="item member">
+    <div class="top"><h4>${esc(m.name || `Member ${i}`)}</h4><button class="x" type="button" data-act="rmMember" data-i="${i}">Remove</button></div>
+    <div class="grid">${inp(`members.${i}.name`, "Name", { ph: "Full name" })}
+      <label class="tick" style="align-self:end;padding-bottom:12px"><input type="checkbox" data-act-toggle="ownAddr" data-i="${i}"${m.ownAddr ? " checked" : ""}> Collected from a different address</label></div>
+    ${m.ownAddr && pi > 0 ? addressBlock(pi, "Their") : ""}
+    <div class="lab">${esc((m.name || "Their").split(" ")[0])}${m.name ? "'s" : ""} bags</div>
+    ${bagsFor(m.id)}
+  </div>`; }).join("")}
+  ${ready ? `<div class="adders"><button type="button" data-act="addMember">+ Add a family member</button></div>` : `<div class="callout">Fill in your name and mobile first, then add the family members whose bags we collect.</div>`}
+  ${inp("notes", "Anything we should know", { full: true, opt: true, ph: "Floor, gate instructions, a bag that needs extra care…" })}`;
   }
-  function rStep4() {
-    return `<h3 class="ph">Bringing bags home</h3><p class="psub">Choose for each bag. Bags you're carrying back yourself can be left off.</p>
-  ${!S.bags.length ? `<div class="callout">Add bags first.</div>` : `
-  <div class="adders"><button type="button" data-act="retAll">Return all bags to their pickup address</button><button type="button" data-act="retNone">I'll carry everything back</button></div>
-  <div>${S.bags.map((b: any, i: number) => `<div class="retrow">
-    <div><label class="tick"><input type="checkbox" data-b="bags.${i}.ret" data-re="1"${b.ret ? " checked" : ""}> <span><b>${esc(memberName(b.owner))}</b> · ${esc((BAG_TYPES.find((x) => x[0] === b.type) || [])[1] || "")}<br><span class="hint">${esc(b.colour || "")} · ${esc(tagId(b))}</span></span></label></div>
-    ${b.ret ? `
-    <select class="${bad(`bags.${i}.retDate`).trim()}" data-b="bags.${i}.retDate" aria-label="Return pickup date"><option value="">Pickup date</option>${RET_DATES.map((d) => `<option${b.retDate === d ? " selected" : ""}>${d}</option>`).join("")}</select>
-    <select class="${bad(`bags.${i}.retSlot`).trim()}" data-b="bags.${i}.retSlot" aria-label="Return pickup time"><option value="">Time</option>${RET_SLOTS.map((d) => `<option${b.retSlot === d ? " selected" : ""}>${d}</option>`).join("")}</select>
-    <select data-b="bags.${i}.retDest" data-re="1" aria-label="Deliver back to">${RET_DEST.map(([k, t]) => `<option value="${k}"${b.retDest === k ? " selected" : ""}>${t}</option>`).join("")}</select>
-    ${b.retDest === "other" ? `<div class="full" style="grid-column:1/-1">${inp(`bags.${i}.retAddress`, "Return address", { ph: "Full address with pincode" })}</div>` : ""}
-    ` : `<div class="hint" style="grid-column:span 3">Travelling back with the guest</div>`}
-  </div>`).join("")}</div>
-  <div class="grid" style="margin-top:20px">
-    ${sel("extraReturn", "Extra bags expected on return", [["0", "None"], ["1", "1 more"], ["2", "2 more"], ["3", "3 more"], ["4", "4 or more"]], { hint: "Gifts and shopping. We'll bring extra tags to your room." })}
-    ${sel("retSameRoom", "Collect return bags from", [["room", "Each guest's room"], ["bell", "Bell desk (we'll leave them there)"]])}
-  </div>`}`;
+  function rReturn() {
+    const p1 = S.pickups[0];
+    const on = S.bags.filter((b: any) => b.ret).length;
+    return `<h3 class="ph">Bringing bags home</h3><p class="psub">Tick the bags that come back from Udaipur. They keep the same tag code for the return, so nothing is re-labelled.</p>
+  ${!S.bags.length ? `<div class="callout">Add your bags on the Booking tab first.</div>` : `
+  <div class="adders"><button type="button" data-act="retAll">Return all ${S.bags.length} bags</button><button type="button" data-act="retNone">I'll carry everything back</button></div>
+  <div class="retlist">${S.bags.map((b: any, i: number) => `<label class="tick retline"><input type="checkbox" data-b="bags.${i}.ret" data-re="1"${b.ret ? " checked" : ""}>
+    <span><b>${esc(memberName(b.owner))}</b> · ${esc((BAG_TYPES.find((x) => x[0] === b.type) || [])[1] || "Bag")}${b.colour ? " · " + esc(b.colour) : ""}${b.mark ? " · " + esc(b.mark) : ""}<br><span class="hint" style="font-family:var(--mono)">${esc(tagId(b))}</span></span></label>`).join("")}</div>
+  ${on ? `<div class="lab" style="margin:26px 0 10px">Return pickup at the hotel</div>
+  <div class="grid">
+    ${sel("ret.date", "Pickup date", RET_DATES, { ph: "18 or 19 December" })}
+    ${sel("ret.slot", "Pickup time", RET_SLOTS, { ph: "Choose a time" })}
+    ${sel("ret.dest", "Deliver back to", RET_DEST, { re: 1, full: true, hint: S.ret.dest === "same" ? esc([p1.address, p1.city, p1.pincode].filter(Boolean).join(", ") || "Your pickup address from the Booking tab") : "" })}
+    ${S.ret.dest === "other" ? inp("ret.address", "Return address", { full: true, ph: "Full address with pincode" }) : ""}
+    ${sel("extraReturn", "Extra bags on the way back", [["0", "None"], ["1", "1 more"], ["2", "2 more"], ["3", "3 more"], ["4", "4 or more"]], { hint: "Gifts and shopping. We bring extra tags to your room." })}
+  </div>` : `<div class="callout">No return booked. ${S.bags.length} bag${S.bags.length > 1 ? "s" : ""} travel one way; you carry them back yourself.</div>`}`}`;
   }
-  function rStep5() {
-    return `<h3 class="ph">Check and confirm</h3><p class="psub">You'll get this summary on WhatsApp, with an edit link.</p>
-  <div class="lab" style="margin-bottom:8px">Travellers</div>
-  <div class="tbl-wrap"><table><thead><tr><th>Guest</th><th>Room</th><th>Leaves</th><th>Bags</th></tr></thead><tbody>
-  ${S.members.map((m: any) => `<tr><td>${esc(m.name)}</td><td>${m.room ? esc(m.room) : '<span class="hint">Bell desk until assigned</span>'}</td><td>${esc(m.depDate)}</td><td class="num">${S.bags.filter((b: any) => b.owner === m.id).length}</td></tr>`).join("")}
-  </tbody></table></div>
-  <div class="lab" style="margin:20px 0 8px">Pickups</div>
-  <div class="tbl-wrap"><table><thead><tr><th>Address</th><th>When</th><th>Bags</th></tr></thead><tbody>
-  ${S.pickups.map((p: any) => `<tr><td><b>${esc(p.label || p.id)}</b><br>${esc(p.address)}, ${esc(p.city)} ${esc(p.pincode)}</td><td>${esc(p.date)}<br><span class="hint">${esc(p.slot)}</span></td><td class="num">${S.bags.filter((b: any) => b.pickup === p.id).length}</td></tr>`).join("")}
+  function rReview() {
+    const ret = S.bags.filter((b: any) => b.ret);
+    return `<h3 class="ph">Check and confirm</h3><p class="psub">Everything our agent needs at your door. Go back to either tab to change anything.</p>
+  <div class="lab" style="margin:0 0 8px">Booking</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Who</th><th>Collected from</th><th>Bags</th></tr></thead><tbody>
+  ${S.members.map((m: any) => { const p = pickupOf(m); return `<tr><td>${esc(m.name)}${m.id === "G01" ? ` <span class="hint">${esc(S.family.phone)}</span>` : ""}</td><td>${esc(p.address)}, ${esc(p.city)} ${esc(p.pincode)}<br><span class="hint">${esc(p.date)} · ${esc(p.slot)} · ${esc(p.lift)}</span></td><td class="num">${S.bags.filter((b: any) => b.owner === m.id).length}</td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="lab" style="margin:20px 0 8px">Bags</div>
-  <div class="tbl-wrap"><table><thead><tr><th>Tag</th><th>Bag</th><th>Owner</th><th>Deliver to</th><th>Return</th></tr></thead><tbody>
-  ${S.bags.map((b: any) => `<tr><td style="font-family:var(--mono);font-size:12px">${esc(tagId(b))}</td><td>${esc(b.colour)} ${esc((BAG_TYPES.find((x) => x[0] === b.type) || [])[1])}${b.hang ? " · hang" : ""}${b.fragile ? " · fragile" : ""}</td><td>${esc(memberName(b.owner))}</td><td>${esc((DELIVER.find((d) => d[0] === b.deliverTo) || [])[1])}${b.deliverTo === "room" && memberRoom(b.owner) ? " " + esc(memberRoom(b.owner)) : ""}</td><td>${b.ret ? esc(b.retDate) + "<br><span class='hint'>" + esc((RET_DEST.find((d) => d[0] === b.retDest) || [])[1]) + "</span>" : "<span class='hint'>With guest</span>"}</td></tr>`).join("")}
+  <div class="tbl-wrap"><table><thead><tr><th>Tag</th><th>Bag</th><th>Owner</th><th>Return</th></tr></thead><tbody>
+  ${S.bags.map((b: any) => `<tr><td style="font-family:var(--mono);font-size:12px">${esc(tagId(b))}</td><td>${esc((BAG_TYPES.find((x) => x[0] === b.type) || [])[1])} · ${esc(b.weight)}${b.colour ? " · " + esc(b.colour) : ""}${b.mark ? " · " + esc(b.mark) : ""}${+b.value > 0 ? " · Rs. " + esc(b.value) : ""}</td><td>${esc(memberName(b.owner))}</td><td>${b.ret ? esc(S.ret.date) + "<br><span class='hint'>" + esc(S.ret.dest === "other" ? S.ret.address : "Same address") + "</span>" : "<span class='hint'>With guest</span>"}</td></tr>`).join("")}
   </tbody></table></div>
-  ${inp("notes", "Anything else we should know", { full: true, opt: true, ph: "Gate codes, building rules, elderly guests…" })}
-  <div class="callout" style="margin-top:20px"><div><b>What we carry:</b> bridal and groom outfits, wedding gifts and hampers, décor materials, return gift boxes and family luggage. <b>We don't carry</b> jewellery, cash, other valuables, liquids that can leak, or anything flammable.</div></div>
-  <div style="display:grid;gap:10px;margin-top:16px">
-    <label class="tick"><input type="checkbox" data-b="decl.items"${S.decl.items ? " checked" : ""}> None of my bags contain jewellery, cash, valuables or restricted items.</label>
-    <label class="tick"><input type="checkbox" data-b="decl.value"${S.decl.value ? " checked" : ""}> The declared values are correct. Undeclared items are covered up to the standard limit. <span class="proto">Prototype: limit to be set</span></label>
-    <label class="tick"><input type="checkbox" data-b="decl.terms"${S.decl.terms ? " checked" : ""}> I agree to Bagdrop's terms of carriage.</label>
-    <label class="tick"><input type="checkbox" data-b="decl.consent"${S.decl.consent ? " checked" : ""}> Bagdrop may use these addresses and travel details only to handle these bags, and delete them after the return delivery.</label>
-    ${showErrors && Object.keys(E).some((k) => k.startsWith("decl.")) ? `<span class="msg">Tick all four to confirm.</span>` : ""}
-  </div>`;
+  ${ret.length ? `<p class="hint" style="margin-top:8px">${ret.length} bag${ret.length > 1 ? "s" : ""} return on ${esc(S.ret.date)}, ${esc(S.ret.slot)}, with the same tags.</p>` : ""}
+  <div class="lab" style="margin:26px 0 10px">Declarations</div>
+  <div style="display:grid;gap:12px">
+    <label class="tick${bad("decl.items")}"><input type="checkbox" data-b="decl.items"${S.decl.items ? " checked" : ""}> None of my bags contain jewellery, cash, valuables or restricted items.</label>
+    <label class="tick${bad("decl.value")}"><input type="checkbox" data-b="decl.value"${S.decl.value ? " checked" : ""}> The declared values, where given, are accurate.</label>
+    <label class="tick${bad("decl.terms")}"><input type="checkbox" data-b="decl.terms"${S.decl.terms ? " checked" : ""}> I agree to Bagdrop's terms of carriage.</label>
+    <label class="tick${bad("decl.consent")}"><input type="checkbox" data-b="decl.consent"${S.decl.consent ? " checked" : ""}> Bagdrop may use these addresses and details only to handle these bags, and delete them after the return delivery.</label>
+  </div>${showErrors && Object.keys(E).some((k) => k.startsWith("decl.")) ? `<p class="msg" style="margin-top:10px">Please tick all four to confirm.</p>` : ""}`;
   }
-
   /* ---------- Render ---------- */
   function renderPanel() {
     const p = $("#panel")!;
     const sum = $("#summary"); if (sum) sum.hidden = closed && mode !== "done";
     if (closed && mode !== "done") { p.innerHTML = rClosed(); return; }
     if (mode === "done") { p.innerHTML = rDone(); drawTagCodes(p); renderSummary(); return; }
-    E = showErrors ? errs(step) : {};
-    const body = [rStep0, rStep1, rStep2, rStep3, rStep4, rStep5][step]();
-    p.innerHTML = `<ol class="stepper">${STEP_NAMES.map((n, i) => `<li class="${i < step ? "done" : i === step ? "cur" : ""}"><button type="button" data-go="${i}"${i > maxStep ? " disabled" : ""}><span>${i + 1}</span>${n}</button></li>`).join("")}</ol>
+    E = showErrors ? errs(review ? 2 : tab) : {};
+    const body = review ? rReview() : [rBooking, rReturn][tab]();
+    const retN = S.bags.filter((b: any) => b.ret).length;
+    p.innerHTML = `<div class="tabs" role="tablist">${TAB_NAMES.map((n, i) => `<button type="button" role="tab" data-tab="${i}" class="${!review && i === tab ? "cur" : ""}" aria-selected="${!review && i === tab}">${n}${i === 1 && retN ? ` <span class="num">${retN}</span>` : ""}</button>`).join("")}<button type="button" role="tab" data-tab="2" class="${review ? "cur" : ""}" aria-selected="${review}">Confirm</button></div>
   <form id="wiz" novalidate>${body}
-  <div class="navrow">${step > 0 ? `<button class="btn ghost" type="button" data-act="back">Back</button>` : "<span></span>"}
-  ${step < 5 ? `<button class="btn" type="submit">Continue</button>` : `<button class="btn" type="submit">Confirm booking</button>`}</div></form>`;
+  <div class="navrow">${review ? `<button class="btn ghost" type="button" data-tab="1">Back</button><button class="btn" type="submit">Confirm booking</button>`
+    : tab === 0 ? `<span></span><button class="btn" type="submit">Next: Return</button>`
+    : `<button class="btn ghost" type="button" data-tab="0">Back</button><button class="btn" type="submit">Review and confirm</button>`}</div></form>`;
     renderSummary();
   }
   function flagsFor(st: any) {
@@ -294,24 +277,24 @@ export function initY2k(): () => void {
     const hv = st.bags.filter((b: any) => +b.value >= 50000).length; if (hv) f.push(["w", `${hv} high-value bag${hv > 1 ? "s" : ""} declared`]);
     const heavy = st.bags.filter((b: any) => b.weight === "Over 32 kg").length; if (heavy) f.push(["w", `${heavy} bag${heavy > 1 ? "s" : ""} over 32 kg`]);
     if (st.pickups.some((p: any) => p.city === "Other city")) f.push(["w", "Pickup outside Mumbai region"]);
-    const early = st.pickups.some((p: any) => p.window === "early"); if (early && st.bags.some((b: any) => b.contents === "Bridal / groom outfits" && st.pickups.find((p: any) => p.id === b.pickup)?.window === "early")) f.push(["w", "Outfits on early pickup: away for 5+ days"]);
+    
     return f;
   }
   function renderSummary() {
     const st = mode === "done" && booking ? booking.state : S;
-    const rooms = [...new Set(st.members.map((m: any) => m.room).filter(Boolean))];
     const ret = st.bags.filter((b: any) => b.ret).length;
     const types: Record<string, number> = {}; st.bags.forEach((b: any) => { const t = (BAG_TYPES.find((x) => x[0] === b.type) || [])[1] as string; types[t] = (types[t] || 0) + 1; });
-    const fl = flagsFor(st);
+    const fl = flagsFor(st).filter((x) => !/without a room/.test(x[1])); // rooms are the hosts' job, not the guest's
+    const retDate = st.ret?.date || st.bags.find((b: any) => b.ret)?.retDate || "";
     $("#summary")!.innerHTML = `<div class="eyebrow">${mode === "done" ? "Booked" : "Your booking"}</div>
   <h4>${esc(st.family.familyName || st.family.lead || "New family booking")}</h4>
   ${st.family.side ? `<div><span class="pillside${st.family.side === "groom" ? " groom" : ""}">${st.family.side === "groom" ? "Groom's side" : "Bride's side"}</span></div>` : ""}
   <dl>
-    <dt>Travellers</dt><dd>${st.members.filter((m: any) => m.name).length || st.members.length}</dd>
-    <dt>Rooms</dt><dd>${rooms.length ? esc(rooms.join(", ")) : "—"}</dd>
-    <dt>Pickup points</dt><dd>${st.pickups.length}</dd>
+    <dt>People</dt><dd>${st.members.filter((m: any) => m.name).length || st.members.length}</dd>
+    <dt>Pickup addresses</dt><dd>${st.pickups.filter((p: any) => p.members?.length).length}</dd>
     <dt>Bags out</dt><dd>${st.bags.length}</dd>
     <dt>Bags back</dt><dd>${ret}${+st.extraReturn ? ` + ${st.extraReturn} extra` : ""}</dd>
+    ${ret && retDate ? `<dt>Return pickup</dt><dd>${esc(retDate)}</dd>` : ""}
   </dl>
   ${st.bags.length ? `<hr><dl>${Object.entries(types).map(([t, n]) => `<dt>${esc(t)}</dt><dd>${n}</dd>`).join("")}</dl>` : ""}
   ${fl.length ? `<hr><div class="flags">${fl.map(([c, t]) => `<div class="flag ${c}"><i></i>${esc(t)}</div>`).join("")}</div>` : `<hr><div class="flags"><div class="flag g"><i></i>Nothing needs attention</div></div>`}
@@ -381,7 +364,7 @@ export function initY2k(): () => void {
     lines.push("");
     st.members.forEach((m: any) => { const n = st.bags.filter((b: any) => b.owner === m.id).length; if (n) lines.push(`${m.name}: ${n} bag${n > 1 ? "s" : ""} → ${m.room ? "Room " + m.room : "bell desk until room is assigned"}`); });
     const r = st.bags.filter((b: any) => b.ret).length; lines.push("", `Return: ${r} bag${r !== 1 ? "s" : ""} from Taj Aravali${+st.extraReturn ? ` (+${st.extraReturn} extra expected)` : ""}.`);
-    lines.push("", "Our agent brings printed tags and seals each bag at your door. Edit until 24 hours before pickup.");
+    lines.push("", "Our agent brings printed tags and seals each bag at your door. Returning bags keep the same tag.");
     return lines.join("\n");
   }
 
@@ -413,9 +396,10 @@ export function initY2k(): () => void {
     let g = 0, bo = 0, br = 0, hang = 0, noRoom = 0;
     docs.forEach((d: any) => { const s = d.state; g += s.members.length; bo += s.bags.length; br += s.bags.filter((b: any) => b.ret).length + (+s.extraReturn || 0); hang += s.bags.filter((b: any) => b.hang).length; noRoom += s.members.filter((m: any) => !m.room).length; });
     $("#opsKpis")!.innerHTML = ([["Families", docs.length], ["Guests", g], ["Bags out", bo], ["Bags back", br], ["Hanging", hang], ["No room yet", noRoom]] as [string, number][]).map(([l, v]) => `<div class="kpi"><b>${v}</b><span>${l}</span></div>`).join("");
+    const openIds = new Set([...document.querySelectorAll<HTMLElement>("#opsList details[open]")].map((x) => x.dataset.id));
     const f = (document.querySelector('input[name=opsf]:checked') as HTMLInputElement | null)?.value || "all";
     const list = docs.filter((d: any) => f === "all" || (f === "flag" ? flagsFor(d.state).some((x) => x[0] === "w") : d.state.family.side === f));
-    $("#opsList")!.innerHTML = list.length ? list.map((d: any) => { const s = d.state, fl = flagsFor(s).filter((x) => x[0] === "w"); return `<details class="fam"><summary>
+    $("#opsList")!.innerHTML = list.length ? list.map((d: any) => { const s = d.state, fl = flagsFor(s).filter((x) => x[0] === "w"); return `<details class="fam" data-id="${esc(d._id)}"${openIds.has(d._id) ? " open" : ""}><summary>
     <span style="font-family:var(--mono);font-size:12px">${esc(d.bookingId)}</span><span><b>${esc(s.family.familyName || s.family.lead)}</b><br><span class="mini">${esc(s.family.phone)} · ${esc(s.pickups.map((p: any) => p.date).join(", "))}</span></span>
     <span><span class="pillside${s.family.side === "groom" ? " groom" : ""}">${s.family.side === "groom" ? "Groom" : "Bride"}</span></span><span class="num">${s.members.length}</span><span class="num">${s.bags.length}</span>
     <span class="mini">${fl.length ? esc(fl.map((x) => x[1]).join(" · ")) : "—"}</span></summary>
@@ -434,60 +418,84 @@ export function initY2k(): () => void {
       if (t.type === "tel") v = v.replace(/[^\d+]/g, "");
       setPath(S, t.dataset.b, v);
       onChange(t.dataset.b, v);
-      if (t.dataset.re || t.type === "radio" || (t.tagName === "SELECT" && t.dataset.re)) { renderPanel(); refocus(t); }
+      if (t.dataset.re || t.type === "radio") { renderPanel(); refocus(t); }
+      else if (/^(family\.(lead|phone)|members\.\d+\.name)$/.test(t.dataset.b)) { renderSummary(); liveLabel(t.dataset.b); }
       else renderSummary();
-    } else if (t.dataset.tg) {
-      const arr = getPath(S, t.dataset.tg); const i = arr.indexOf(t.value);
-      if (t.checked && i < 0) arr.push(t.value); if (!t.checked && i >= 0) arr.splice(i, 1); renderSummary();
     }
   }, { signal });
   document.addEventListener("change", (e) => {
     const t = e.target as any;
     if (t.name === "opsf") renderOps();
-    if (t.dataset && t.dataset.ops) void updateStatus(t.dataset.ops, t.dataset.tag, t.value);
+    if (t.dataset && t.dataset.ops) { opsBusy = true; t.blur(); void updateStatus(t.dataset.ops, t.dataset.tag, t.value); }
+    if (t.dataset && t.dataset.actToggle === "ownAddr") { toggleOwnAddr(+t.dataset.i, t.checked); renderPanel(); }
+    /* the add-member button appears once the lead's name and mobile are in */
+    if (t.dataset && (t.dataset.b === "family.lead" || t.dataset.b === "family.phone")) renderPanel();
   }, { signal });
   function refocus(t: any) { const id = t.id; if (id) { const n = document.getElementById(id); if (n && n !== t && t.type !== "radio") n.focus(); } }
+  /* a member's name is echoed in their card heading and bag list without a full redraw (which would steal focus) */
+  function liveLabel(path: string) {
+    const m = path.match(/^members\.(\d+)\.name$/); if (!m) return;
+    const card = document.querySelectorAll("#panel .item.member")[+m[1] - 1]; if (!card) return;
+    const name = S.members[+m[1]].name;
+    const h = card.querySelector("h4"); if (h) h.textContent = name || `Member ${m[1]}`;
+    const l = card.querySelector(":scope > .lab"); if (l) l.textContent = `${(name || "Their").split(" ")[0]}${name ? "'s" : ""} bags`;
+  }
   function onChange(path: string, v: any) {
-    /* Smart defaults */
-    const m = path.match(/^bags\.(\d+)\.contents$/);
-    if (m) { const b = S.bags[+m[1]]; if (v === "Bridal / groom outfits") { b.hang = true; } if (v === "Wedding gifts & hampers" || v === "Return gift boxes") { b.deliverTo = "host"; } if (v === "Décor material") { b.deliverTo = "decor"; } }
-    const o = path.match(/^bags\.(\d+)\.owner$/);
-    if (o) { const b = S.bags[+o[1]]; const p = S.pickups.find((p: any) => p.members.includes(v)); if (p && !b.pickup) b.pickup = p.id; }
-    const w = path.match(/^pickups\.(\d+)\.window$/); if (w) { S.pickups[+w[1]].date = ""; }
+    /* the person booking is member G01: their name and mobile are typed once, at the top */
+    if (path === "family.lead") S.members[0].name = v;
+    if (path === "family.phone") S.members[0].phone = v;
+    const c = path.match(/^bags\.(\d+)\.colourPick$/);
+    if (c) { const b = S.bags[+c[1]]; b.colour = v === OTHER ? "" : v; }
+    const t = path.match(/^bags\.(\d+)\.type$/);
+    if (t) { const b = S.bags[+t[1]]; if (!WEIGHTS[v]?.includes(b.weight)) b.weight = WEIGHTS[v]?.[v === "large" ? 1 : 0] ?? ""; }
+    const r = path.match(/^bags\.(\d+)\.ret$/);
+    if (r && v) { const b = S.bags[+r[1]]; b.retDest = S.ret.dest; }
+    if (path.startsWith("ret.")) syncReturn();
+  }
+  /* the family's one return choice is written onto every returning bag, the shape the tags and OS read */
+  function syncReturn() { S.bags.forEach((b: any) => { if (!b.ret) return; b.retDate = S.ret.date; b.retSlot = S.ret.slot; b.retDest = S.ret.dest; b.retAddress = S.ret.dest === "other" ? S.ret.address : ""; }); }
+  function toggleOwnAddr(i: number, on: boolean) {
+    const m = S.members[i]; m.ownAddr = on;
+    S.pickups.forEach((p: any) => { p.members = p.members.filter((x: string) => x !== m.id); });
+    let p: any;
+    if (on) { S.seq.p++; p = blankPickup(S.seq.p); p.label = m.name || p.id; S.pickups.push(p); }
+    else p = S.pickups[0];
+    p.members.push(m.id);
+    S.pickups = S.pickups.filter((x: any, k: number) => k === 0 || x.members.length); // drop an address nobody uses
+    S.bags.forEach((b: any) => { if (b.owner === m.id) b.pickup = p.id; });
   }
   document.addEventListener("click", (e) => {
-    const go = (e.target as HTMLElement).closest("[data-go]") as HTMLButtonElement | null; if (go && !go.disabled) { step = +go.dataset.go!; showErrors = false; renderPanel(); scrollPanel(); return; }
+    const tb = (e.target as HTMLElement).closest("[data-tab]") as HTMLButtonElement | null;
+    if (tb) { const n = +tb.dataset.tab!; if (n === 2) { if (!tabValid(0) || !tabValid(1)) { showErrors = true; tab = tabValid(0) ? 1 : 0; review = false; renderPanel(); scrollFirstBad(); return; } review = true; } else { review = false; tab = n; } showErrors = false; renderPanel(); scrollPanel(); return; }
     const a = (e.target as HTMLElement).closest("[data-act]") as HTMLElement | null; if (!a) return;
     const i = +(a.dataset.i ?? -1), act = a.dataset.act;
-    if (act === "addMember") { S.seq.g++; S.members.push(blankMember(S.seq.g)); }
-    if (act === "rmMember") { const id = S.members[i].id; S.members.splice(i, 1); S.pickups.forEach((p: any) => p.members = p.members.filter((x: string) => x !== id)); S.bags.forEach((b: any) => { if (b.owner === id) b.owner = ""; }); }
-    if (act === "addPickup") { S.seq.p++; const p = blankPickup(S.seq.p); S.pickups.push(p); }
-    if (act === "rmPickup") { const id = S.pickups[i].id; S.pickups.splice(i, 1); S.bags.forEach((b: any) => { if (b.pickup === id) b.pickup = ""; }); }
-    if (act === "addBag") { S.seq.b++; const owner = S.members.length === 1 ? S.members[0].id : ""; const pk = S.pickups.length === 1 ? S.pickups[0].id : (owner ? (S.pickups.find((p: any) => p.members.includes(owner)) || {}).id || "" : "");
-      const t = a.dataset.t!;
-      S.bags.push({ id: "B" + pad(S.seq.b), type: t, owner, pickup: pk, colour: "", mark: "", weight: t === "large" || t === "trunk" ? "20–32 kg" : t === "cabin" || t === "garment" ? "Under 10 kg" : "10–20 kg",
-        contents: t === "garment" ? "Bridal / groom outfits" : t === "gift" ? "Wedding gifts & hampers" : t === "decor" ? "Décor material" : "Family luggage",
-        deliverTo: t === "gift" ? "host" : t === "decor" ? "decor" : "room", value: "", hang: t === "garment", fragile: t === "gift" || t === "decor", ret: t !== "gift" && t !== "decor", retDate: "19 Dec", retSlot: "At checkout time", retDest: "same", retAddress: "" }); }
-    if (act === "dupBag") { S.seq.b++; const c = JSON.parse(JSON.stringify(S.bags[i])); c.id = "B" + pad(S.seq.b); S.bags.splice(i + 1, 0, c); }
+    if (act === "addMember") { S.seq.g++; const m = blankMember(S.seq.g); S.members.push(m); S.pickups[0].members.push(m.id); }
+    if (act === "rmMember") { const id = S.members[i].id; S.members.splice(i, 1); S.pickups.forEach((p: any) => p.members = p.members.filter((x: string) => x !== id)); S.pickups = S.pickups.filter((x: any, k: number) => k === 0 || x.members.length); S.bags = S.bags.filter((b: any) => b.owner !== id); }
+    if (act === "addBag") { S.seq.b++; const owner = a.dataset.o!; const m = S.members.find((x: any) => x.id === owner); const pk = (m ? pickupOf(m) : S.pickups[0]).id;
+      const last = [...S.bags].reverse().find((b: any) => b.owner === owner);
+      S.bags.push(blankBag(S.seq.b, last ? last.type : "large", owner, pk)); }
     if (act === "rmBag") { S.bags.splice(i, 1); }
-    if (act === "retAll") { S.bags.forEach((b: any) => { b.ret = true; b.retDest = "same"; b.retDate = b.retDate || "19 Dec"; b.retSlot = b.retSlot || "At checkout time"; }); }
-    if (act === "retNone") { S.bags.forEach((b: any) => b.ret = false); }
-    if (act === "back") { step--; showErrors = false; renderPanel(); scrollPanel(); return; }
+    if (act === "retAll") { S.bags.forEach((b: any) => { b.ret = true; }); if (!S.ret.date) S.ret.date = "19 Dec"; if (!S.ret.slot) S.ret.slot = "At checkout time"; syncReturn(); }
+    if (act === "retNone") { S.bags.forEach((b: any) => { b.ret = false; b.retDate = ""; b.retSlot = ""; }); }
     // guests cannot edit a saved booking; they start a new one (the team changes bookings in BAGDROP OS)
     if (act === "newBooking" && closed) { toast("Bookings are closed"); return; }
-    if (act === "newBooking") { booking = null; try { localStorage.removeItem("y2k-booking"); } catch {} S = fresh(); mode = "form"; step = 0; maxStep = 0; showErrors = false; renderPanel(); renderTrack(); scrollPanel(); return; }
+    if (act === "newBooking") { booking = null; try { localStorage.removeItem("y2k-booking"); } catch {} S = fresh(); mode = "form"; tab = 0; review = false; showErrors = false; renderPanel(); renderTrack(); scrollPanel(); return; }
     if (act === "copyWa") { const txt = $("#waText")!.textContent || ""; try { navigator.clipboard.writeText(txt).then(() => toast("Message copied"), () => selectWa()); } catch { selectWa(); } return; }
     renderPanel();
+    if (act === "addBag" || act === "addMember") { const items = document.querySelectorAll(act === "addBag" ? "#panel .item.bag" : "#panel .item.member"); const el = items[items.length - 1]; if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); (el.querySelector("input:not([type=radio]),select") as HTMLElement | null)?.focus(); } }
   }, { signal });
   function selectWa() { const r = document.createRange(); r.selectNodeContents($("#waText")!); const s = getSelection()!; s.removeAllRanges(); s.addRange(r); toast("Selected. Press copy on your keyboard."); }
   function scrollPanel() { $("#book")!.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
+  function scrollFirstBad() { const b = $("#panel .bad, #panel .msg"); if (b) b.scrollIntoView({ block: "center" }); }
   document.addEventListener("submit", (e) => {
     if ((e.target as HTMLElement).id !== "wiz") return; e.preventDefault();
-    if (!stepValid(step)) { showErrors = true; renderPanel(); const b = $("#panel .bad, #panel .msg"); if (b) b.scrollIntoView({ block: "center" }); return; }
-    showErrors = false;
-    if (step < 5) { step++; maxStep = Math.max(maxStep, step); renderPanel(); scrollPanel(); } else void confirmBooking();
+    const t = review ? 2 : tab;
+    if (!tabValid(t)) { showErrors = true; renderPanel(); scrollFirstBad(); return; }
+    showErrors = false; syncReturn();
+    if (review) { void confirmBooking(); return; }
+    if (tab === 0) { tab = 1; } else { review = true; }
+    renderPanel(); scrollPanel();
   }, { signal });
-
   /* ---------- Save ---------- */
   async function confirmBooking() {
     const btn = $('#wiz button[type=submit]') as HTMLButtonElement | null; if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
@@ -552,19 +560,30 @@ export function initY2k(): () => void {
     });
     unsubs.push(unsubMine);
   }
-  async function updateStatus(docId: string, tag: string, val: string) {
+  async function updateStatus(docId: string, tag: string, val: string, override = false): Promise<void> {
+    const bag = tag.split("-").slice(-1)[0];
     try {
-      const d: any = opsRaw[docId] ?? (await adminListBookings()).find((x) => x.id === docId); if (!d || !d.wedding) return;
-      d.wedding.bagStatus[tag] = val; d.wedding.updatedAt = new Date().toISOString();
-      d.events = (d.events || []).concat([{ at: d.wedding.updatedAt, by: "admin", text: "Bag " + tag.split("-").slice(-1)[0] + " → " + val + " (Y2K ops desk)" }]);
+      const d0: any = opsRaw[docId] ?? (await adminListBookings()).find((x) => x.id === docId); if (!d0 || !d0.wedding) { toast("Couldn't find that booking. Reload the page."); return; }
+      const d: any = JSON.parse(JSON.stringify(d0));
+      d.wedding.bagStatus = { ...(d.wedding.bagStatus || {}), [tag]: val }; d.wedding.updatedAt = new Date().toISOString();
+      d.events = (d.events || []).concat([{ at: d.wedding.updatedAt, by: "admin", text: "Bag " + bag + " → " + val + " (Y2K ops desk)" + (override ? " · Aadhaar override" : "") }]);
       const k = STAGES.indexOf(val);
       /* Booked, Picked up, At hub, In transit, At Taj, In room, Return pickup, Delivered home */
       if (k >= 1 && k <= 2 && ["submitted", "accepted", "assigned"].includes(d.status)) d.status = "picked_up";
       if (k === 3 || k === 4 || k === 6) d.status = "in_transit";
       if (k === 5 || k === 7) d.status = "delivered";
-      await adminSaveBooking(d);
-      toast(tag.split("-").slice(-1)[0] + " → " + val);
-    } catch { toast("Couldn't update. Check your access."); }
+      const saved: any = await adminSaveBooking(d, { overrideIdentityGate: override });
+      opsRaw[docId] = saved;
+      opsDocs = opsDocs.map((x: any) => x._id === docId ? { ...x, bagStatus: saved.wedding.bagStatus } : x);
+      toast(bag + " → " + val);
+    } catch (e: any) {
+      if (e?.code === "IDENTITY_NOT_VERIFIED") {
+        if (confirm(`${tag}: Aadhaar is not verified for this family yet.\n\nMark it "${val}" anyway? The override is recorded on the booking.`)) return updateStatus(docId, tag, val, true);
+        toast(bag + " kept as it was. Aadhaar pending.");
+      } else if (e?.code === "STALE") toast("That booking changed elsewhere. Refreshed, try again.");
+      else toast("Couldn't update: " + (e?.message || "check your access."));
+      await opsRefresh();
+    } finally { opsBusy = false; renderOps(); }
   }
 
   /* ---------- Countdown ---------- */
@@ -630,18 +649,22 @@ export function initY2k(): () => void {
   isEditor = new URLSearchParams(location.search).get("ops") === "1";
   if (isEditor) {
     const opsTick = async () => {
+      if (opsBusy || (document.activeElement as HTMLElement | null)?.closest?.("#opsList select")) return;
       try {
         const list = await adminListBookings();
         opsLocked = false;
         opsRaw = {};
         list.forEach((x: any) => { if (x.eventCode === EVENT_CODE && x.wedding) opsRaw[x.id] = x; });
-        opsDocs = Object.values(opsRaw).map((x: any) => Object.assign({ _id: x.id }, x.wedding));
+        // a half-saved booking may lack members/bags/pickups: default them so one bad row can't blank the whole manifest
+        opsDocs = Object.values(opsRaw).map((x: any) => { const w = Object.assign({ _id: x.id }, x.wedding); const st = w.state || {};
+          w.state = { ...st, family: st.family || {}, members: st.members || [], bags: st.bags || [], pickups: st.pickups || [] }; w.bookingId = w.bookingId || x.id; return w; });
         opsDocs.sort((a: any, b: any) => String(a.bookingId).localeCompare(b.bookingId));
       } catch {
         opsLocked = true;
       }
       renderOps();
     };
+    opsRefresh = async () => { opsBusy = false; await opsTick(); };
     void opsTick();
     timers.push(setInterval(() => void opsTick(), 5000));
     renderOps();

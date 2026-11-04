@@ -16,7 +16,7 @@ import { alertTeamOfGuestMessage } from "@/lib/weddingOpsHandler";
  *  admin, payment or identity fields. */
 
 const BAG_TYPE: Record<string, string> = {
-  large: "Large suitcase", medium: "Medium suitcase", cabin: "Cabin bag", garment: "Garment bag",
+  small: "Small bag", large: "Large bag", medium: "Medium suitcase", cabin: "Cabin bag", garment: "Garment bag",
   trunk: "Trunk / duffel", gift: "Gift / hamper box", decor: "Décor crate",
 };
 type DeskState = {
