@@ -237,7 +237,7 @@ input[readonly]{background:var(--line-2);color:var(--label)}
 .swatches i{display:block;width:28px;height:28px;border-radius:50%;border:2px solid var(--card);box-shadow:0 0 0 1px var(--line)}
 .swatches input:checked+i{box-shadow:0 0 0 2px var(--ink)}
 .swatches input:focus-visible+i{outline:2px solid var(--gold-2);outline-offset:2px}
-.callout{border-radius:14px;padding:14px 16px;font-size:14px;background:#F8F1E4;border:1px solid #EADBC0;color:#5B4A2E;display:flex;gap:10px}
+.callout{border-radius:14px;padding:14px 16px;font-size:14px;background:#F8F1E4;border:1px solid #EADBC0;color:#5B4A2E;display:flex;gap:10px;margin-bottom:16px}
 .callout.ok{background:#EEF2E8;border-color:#D4DEC8;color:#3C5230}
 .callout.warn{background:#FBEFDF;border-color:#EFD3A8;color:#6E4A12}
 .proto{display:inline-block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px dashed var(--warn);color:var(--warn);border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:middle;font-weight:600}
