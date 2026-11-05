@@ -14,6 +14,8 @@ import UpiPay, { type PayTo } from "@/components/UpiPay";
 import { pcsLabel } from "@/lib/opsModel";
 import OnlinePay from "@/components/OnlinePay";
 
+const FEE_PCT = Math.max(0, Number(process.env.NEXT_PUBLIC_RAZORPAY_CONVENIENCE_FEE_PCT) || 0);
+
 interface View {
   id: string; created: string; status: string;
   decision: { state: string; note?: string; at?: string };
@@ -225,12 +227,11 @@ function PaySection({ b, payTo, gateway, kind, amount, onChanged }: { b: View; p
       {kind === "topup" && <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900"><b>Extra bags added</b> — {inr(amount)} more to pay.</p>}
       {rejected && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Your last proof couldn&apos;t be verified:</b> {rejected}. Please check and upload again.</p>}
       {gateway && <OnlinePay bookingId={b.id} kind={kind} amount={amount} onPaid={onChanged} />}
-      {gateway ? (
-        <details className="rounded-xl border border-line p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Paid another way? Bank transfer or UPI to our account — share the proof</summary>
-          <div className="mt-3 grid gap-3"><ManualPay b={b} payTo={payTo} kind={kind} amount={amount} utr={utr} setUtr={setUtr} file={file} setFile={setFile} busy={busy} submit={submit} err={err} /></div>
-        </details>
-      ) : <ManualPay b={b} payTo={payTo} kind={kind} amount={amount} utr={utr} setUtr={setUtr} file={file} setFile={setFile} busy={busy} submit={submit} err={err} />}
+      {gateway && <p className="text-center text-xs font-semibold uppercase tracking-[0.14em] text-faint">or</p>}
+      <div className={gateway ? "rounded-xl border border-line p-3" : ""}>
+        {gateway && <p className="mb-2 text-sm font-semibold">Option 2 · Pay directly via UPI QR{FEE_PCT > 0 && <span className="font-normal text-green-700"> (no extra fee)</span>}</p>}
+        <div className="grid gap-3"><ManualPay b={b} payTo={payTo} kind={kind} amount={amount} utr={utr} setUtr={setUtr} file={file} setFile={setFile} busy={busy} submit={submit} err={err} /></div>
+      </div>
     </div>
   );
 }

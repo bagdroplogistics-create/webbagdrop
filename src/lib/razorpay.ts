@@ -55,8 +55,13 @@ export function verifyWebhook(rawBody: string, signature: string): boolean {
 }
 
 /** The order a booking is currently paying, kept on the booking so a payment
- *  can only ever settle the booking (and amount) it was created for. */
-export interface GatewayOrder { id: string; amount: number; kind: "full" | "topup"; at: string }
+ *  can only ever settle the booking (and amount) it was created for.
+ *  `amount` is the TOTAL actually charged (what Razorpay's order and the
+ *  customer's card/UPI app show) — `baseAmount`/`feeAmount` are its split,
+ *  so applyGatewayPayment can book the service price as revenue and the fee
+ *  separately, instead of conflating the two. feeAmount is 0 whenever the
+ *  convenience fee is switched off, so amount === baseAmount then. */
+export interface GatewayOrder { id: string; amount: number; baseAmount: number; feeAmount: number; kind: "full" | "topup"; at: string }
 export const gatewayOrderOf = (b: Booking): GatewayOrder | undefined => (b.admin as { rzpOrder?: GatewayOrder }).rzpOrder;
 
 /* ---------------- Payment Links ---------------- */
@@ -118,7 +123,7 @@ export function verifyPaymentLinkSignature(linkId: string, referenceId: string, 
  *  (idempotent replay). A SECOND full payment on an already-paid booking is
  *  never applied over the first: it is recorded for a refund and flagged. */
 export function applyGatewayPayment(b: Booking, p: {
-  paymentId: string; amountInr: number; kind: "full" | "topup"; method?: string;
+  paymentId: string; amountInr: number; baseAmountInr?: number; feeAmountInr?: number; kind: "full" | "topup"; method?: string;
   orderId?: string; linkId?: string; via: "checkout" | "webhook" | "payment link";
 }): { next: Booking; duplicate: boolean } | null {
   if ((b.pay?.history ?? []).some((h) => h.utr === p.paymentId)) return null;
@@ -128,6 +133,11 @@ export function applyGatewayPayment(b: Booking, p: {
   const now = new Date().toISOString();
   const gateway = `Razorpay${p.method ? ` · ${p.method}` : ""}`;
   const verifiedBy = `Razorpay (${p.via === "checkout" ? "signature + API" : p.via === "payment link" ? "payment link + API" : "webhook"})`;
+  /* baseAmountInr/feeAmountInr are only passed for the checkout/webhook
+   * paths that know the split (create-order computed it); a payment link
+   * never carries the convenience fee, so amountInr IS the base there. */
+  const baseAmt = p.baseAmountInr ?? p.amountInr;
+  const feeAmt = p.feeAmountInr ?? 0;
   const amt = `₹${p.amountInr.toLocaleString("en-IN")}`;
   const admin = { ...(b.admin as Record<string, unknown>) };
   if (p.orderId && gatewayOrderOf(b)?.id === p.orderId) delete admin.rzpOrder;
@@ -136,8 +146,8 @@ export function applyGatewayPayment(b: Booking, p: {
   if (p.kind === "topup" && b.pay?.status === "captured" && b.pay.topup) {
     return { duplicate: false, next: {
       ...b, admin,
-      pay: { ...b.pay, amount: b.pay.amount + p.amountInr, topup: null,
-        history: [...(b.pay.history ?? []), { at: now, amount: p.amountInr, kind: "topup", utr: p.paymentId, verifiedBy }] },
+      pay: { ...b.pay, amount: b.pay.amount + baseAmt, gatewayFee: (b.pay.gatewayFee ?? 0) + feeAmt, topup: null,
+        history: [...(b.pay.history ?? []), { at: now, amount: baseAmt, gatewayFee: feeAmt || undefined, kind: "topup", utr: p.paymentId, verifiedBy }] },
       events: [...b.events, { at: now, by: "customer", text: `Extra-bags payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
     } };
   }
@@ -150,9 +160,9 @@ export function applyGatewayPayment(b: Booking, p: {
   }
   return { duplicate: false, next: {
     ...b, admin,
-    pay: { mode: "full", amount: p.amountInr, status: "captured", gateway, at: now, utr: p.paymentId,
+    pay: { mode: "full", amount: baseAmt, gatewayFee: feeAmt || undefined, status: "captured", gateway, at: now, utr: p.paymentId,
       verifiedAt: now, verifiedBy, proof: null, submittedAt: null, rejectedNote: undefined,
-      history: [...(b.pay?.history ?? []), { at: now, amount: p.amountInr, kind: "full", utr: p.paymentId, verifiedBy }] },
-    events: [...b.events, { at: now, by: "customer", text: `Payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
+      history: [...(b.pay?.history ?? []), { at: now, amount: baseAmt, gatewayFee: feeAmt || undefined, kind: "full", utr: p.paymentId, verifiedBy }] },
+    events: [...b.events, { at: now, by: "customer", text: `Payment ${amt} paid online · ${gateway} · ${p.paymentId}${feeAmt ? ` (incl. ₹${feeAmt.toLocaleString("en-IN")} Razorpay convenience fee)` : ""}` }],
   } };
 }
