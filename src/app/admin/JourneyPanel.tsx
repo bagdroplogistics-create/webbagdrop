@@ -18,11 +18,12 @@ export async function lifecycle(id: string, action: "cancel" | "restore", reason
 }
 
 /** Undo an approval made by mistake — only while it's still safe (gated again,
- *  for real, on the server): no money captured and no LR/invoice/Estimate
- *  issued yet. Once any of those are real, this button is hidden — Cancel
- *  booking is the only way back from there. */
+ *  for real, on the server): no money captured and no LR/invoice issued yet.
+ *  The Estimate (PI) is auto-issued on every approval, so its presence alone
+ *  doesn't block this — only a real dispatch/financial document does. Once
+ *  one exists, this button is hidden — Cancel booking is the way back. */
 const canUnapprove = (b: Booking): boolean =>
-  b.status === "accepted" && !isPaid(b) && !b.pay && !(b.docs ?? []).some((d) => d.type === "LR" || d.type === "INV" || d.type === "PI");
+  b.status === "accepted" && !isPaid(b) && !b.pay && !(b.docs ?? []).some((d) => d.type === "LR" || d.type === "INV");
 
 export default function JourneyPanel({ b, compact = false, onChanged, onOpenOps }: {
   b: Booking; compact?: boolean; onChanged?: (b: Booking) => void; onOpenOps?: () => void;
