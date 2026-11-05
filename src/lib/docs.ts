@@ -2,10 +2,32 @@
  *  LR/trips and Finance. Doc numbers themselves come from the database's
  *  next_doc_no(type, fy) function (race-safe, see supabase/schema.sql) —
  *  call it via a service-role client, never generate numbers client-side. */
-import type { Booking } from "./types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Booking, DocType } from "./types";
 
 export const GST_RATE = 0.05;
 export const SAC = "9965";
+
+/** The one place that calls next_doc_no — race-safe, server-only (service
+ *  role). Returns the stored form, e.g. "PI/2026-27/0007"; both
+ *  src/app/api/admin/finance/doc/route.ts and the auto-estimate-on-accept
+ *  path in src/app/api/admin/decision/route.ts share this instead of each
+ *  inlining the RPC call. */
+export async function nextDocNo(sb: SupabaseClient, type: DocType, fy = financialYear()): Promise<string> {
+  const { data, error } = await sb.rpc("next_doc_no", { p_type: type, p_fy: fy });
+  if (error) throw error;
+  return String(data);
+}
+
+/** The "PI" doc type is stored and numbered exactly like every other
+ *  race-safe document (so Finance's existing invoice-numbering plumbing
+ *  never needs a second sequence) but the customer-facing document is an
+ *  "Estimate" — bagdrop.co's own live quotes are numbered "QT/…", not
+ *  "PI/…", so the stored number is reformatted for display only; the
+ *  underlying `doc.no` (what's actually unique/race-safe) never changes. */
+export function estimateDisplayNo(storedNo: string): string {
+  return storedNo.replace(/^PI\//, "QT/");
+}
 
 /** Apr–Mar Indian financial year string, e.g. "2026-27". */
 export function financialYear(d: Date = new Date()): string {

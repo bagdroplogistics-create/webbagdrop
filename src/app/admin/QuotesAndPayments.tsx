@@ -24,7 +24,9 @@ import { refreshBookings, watchAdminBookings } from "@/lib/adminApi";
 import { deskLock } from "@/lib/deskRules";
 import { isPaid } from "@/lib/payState";
 import { pcsLabel } from "@/lib/opsModel";
-import type { Booking, Mode, UseCase } from "@/lib/types";
+import { estimateDisplayNo } from "@/lib/docs";
+import DocumentView from "./DocumentView";
+import type { Booking, DocRecord, Mode, UseCase } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 
@@ -226,8 +228,10 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
   const [err, setErr] = useState<{ text: string; stale?: boolean } | null>(null);
   const [done, setDone] = useState("");
   const [saved, setSaved] = useState<Booking | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<DocRecord | null>(null);
 
   const booking = editing.kind === "booking" ? all.find((b) => b.id === editing.id) ?? null : null;
+  const estimateDoc = booking?.docs?.filter((d) => d.type === "PI").slice(-1)[0] ?? null;
   /* a paid booking that hasn't moved yet may still be changed: the chart
    * re-prices it and the difference becomes a top-up or a credit note */
   const amendable = !!booking && isPaid(booking) && ["accepted", "assigned"].includes(booking.status);
@@ -472,6 +476,13 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
               )}
             </div>
 
+            {booking && estimateDoc && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#EA580C]/30 bg-orange-50 p-3 text-sm">
+                <span>Estimate <b className="font-mono">{estimateDisplayNo(estimateDoc.no)}</b> — ready to send to the customer.</span>
+                <Button size="sm" variant="outline" onClick={() => setViewingDoc(estimateDoc)}>View / print</Button>
+              </div>
+            )}
+
             {isBooking && booking && amendable && (
               <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <p><b>Paid booking.</b> Change any detail above; the rate chart re-prices it. Price up: a top-up falls due and the client gets the link. Price down: a credit note is issued. The client is told either way.</p>
@@ -580,6 +591,7 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
             </div>
           )}
       </Card>
+      {viewingDoc && booking && <DocumentView booking={booking} doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
     </div>
   );
 }

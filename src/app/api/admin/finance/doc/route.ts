@@ -2,7 +2,7 @@ import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
-import { financialYear } from "@/lib/docs";
+import { nextDocNo } from "@/lib/docs";
 import type { Booking, DocType } from "@/lib/types";
 
 /** Generates one of the Finance module's documents against a booking —
@@ -28,8 +28,8 @@ async function handlePOST(req: Request) {
   if (!row) return NextResponse.json({ error: "BOOKING_NOT_FOUND" }, { status: 404 });
   let booking = row.doc as Booking;
 
-  const { data: no, error: noErr } = await sb.rpc("next_doc_no", { p_type: b.type, p_fy: financialYear() });
-  if (noErr) return NextResponse.json({ error: noErr.message }, { status: 500 });
+  let no: string;
+  try { no = await nextDocNo(sb, b.type); } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 }); }
 
   const nowIso = new Date().toISOString();
   let amount = b.amount ?? booking.pay?.amount ?? booking.quote.total;
