@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { ensurePaymentLink } from "@/lib/paymentLinks";
+import { publicOrigin } from "@/lib/siteOrigin";
 
 /** BAGDROP OS · get (or make) the Razorpay payment link for what a booking
  *  owes now — used by the Inbox's "WhatsApp payment details" and "Copy pay
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   try { b = await req.json(); } catch { return NextResponse.json({ error: "BAD_JSON" }, { status: 400 }); }
   if (!b.id) return NextResponse.json({ error: "MISSING_ID" }, { status: 400 });
 
-  const link = await ensurePaymentLink(sb, b.id, new URL(req.url).origin);
+  const link = await ensurePaymentLink(sb, b.id, publicOrigin(req));
   if ("error" in link) {
     const status = link.error === "NOT_FOUND" ? 404 : link.error === "GATEWAY_NOT_CONFIGURED" ? 503 : link.error === "GATEWAY_ERROR" ? 502 : 409;
     return NextResponse.json(link, { status });

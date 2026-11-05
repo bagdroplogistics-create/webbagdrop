@@ -13,6 +13,7 @@ import { clientView, loadPayConfig } from "@/lib/clientView";
 import type { Booking } from "@/lib/types";
 import { withAirportAddress } from "@/lib/airports";
 import { loadPocConfig } from "@/lib/airportServer";
+import { publicOrigin } from "@/lib/siteOrigin";
 import { carrierOf, parseFlightRef } from "@/lib/airportPoc";
 
 /** The ONLY way a homepage booking enters the system.
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
   await notifyInquiryDesk(summary, `${instant ? "Instant booking" : priced ? "New booking request" : "New sector inquiry"} · ${id} · ${fromName} → ${toName}`, `inq:${id}`);
   /* instant: a payment link too, so the WhatsApp/email acknowledgement can carry it */
   if (instant) {
-    const l = await ensurePaymentLink(sb, id, new URL(req.url).origin).catch((e) => ({ error: "EXCEPTION", detail: String(e) }));
+    const l = await ensurePaymentLink(sb, id, publicOrigin(req)).catch((e) => ({ error: "EXCEPTION", detail: String(e) }));
     /* not fatal: the customer can pay in the booking form / My bookings, and
      * the sweep retries the link before the WhatsApp acknowledgement */
     if ("error" in l) console.error(`[instant] payment link not created for ${id}: ${l.error} ${l.detail ?? ""}`);

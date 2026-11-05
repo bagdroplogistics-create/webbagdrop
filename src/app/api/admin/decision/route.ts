@@ -11,6 +11,7 @@ import { isHostBilled, isPaid } from "@/lib/payState";
 import { notify, kickSweep } from "@/lib/automation";
 import { dropPaymentLink, ensurePaymentLink } from "@/lib/paymentLinks";
 import { applyInquiryChanges, type InquiryChanges } from "@/lib/inquiryEdit";
+import { publicOrigin } from "@/lib/siteOrigin";
 import type { Booking } from "@/lib/types";
 
 /** Staff decision on a booking request — the gate between "inquiry" and
@@ -60,7 +61,7 @@ async function handlePOST(req: Request) {
     }
     if (r.changed.length) doc = { ...r.next, events: [...r.next.events, { at: now, by: "admin", text: `Details corrected by ${await actorName()} · ${r.changed.join("; ")}` }] };
   }
-  const origin = new URL(req.url).origin;
+  const origin = publicOrigin(req);
   const total = Math.round(Number(b.total) || 0);
   const hasPrice = !doc.quote.breakdown?.ror && doc.quote.total > 0;
   const hosted = isHostBilled(doc);

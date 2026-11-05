@@ -6,6 +6,7 @@ import { notify, kickSweep } from "@/lib/automation";
 import { normFleet, slotMinutes, type FleetSettings } from "@/lib/movesPlan";
 import type { Booking } from "@/lib/types";
 import { istToday } from "@/lib/services";
+import { publicOrigin } from "@/lib/siteOrigin";
 
 /** BAGDROP OS · Moves calendar — the writes behind the calendar.
  *   GET                       fleet settings (vehicle capacities, run window…)
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
     if (out.refusal) return NextResponse.json(out.refusal, { status: 409 });
     if (!next) return NextResponse.json({ error: "NOT_SAVED", detail: "The booking changed or couldn't be found — reload and try again." }, { status: 409 });
 
-    const origin = (process.env.SITE_URL || new URL(req.url).origin).replace(/\/$/, "");
+    const origin = publicOrigin(req);
     const when = `${pretty(b.date)}${b.leg === "pickup" && next.slot ? `, ${next.slot}` : ""}`;
     const sent = await notify("booking_rescheduled", { name: next.traveller.name, mobile: next.traveller.mobile, email: next.traveller.email }, {
       ref: next.id, lane: `${next.from} → ${next.to}`, leg: LEG_NAME[b.leg], when, was, note: reason, dashboard: `${origin}/account`,
