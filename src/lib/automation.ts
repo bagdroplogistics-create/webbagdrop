@@ -43,6 +43,7 @@ export interface OutboxDoc {
   name?: string;
   template?: string;
   text?: string;                // rendered body
+  html?: string;                // branded HTML body, for send.email only
   subject?: string;
   status: "queued" | "sending" | "done" | "dead";
   stub?: boolean;               // completed without a provider (link logged)
@@ -56,6 +57,42 @@ export interface OutboxDoc {
 /* ================= templates — the WhatsApp + email pairs ================= */
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 type T = { wa: (d: Record<string, string>) => string; subject: (d: Record<string, string>) => string };
+
+/** One shared branded wrapper every outgoing email uses, instead of the raw
+ *  WhatsApp text pasted as the whole email body. Same wording, same facts —
+ *  just a real HTML layout: orange masthead, the message as paragraphs,
+ *  every URL in it turned into a proper button instead of a pasted link.
+ *  Keeps one message per event (notify()) instead of a second HTML-only
+ *  copy of every template to maintain. */
+function emailHtml(text: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const urlRe = /(https?:\/\/\S+)/g;
+  const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : "Open link";
+  const body = text.split("\n").filter((l) => l.trim()).map((line) => {
+    const parts = line.split(urlRe);
+    const html = parts.map((part, i) => i % 2 === 1
+      ? `<a href="${esc(part)}" style="display:inline-block;margin:8px 0;padding:11px 22px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${buttonLabel(part)}</a>`
+      : esc(part)
+    ).join("");
+    return `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.6">${html}</p>`;
+  }).join("");
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3F0;padding:24px 0">
+<tr><td align="center">
+<table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+<tr><td style="background:#EA580C;padding:22px 28px">
+<div style="color:#ffffff;font-size:21px;font-weight:800;letter-spacing:.01em;font-family:Georgia,serif">BAGDROP</div>
+<div style="color:#ffffff;opacity:.9;font-size:10px;font-weight:600;letter-spacing:.15em;margin-top:3px">INDIA'S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</div>
+</td></tr>
+<tr><td style="padding:28px 28px 8px">${body}</td></tr>
+<tr><td style="padding:16px 28px 24px;border-top:1px solid #E7E2DC;color:#78716C;font-size:11px;line-height:1.6">
+${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot; ${esc(COMPANY.email)} &middot; ${esc(COMPANY.web)}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
 
 export const TEMPLATES: Record<string, T> = {
   inquiry_ack: {
@@ -319,7 +356,7 @@ export async function notify(template: string, to: { name: string; mobile?: stri
   const now = new Date().toISOString();
   const rows: OutboxDoc[] = [];
   if (to.mobile) rows.push({ kind: "send.wa", key: `${key}:wa`, to: to.mobile, name: to.name, template, text, status: "queued", attempts: 0, createdAt: now });
-  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
+  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
   return insertRows(rows);
 }
 
@@ -368,12 +405,12 @@ export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText
   return { stub: false };
 }
 
-export async function sendEmail(email: string, subject: string, text: string): Promise<{ stub: boolean; link?: string }> {
+export async function sendEmail(email: string, subject: string, text: string, html?: string): Promise<{ stub: boolean; link?: string }> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { stub: true, link: `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}` };
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM ?? "Bagdrop <updates@bagdrop.co>", to: [email], subject, text }),
+    body: JSON.stringify({ from: process.env.EMAIL_FROM ?? "Bagdrop <updates@bagdrop.co>", to: [email], subject, text, ...(html ? { html } : {}) }),
   });
   if (!r.ok) throw new Error(`EMAIL_${r.status}:${(await r.text()).slice(0, 200)}`);
   return { stub: false };
@@ -868,7 +905,7 @@ async function drainPass(stats: SweepStats, limit = 40) {
       const res = doc.kind === "send.wa"
         ? await sendWhatsApp(doc.to!, doc.text!)
         : doc.kind === "send.email"
-          ? await sendEmail(doc.to!, doc.subject ?? "Bagdrop update", doc.text!)
+          ? await sendEmail(doc.to!, doc.subject ?? "Bagdrop update", doc.text!, doc.html)
           : { stub: true as const };
       const done: OutboxDoc = { ...doc, status: "done", stub: res.stub, link: res.link, doneAt: new Date().toISOString() };
       await sb.from("outbox").upsert({ id: row.id, doc: done, status: "done", created: doc.createdAt });

@@ -4,6 +4,7 @@ import { actorCan, actorName, isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { inr } from "@/lib/pricing";
 import { notify, kickSweep } from "@/lib/automation";
+import { publicOrigin } from "@/lib/siteOrigin";
 import type { Booking } from "@/lib/types";
 
 /** Finance payment verification. A customer-submitted payment only becomes
@@ -42,7 +43,7 @@ async function handlePOST(req: Request) {
   const ref = (b.ref ?? "").trim().slice(0, 60);
   const now = new Date().toISOString();
   const to = { name: doc.traveller.name, mobile: doc.traveller.mobile, email: doc.traveller.email };
-  const origin = new URL(req.url).origin;
+  const origin = publicOrigin(req);
   let next: Booking;
 
   if (b.action === "verify") {
