@@ -874,7 +874,7 @@ function CostDesk({ model, onSaved }: { model: CostModel; onSaved: () => Promise
 /* ================= automation desk ================= */
 interface AutoData {
   counts: { queued: number; done: number; stubbed: number; dead: number };
-  recent: { kind: string; key: string; to?: string; template?: string; text?: string; status: string; stub?: boolean; link?: string; lastError?: string; createdAt: string }[];
+  recent: { kind: string; key: string; to?: string; template?: string; text?: string; status: string; stub?: boolean; link?: string; lastError?: string; createdAt: string; waStatus?: string; waError?: string }[];
   dead: AutoData["recent"];
   providers: { whatsapp: boolean; email: boolean; razorpay: boolean; cron: boolean };
   alerts?: { mobile?: string; email?: string };
@@ -971,6 +971,7 @@ function AutomationDesk() {
               <span className="font-mono text-[10.5px] text-faint">{new Date(e.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
               <span className="flex-1"><b>{e.template ?? e.kind}</b> <span className="text-muted">to {e.to ?? "—"} · {e.kind === "send.wa" ? "WhatsApp" : "email"}</span></span>
               <Badge tone={e.status === "done" ? "ok" : e.status === "dead" ? "bad" : "info"}>{e.status}{e.stub ? " · stub" : ""}</Badge>
+              {e.waStatus && <span title={e.waError}><Badge tone={e.waStatus === "failed" ? "bad" : e.waStatus === "read" || e.waStatus === "delivered" ? "ok" : "warn"}>on WhatsApp: {e.waStatus}</Badge></span>}
               {e.stub && e.link && <Button size="sm" variant="ghost" onClick={() => window.open(e.link, "_blank")}>Send manually</Button>}
             </div>
           ))}
