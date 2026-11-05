@@ -5,6 +5,7 @@
  *  back, wherever the team is looking at it. */
 import { useState } from "react";
 import { PHASES, cancelInfo, journeyOf } from "@/lib/journey";
+import { isPaid } from "@/lib/payState";
 import type { Booking } from "@/lib/types";
 import { Button, Input } from "@/components/ui";
 
@@ -15,6 +16,13 @@ export async function lifecycle(id: string, action: "cancel" | "restore", reason
   window.dispatchEvent(new Event("bagdrop:bookings-changed"));
   return { ok: true, booking: j.booking as Booking };
 }
+
+/** Undo an approval made by mistake — only while it's still safe (gated again,
+ *  for real, on the server): no money captured and no LR/invoice/Estimate
+ *  issued yet. Once any of those are real, this button is hidden — Cancel
+ *  booking is the only way back from there. */
+const canUnapprove = (b: Booking): boolean =>
+  b.status === "accepted" && !isPaid(b) && !b.pay && !(b.docs ?? []).some((d) => d.type === "LR" || d.type === "INV" || d.type === "PI");
 
 export default function JourneyPanel({ b, compact = false, onChanged, onOpenOps }: {
   b: Booking; compact?: boolean; onChanged?: (b: Booking) => void; onOpenOps?: () => void;
@@ -29,6 +37,16 @@ export default function JourneyPanel({ b, compact = false, onChanged, onOpenOps 
     setBusy(true); setErr("");
     try { const r = await lifecycle(b.id, action, reason); if (r.ok) { setCancelling(false); setReason(""); onChanged?.(r.booking); } else setErr(r.error); }
     finally { setBusy(false); }
+  };
+  const unapprove = async () => {
+    setBusy(true); setErr("");
+    try {
+      const r = await fetch("/api/admin/decision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: b.id, rev: b.rev, decision: "unapprove" }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(j.detail ?? j.error ?? `HTTP_${r.status}`); return; }
+      window.dispatchEvent(new Event("bagdrop:bookings-changed"));
+      onChanged?.(j.booking as Booking);
+    } finally { setBusy(false); }
   };
   const tone = j.closed === "cancelled" || j.closed === "declined" ? "var(--a-bad, #b91c1c)" : j.phase === 5 ? "var(--a-ok, #15803d)" : "var(--brand, #FD6201)";
   return (
@@ -56,6 +74,7 @@ export default function JourneyPanel({ b, compact = false, onChanged, onOpenOps 
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {b.status === "cancelled" && <Button size="sm" disabled={busy} onClick={() => void act("restore")}>Restore booking</Button>}
+        {canUnapprove(b) && !cancelling && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void unapprove()}>Back to needs decision</Button>}
         {b.status !== "cancelled" && b.status !== "delivered" && b.status !== "rejected" && !cancelling && (
           <Button size="sm" variant="ghost" onClick={() => setCancelling(true)}>Cancel booking</Button>
         )}
