@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { issueOtp, checkOtpLimited, cleanMobile, cleanEmail } from "@/lib/otp";
-import { sendWhatsApp, sendEmail } from "@/lib/automation";
+import { sendWhatsAppOtp, sendEmail } from "@/lib/automation";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
 import { serviceClient } from "@/lib/supabaseAdmin";
 
@@ -43,7 +43,7 @@ async function tryChannel(channel: "mobile" | "email", to: string): Promise<{ ok
   const text = `${code} is your Bagdrop verification code. Valid 10 minutes — never share it.`;
   try {
     if (channel === "mobile" && waDown()) throw new Error("WA_SIMULATED_DOWN");
-    const res = channel === "email" ? await sendEmail(to, `${code} is your Bagdrop code`, text) : await sendWhatsApp(to, text);
+    const res = channel === "email" ? await sendEmail(to, `${code} is your Bagdrop code`, text) : await sendWhatsAppOtp(to, code, text);
     if (res.stub && !DEMO_ALLOWED) return { ok: false, why: "not_configured" };
     return { ok: true, exp, token, ...(res.stub ? { demo: code } : {}) };
   } catch (e) {
