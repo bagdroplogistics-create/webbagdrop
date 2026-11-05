@@ -62,7 +62,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
         <div className="flex items-center justify-between bg-[#EA580C] px-5 py-2.5 text-white">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/logo-icon.png" alt="" className="h-9 w-auto" />
+            <img src="/images/logo-mark-white.png" alt="" className="h-9 w-auto" />
             <div className="font-display text-xl font-extrabold leading-tight">BAGDROP<span className="block text-[8px] font-semibold tracking-[0.2em]">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</span></div>
           </div>
           <div className="text-center">
@@ -582,7 +582,7 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
         <div className="flex items-start justify-between bg-[#EA580C] px-6 py-4 text-white">
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/logo-icon.png" alt="" className="mb-1 h-9 w-auto" />
+            <img src="/images/logo-mark-white.png" alt="" className="mb-1 h-9 w-auto" />
             <div className="font-display text-xl font-extrabold leading-tight">BAGDROP</div>
             <div className="text-[9px] font-semibold tracking-[0.2em] opacity-90">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</div>
           </div>
