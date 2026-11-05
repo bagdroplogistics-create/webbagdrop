@@ -195,7 +195,7 @@ export default function VerifyClient({ id }: { id: string }) {
                     </div>
                     {otpSent && (
                       <div className="mt-2 flex flex-wrap items-end gap-2">
-                        <Field label={`OTP sent to your Aadhaar-linked mobile${otpSent.demo ? ` (demo: ${otpSent.demo})` : ""}`}>
+                        <Field label={`OTP sent to your Aadhaar-linked mobile${otpSent.demo ? ` (your code: ${otpSent.demo})` : ""}`}>
                           <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="••••••" />
                         </Field>
                         <Button disabled={busy || otp.length !== 6 || !allTicked || signature.trim().length < 3} onClick={() => void signDomestic()}>{busy ? "Signing…" : "Sign the bond"}</Button>
@@ -233,7 +233,7 @@ export default function VerifyClient({ id }: { id: string }) {
                       <Button variant="outline" disabled={busy} onClick={() => void sendIntlOtp()}>{otpSent ? "Resend code" : "Send signing code"}</Button>
                       {otpSent && (
                         <>
-                          <Field label={`Code${otpSent.demo ? ` (demo: ${otpSent.demo})` : ""}`}><Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} /></Field>
+                          <Field label={`Code${otpSent.demo ? ` (your code: ${otpSent.demo})` : ""}`}><Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} /></Field>
                           <Button disabled={busy || otp.length !== 6 || !allTicked || signature.trim().length < 3} onClick={() => void signIntl()}>{busy ? "Signing…" : "Sign the bond"}</Button>
                         </>
                       )}
