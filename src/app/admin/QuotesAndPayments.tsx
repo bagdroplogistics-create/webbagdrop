@@ -477,9 +477,16 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
             </div>
 
             {booking && estimateDoc && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#EA580C]/30 bg-orange-50 p-3 text-sm">
-                <span>Estimate <b className="font-mono">{estimateDisplayNo(estimateDoc.no)}</b> — ready to send to the customer.</span>
-                <Button size="sm" variant="outline" onClick={() => setViewingDoc(estimateDoc)}>View / print</Button>
+              <div className="mb-4 rounded-xl border border-[#EA580C]/30 bg-orange-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>Estimate <b className="font-mono">{estimateDisplayNo(estimateDoc.no)}</b> — ready to send to the customer.</span>
+                  <Button size="sm" variant="outline" onClick={() => setViewingDoc(estimateDoc)}>View / print</Button>
+                </div>
+                {!amendable && (
+                  <p className="mt-2 text-xs text-stone-600">
+                    <b>Found a mistake?</b> Edit any field above (or set a Team price) and click &quot;Accept&quot; again — the same Estimate number is corrected in place and the change is logged on the booking.
+                  </p>
+                )}
               </div>
             )}
 
