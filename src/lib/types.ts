@@ -356,6 +356,9 @@ export interface DocRecord {
   no: string;
   at: string;
   amount: number;
+  /** who issued it — set for docs that aren't system-anonymous (e.g. the
+   *  staff member whose Accept finalized the price on a PI/estimate). */
+  by?: string;
 }
 
 /** A wedding/event inquiry — the `inquiries` table. There's no customer-

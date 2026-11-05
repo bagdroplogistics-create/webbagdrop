@@ -6,6 +6,7 @@ import { quotePayload, sign } from "@/lib/sign";
 import { inr, isChartPriced, quote } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";
 import { loadPayConfig, decisionOf } from "@/lib/clientView";
+import { nextDocNo } from "@/lib/docs";
 import { isHostBilled, isPaid } from "@/lib/payState";
 import { notify, kickSweep } from "@/lib/automation";
 import { dropPaymentLink, ensurePaymentLink } from "@/lib/paymentLinks";
@@ -125,6 +126,24 @@ async function handlePOST(req: Request) {
     }
     default:
       return NextResponse.json({ error: "BAD_DECISION" }, { status: 400 });
+  }
+
+  /* a priced, non-hosted approval gets its customer-ready Estimate (the "PI"
+   * doc type, displayed as "Estimate"/"QT-…") the moment the price is final
+   * — no separate "generate quote" click, matching how LR auto-issues on
+   * payment. Hosted families aren't billed, so there's nothing to quote
+   * them. Idempotent: skip if this booking already has one (a retried
+   * request, or approve firing twice some other way) so Accept never mints
+   * a second estimate number for the same booking. Never blocks the
+   * approval itself — a numbering hiccup here shouldn't stop the customer
+   * from being told they're approved. */
+  if (b.decision === "approve" && !hosted && next.quote.total > 0 && !(next.docs ?? []).some((d) => d.type === "PI")) {
+    try {
+      const estimateNo = await nextDocNo(sb, "PI");
+      next = { ...next, docs: [...(next.docs ?? []), { type: "PI", no: estimateNo, at: now, amount: next.quote.total, by: await actorName() }] };
+    } catch (e) {
+      console.error("Auto-estimate generation failed:", e instanceof Error ? e.message : e);
+    }
   }
 
   const prev = decisionOf(doc);

@@ -5,15 +5,17 @@
  *  amount) but had nothing to show for it. Not a port of the static
  *  build's print-window HTML verbatim, but the same information: company
  *  letterhead, customer/consignment details, GST breakup, doc-type terms. */
+import { useEffect, useMemo, useState } from "react";
+import qrcode from "qrcode-generator";
 import { useNow } from "@/lib/useNow";
-import { gstSplit, SAC } from "@/lib/docs";
+import { gstSplit, SAC, estimateDisplayNo } from "@/lib/docs";
 import { COMPANY, inrWords } from "@/lib/company";
 import { inr } from "@/lib/pricing";
 import { Button } from "@/components/ui";
 import type { BagdropEvent, Booking, DocRecord, DocType, HostInvoiceRecord } from "@/lib/types";
 
 const TITLES: Record<DocType, string> = {
-  PI: "Proforma Invoice", INV: "Tax Invoice", RCT: "Payment Receipt", CSH: "Cash Receipt",
+  PI: "Estimate", INV: "Tax Invoice", RCT: "Payment Receipt", CSH: "Cash Receipt",
   LR: "Lorry Receipt / Consignment Note", CV: "Credit Voucher", CN: "GST Credit Note",
   TR: "Trip Sheet", MF: "Manifest",
 };
@@ -490,11 +492,193 @@ export function HostInvoiceDoc({ event, inv, onClose }: { event: BagdropEvent; i
   );
 }
 
+/** The ten numbered terms every live bagdrop.co quote carries — kept as a
+ *  fixed constant rather than config, since these are legal boilerplate,
+ *  not something a desk should be able to accidentally edit. */
+const ESTIMATE_TERMS = [
+  "Booking Confirmation: All bookings are confirmed upon receipt of the total amount payable. A unique CN (Confirmation) number will be provided for your reference.",
+  "Total Amount Payable: The total amount payable for the baggage service is as per the policy.",
+  "Included Services: Only the services mentioned above in the Estimate shall be included and the company reserves all rights to Cancel at any point.",
+  "Prohibited Items: Luggage should not contain any items prohibited by the government or legal system. Alcohol and Illegal substance is strictly prohibited. All bags are processed through the Govt Screening processes.",
+  "Assistance and Queries: For any assistance or queries, clients can contact BAGDROP at 63 5711 5711 / 63 5733 5733 or via email at info@bagdrop.co",
+  "Payment Confirmation: Clients are requested to share a screenshot of the payment confirmation for booking verification.",
+  "Cancellation Policy: All Destinations: Cancellations must be made at least 7 days before the scheduled pick-up time to receive a full refund.",
+  "Liability: BAGDROP is not liable for any loss, damage, or theft of items during transportation. Clients are advised to secure valuable items and carry essential documents with them. No Illegal items and Alcohol shall be kept in the luggage bags given for Shipment.",
+  "The services are subject to availability at the time of booking. The rates may vary or change at any time without any prior Notice.",
+  "Terms Acceptance: Booking with BAGDROP implies acceptance of these terms and conditions. We appreciate your trust in BAGDROP for your baggage transportation needs.",
+];
+
+/** The customer-ready quotation — bagdrop.co's own live "QT-…" estimate
+ *  format, reproduced field-for-field from a real issued example. Internally
+ *  this is a "PI" doc (src/lib/types.ts's DocType) so it shares the same
+ *  race-safe next_doc_no() numbering Finance already uses for every other
+ *  document — estimateDisplayNo() only changes how the stored "PI/…" number
+ *  is PRINTED ("QT/…"), never what's actually stored/unique. Auto-issued the
+ *  moment a non-hosted inquiry is Accepted (src/app/api/admin/decision),
+ *  so there's no separate "generate quote" step. */
+function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord; onClose: () => void }) {
+  const [pay, setPay] = useState<{ upiId?: string; payeeName?: string; bankName?: string; accountName?: string; accountNo?: string; ifsc?: string } | null>(null);
+  useEffect(() => { void fetch("/api/payconfig").then((r) => r.json()).then((j) => setPay(j.config ?? {})).catch(() => setPay({})); }, []);
+
+  const split = gstSplit(b.quote.total || doc.amount);
+  const cgst = Math.round(split.gst / 2), sgst = split.gst - cgst;
+  const pcs = b.bags + b.oversize;
+  const dateStr = (s?: string | null) => s ? new Date(s).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  const pickupDate = b.pickupDate || b.date;
+
+  const upiUri = pay?.upiId ? `upi://pay?pa=${encodeURIComponent(pay.upiId)}&pn=${encodeURIComponent(pay.payeeName ?? "Bagdrop Logistics Solutions")}&am=${b.quote.total}&tn=${encodeURIComponent(estimateDisplayNo(doc.no))}&cu=INR` : "";
+  const qrSvg = useMemo(() => {
+    if (!upiUri) return "";
+    const qr = qrcode(0, "M");
+    qr.addData(upiUri);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 3, margin: 1, scalable: true });
+  }, [upiUri]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-2 lg:p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-[900px] bg-white shadow-2xl print:max-w-none print:shadow-none">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={() => window.print()}>Print / Download</Button>
+        </div>
+
+        {/* masthead */}
+        <div className="flex items-start justify-between bg-[#EA580C] px-6 py-4 text-white">
+          <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/logo-icon.png" alt="" className="mb-1 h-9 w-auto" />
+            <div className="font-display text-xl font-extrabold leading-tight">BAGDROP</div>
+            <div className="text-[9px] font-semibold tracking-[0.2em] opacity-90">INDIA&apos;S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] font-semibold tracking-[0.25em] opacity-90">ESTIMATE</div>
+            <div className="font-display text-lg font-extrabold">{estimateDisplayNo(doc.no)}</div>
+            <div className="text-[11px] opacity-90">{dateStr(doc.at)}</div>
+          </div>
+        </div>
+
+        {/* info strip */}
+        <div className="grid grid-cols-2 gap-2 bg-orange-50 px-6 py-2.5 text-[11px] sm:grid-cols-4">
+          <div><span className="block text-[9px] font-semibold uppercase tracking-wide text-stone-500">GSTIN</span><b>{COMPANY.gstin}</b></div>
+          <div><span className="block text-[9px] font-semibold uppercase tracking-wide text-stone-500">SAC code</span><b>{SAC}</b></div>
+          <div><span className="block text-[9px] font-semibold uppercase tracking-wide text-stone-500">Booking ref</span><b className="font-mono">{b.id}</b></div>
+          <div><span className="block text-[9px] font-semibold uppercase tracking-wide text-stone-500">Salesperson</span><b>{doc.by ?? "—"}</b></div>
+        </div>
+
+        <div className="px-6 py-4 text-[12px] text-stone-900">
+          <div className="mb-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-line bg-paper p-3">
+              <p className="mb-1 text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Bill to</p>
+              <p className="font-semibold">{b.traveller.title ? `${b.traveller.title} ` : ""}{b.traveller.name}</p>
+              <p className="text-stone-600">{b.traveller.mobile}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-paper p-3">
+              <p className="mb-1 text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Journey details</p>
+              <p><span className="text-stone-500">From</span> <b className="uppercase">{b.from}</b> → <span className="text-stone-500">To</span> <b className="uppercase">{b.to}</b></p>
+              <p className="text-stone-600">Pickup: {dateStr(pickupDate)}{b.deliveryDate ? ` · Delivery: ${dateStr(b.deliveryDate)}` : ""}</p>
+              <p className="text-stone-600">Bags: {pcs}</p>
+            </div>
+          </div>
+
+          <div className="mb-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-line bg-paper p-3">
+              <p className="mb-1 text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Pickup address</p>
+              <p className="text-stone-700">{b.pickAddr || b.from}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-paper p-3">
+              <p className="mb-1 text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Delivery address</p>
+              <p className="text-stone-700">{b.dropAddr || b.to}</p>
+            </div>
+          </div>
+
+          <p className="mb-3 border-l-2 border-[#EA580C] pl-2 text-[11px]"><b>Pick up date:</b> {dateStr(pickupDate)}</p>
+
+          <table className="mb-4 w-full text-[11px]">
+            <thead>
+              <tr className="bg-stone-900 text-left text-[10px] uppercase text-white">
+                <th className="px-2 py-1.5">#</th><th className="px-2 py-1.5">Description</th><th className="px-2 py-1.5 text-right">Qty</th><th className="px-2 py-1.5 text-right">Rate</th><th className="px-2 py-1.5">Tax</th><th className="px-2 py-1.5 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line">
+                <td className="px-2 py-1.5">1</td>
+                <td className="px-2 py-1.5">Transportation of Bags (Upto {pcs} Bags) — {b.from} → {b.to}</td>
+                <td className="px-2 py-1.5 text-right">{pcs}</td>
+                <td className="px-2 py-1.5 text-right">{inr(split.taxable)}</td>
+                <td className="px-2 py-1.5">GST 5%</td>
+                <td className="px-2 py-1.5 text-right">{inr(split.taxable)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-line p-3">
+              <p className="mb-2 text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Payment details</p>
+              {pay?.upiId ? (
+                <div className="flex items-start gap-3">
+                  <div className="grid gap-0.5 text-[11px]">
+                    {pay.bankName && <p><span className="text-stone-500">Bank:</span> <b>{pay.bankName}</b></p>}
+                    {pay.accountNo && <p><span className="text-stone-500">A/C No:</span> <b className="font-mono">{pay.accountNo}</b></p>}
+                    {pay.ifsc && <p><span className="text-stone-500">IFSC:</span> <b className="font-mono">{pay.ifsc}</b></p>}
+                    <p><span className="text-stone-500">UPI:</span> <b className="font-mono">{pay.upiId}</b></p>
+                  </div>
+                  {qrSvg && <div className="w-[80px] shrink-0 [&_svg]:h-auto [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: qrSvg }} />}
+                </div>
+              ) : <p className="text-[11px] text-stone-500">Payment details are being set up — our team will share them with you directly.</p>}
+            </div>
+            <div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  <tr><td className="py-0.5 text-stone-600">Sub Total</td><td className="py-0.5 text-right">{inr(split.taxable)}</td></tr>
+                  <tr><td className="py-0.5 text-stone-600">CGST @ 2.5%</td><td className="py-0.5 text-right">{inr(cgst)}</td></tr>
+                  <tr><td className="py-0.5 text-stone-600">SGST @ 2.5%</td><td className="py-0.5 text-right">{inr(sgst)}</td></tr>
+                  <tr className="border-t border-line"><td className="py-1 font-bold">Total Amount</td><td className="py-1 text-right font-display text-base font-extrabold text-[#EA580C]">{inr(split.taxable + cgst + sgst)}</td></tr>
+                </tbody>
+              </table>
+              <div className="mt-2 rounded-lg bg-amber-50 p-2">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-800">Amount in words</p>
+                <p className="text-[11px] italic text-amber-900">{inrWords(split.taxable + cgst + sgst)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-3 border-l-2 border-[#EA580C] pl-2">
+            <p className="text-[9.5px] font-semibold uppercase tracking-wide text-stone-500">Subject text</p>
+            <p className="text-[11px]">Transportation of Bags From {b.from} to {b.to}</p>
+          </div>
+
+          <div className="mb-4 rounded-xl bg-paper p-3 text-[9.5px] text-stone-600">
+            <p className="mb-1.5 font-semibold text-ink">Terms &amp; Conditions</p>
+            <ol className="grid list-decimal gap-x-4 gap-y-1 pl-4 sm:grid-cols-2">
+              {ESTIMATE_TERMS.map((t, i) => <li key={i} className="leading-snug">{t}</li>)}
+            </ol>
+          </div>
+
+          <div className="flex items-end justify-between border-t border-line pt-3 text-[10px] text-stone-500">
+            <div>
+              <p className="font-semibold text-ink">{COMPANY.name}</p>
+              <p>{COMPANY.address}</p>
+              <p>GSTIN: {COMPANY.gstin} · Tel: {COMPANY.phone} · {COMPANY.email} · {COMPANY.web}</p>
+            </div>
+            <div className="text-right">
+              <p className="mb-6">&nbsp;</p>
+              <p className="border-t border-stone-400 pt-1 font-semibold text-ink">Authorized Signatory</p>
+              <p>For {COMPANY.name}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DocumentView({ booking, doc, onClose }: { booking: Booking; doc: DocRecord; onClose: () => void }) {
   const isInvoiceLike = doc.type !== "LR" && doc.type !== "TR" && doc.type !== "MF";
   const split = isInvoiceLike ? gstSplit(doc.amount) : null;
 
   if (doc.type === "LR") return <LrNote booking={booking} doc={doc} onClose={onClose} />;
+  if (doc.type === "PI") return <EstimateDoc booking={booking} doc={doc} onClose={onClose} />;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
