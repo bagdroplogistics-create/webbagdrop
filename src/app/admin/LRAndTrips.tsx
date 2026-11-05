@@ -12,7 +12,8 @@ import { assignBookingToTrip, createTrip, patchTrip, unassignBooking, watchTrips
 import { CHARGE_HEADS, DELIVERY_AT, GST_PAYABLE, LR_TYPES, PAYMENT_TERMS, lrTotals, type ChargeKey } from "@/lib/lrModel";
 import { COMPANY } from "@/lib/company";
 import type { Booking, DocRecord, Trip, TripExpense } from "@/lib/types";
-import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, Select, TableFrame } from "@/components/ui";
+import { pcsLabel } from "@/lib/opsModel";
 import DocumentView, { BagLabelsDoc, OpsNoteDoc } from "./DocumentView";
 
 const VEHICLE_TYPES = ["Tata Ace", "Bolero pickup", "Eicher 14ft", "Eicher 17ft", "Tempo traveller", "Container"];
@@ -34,6 +35,7 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [viewingIssued, setViewingIssued] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
+  const [editingLr, setEditingLr] = useState<Booking | null>(null);
   const [opsNoteFor, setOpsNoteFor] = useState<Booking | null>(null);
   const [labelsFor, setLabelsFor] = useState<Booking | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
@@ -98,28 +100,42 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
       <Card>
         <h3 className="mb-2 font-display text-sm font-bold">Issued LRs <span className="font-normal text-faint">view or print any consignment note already issued</span></h3>
         {issuedBookings.length === 0 && <p className="py-2 text-center text-sm text-muted">No LRs issued yet.</p>}
-        <div className="grid gap-1.5">
-          {issuedBookings.map((b) => (
-            <div key={b.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-line pb-1.5 text-xs last:border-0">
-              <span className="min-w-0">
-                <b className="font-mono text-[11px]">{b.lr!.no}</b> · {b.id} · {b.traveller.name}
-                <span className="block text-muted">{b.from} → {b.to} · trip {trips.some((t) => t.id === b.lr!.trip) ? b.lr!.trip : `${b.lr!.trip} (removed)`}</span>
-              </span>
-              <span className="flex gap-1.5">
-                <Button size="sm" variant="outline" onClick={() => openIssued(b)}>View / Print LR</Button>
-                <Button size="sm" variant="outline" onClick={() => setOpsNoteFor(b)}>Ops Note</Button>
-                <Button size="sm" variant="outline" onClick={() => setLabelsFor(b)}>Bag Labels</Button>
-              </span>
-            </div>
-          ))}
-        </div>
+        {issuedBookings.length > 0 && (
+          <TableFrame maxHeight="22rem">
+            <table className="text-[13px]">
+              <thead><tr className="text-left"><th>LR</th><th>Booking</th><th>Consignee</th><th>Lane</th><th>Trip</th><th>Issued</th><th className="text-right">Documents</th></tr></thead>
+              <tbody>
+                {issuedBookings.map((b) => (
+                  <tr key={b.id}>
+                    <td className="font-mono text-xs">{b.lr!.no}</td>
+                    <td className="font-mono text-xs">{b.id}</td>
+                    <td>{b.traveller.name}</td>
+                    <td>{b.from} → {b.to}</td>
+                    <td className="font-mono text-xs">{trips.some((t) => t.id === b.lr!.trip) ? b.lr!.trip : `${b.lr!.trip} (removed)`}</td>
+                    <td className="text-xs text-muted">{new Date(b.lr!.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</td>
+                    <td className="text-right"><span className="inline-flex gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => openIssued(b)}>View / Print</Button>
+                      {b.status !== "delivered" && <Button size="sm" variant="outline" onClick={() => setEditingLr(editingLr?.id === b.id ? null : b)}>{editingLr?.id === b.id ? "Close" : "Edit LR"}</Button>}
+                      <Button size="sm" variant="ghost" onClick={() => setOpsNoteFor(b)}>Ops note</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setLabelsFor(b)}>Labels</Button>
+                    </span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableFrame>
+        )}
+        {editingLr && <MakeLr key={`edit-${editingLr.id}-${(editingLr.admin as { lrVersion?: number }).lrVersion ?? 1}`} b={editingLr} trips={trips} mode="edit" onIssued={(b) => { setBookings((p) => p.map((x) => (x.id === b.id ? b : x))); setEditingLr(null); }} onClose={() => setEditingLr(null)} />}
         {viewingIssued && <DocumentView booking={viewingIssued.booking} doc={viewingIssued.doc} onClose={() => setViewingIssued(null)} />}
         {opsNoteFor && <OpsNoteDoc booking={opsNoteFor} onClose={() => setOpsNoteFor(null)} />}
         {labelsFor && <BagLabelsDoc booking={labelsFor} onClose={() => setLabelsFor(null)} />}
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-        <div className="grid gap-5">
+      {/* THE LR DESK — confirmed consignments and the LR form take the whole width */}
+      <ReadyForLr bookings={readyForLr} trips={trips} onIssued={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))} />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        <div className="grid content-start gap-5">
           <Card>
             <h3 className="mb-3 font-display text-sm font-bold">Create a trip <span className="font-normal text-faint">one vehicle, one run</span></h3>
             <div className="grid gap-x-3 sm:grid-cols-2">
@@ -140,9 +156,11 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
             </div>
           </Card>
 
+        </div>
+        <div className="grid content-start gap-5">
           <Card>
             <h3 className="mb-3 font-display text-sm font-bold">Trips <Badge tone="ok">live</Badge></h3>
-            <div className="overflow-x-auto">
+            <TableFrame maxHeight="26rem">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
@@ -166,8 +184,11 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableFrame>
           </Card>
+        </div>
+      </div>
+      <div className="grid gap-5">
           {trip && (
             <TripDetail
               trip={trip}
@@ -177,10 +198,6 @@ export default function LRAndTrips({ search = "" }: { search?: string }) {
               onBookingChanged={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))}
             />
           )}
-        </div>
-
-        {/* RIGHT COLUMN — confirmed consignments: approve auto-drafts, or select manually */}
-        <ReadyForLr bookings={readyForLr} trips={trips} onIssued={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))} />
       </div>
     </div>
   );
@@ -214,6 +231,7 @@ function ReadyForLr({ bookings, trips, onIssued }: { bookings: Booking[]; trips:
 
   return (
     <div className="grid content-start gap-5">
+      <div className="grid gap-5 xl:grid-cols-2">
       <Card className="border-l-4 border-l-brand">
         <h3 className="mb-2 font-display text-sm font-bold">LRs awaiting approval <span className="font-normal text-faint">auto-drafted after 00:01 on the dispatch day — one click issues</span></h3>
         {err && <p className="mb-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
@@ -225,7 +243,7 @@ function ReadyForLr({ bookings, trips, onIssued }: { bookings: Booking[]; trips:
               <div key={b.id} className="anim-in rounded-xl border border-line bg-paper/50 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span><b className="font-mono text-[11px]">{b.id}</b> · {b.traveller.name} <Badge tone="warn">dispatch {b.date}</Badge></span>
-                  <span className="text-muted">{b.from} → {b.to} · {d.details?.pieces ?? b.bags + b.oversize} pcs{d.details?.declaredValue ? ` · ${inr(d.details.declaredValue)}` : ""}</span>
+                  <span className="text-muted">{b.from} → {b.to} · {d.details?.pieces != null && d.details.pieces !== b.bags + b.oversize ? `${d.details.pieces} pcs` : pcsLabel(b.bags, b.oversize)}{d.details?.declaredValue ? ` · ${inr(d.details.declaredValue)}` : ""}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-muted">Consignee {d.details?.consignee ?? b.traveller.name} · {d.details?.toAddr ?? b.to} · drafted {new Date(d.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
                 <div className="mt-2 flex gap-2">
@@ -246,7 +264,7 @@ function ReadyForLr({ bookings, trips, onIssued }: { bookings: Booking[]; trips:
             <div key={b.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-line pb-1.5 text-xs last:border-0">
               <span className="min-w-0">
                 <b className="font-mono text-[11px]">{b.id}</b> · {b.traveller.name}
-                <span className="block text-muted">{b.from} → {b.to} · {b.date || "date TBC"} · {b.bags + b.oversize} pcs{b.quote.total ? ` · ${inr(b.quote.total)}` : ""} · <Badge tone="ok">{b.status.replace("_", " ")}</Badge></span>
+                <span className="block text-muted">{b.from} → {b.to} · {b.date || "date TBC"} · {pcsLabel(b.bags, b.oversize)}{b.quote.total ? ` · ${inr(b.quote.total)}` : ""} · <Badge tone="ok">{b.status.replace("_", " ")}</Badge></span>
               </span>
               <Button size="sm" variant="outline" onClick={() => setMaking(making?.id === b.id ? null : b)}>{making?.id === b.id ? "Close" : "Make LR"}</Button>
             </div>
@@ -254,17 +272,20 @@ function ReadyForLr({ bookings, trips, onIssued }: { bookings: Booking[]; trips:
         </div>
       </Card>
 
+      </div>
       {making && <MakeLr key={making.id} b={making} trips={trips} onIssued={onIssued} onClose={() => setMaking(null)} />}
       {issued && <DocumentView booking={issued.booking} doc={issued.doc} onClose={() => setIssued(null)} />}
     </div>
   );
 }
 
-function MakeLr({ b, trips, onIssued, onClose }: { b: Booking; trips: Trip[]; onIssued: (b: Booking) => void; onClose: () => void }) {
+function MakeLr({ b, trips, onIssued, onClose, mode = "issue" }: { b: Booking; trips: Trip[]; onIssued: (b: Booking) => void; onClose: () => void; mode?: "issue" | "edit" }) {
   const openTrips = trips.filter((t) => t.status !== "completed");
+  const editing = mode === "edit";
+  const [reason, setReason] = useState("");
   /* every field of the official BDLR consignment note, PRE-FILLED — from the
    * auto-draft when one exists, else the confirmed booking — all editable */
-  const d = draftOf(b)?.details;
+  const d = editing ? ((b.admin as { lrDetails?: LrDetails }).lrDetails ?? {}) : draftOf(b)?.details;
   const opsTags = ((b.admin as { ops?: { tags?: string[] } }).ops?.tags ?? []).join(", ");
   const paid = b.pay?.status === "captured";
   const [f, setF] = useState({
@@ -316,12 +337,31 @@ function MakeLr({ b, trips, onIssued, onClose }: { b: Booking; trips: Trip[]; on
   async function issue() {
     setBusy(true); setErr(null);
     try {
+      if (editing) {
+        const lr = buildDetails();
+        const r = await fetch("/api/admin/lr", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: b.id, lr, reason }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
+        onIssued(j.booking as Booking);
+        return;
+      }
       let tripId = f.tripId;
       if (!tripId) {
         const t = await createTrip({ route: `${b.from} → ${b.to}`, date: b.date || new Date().toISOString().slice(0, 10), vehicle: newTrip.vehicle || f.vehicleNo, vehicleType: VEHICLE_TYPES[0], driver: newTrip.driver, driverMobile: newTrip.driverMobile });
         tripId = t.id;
       }
-      const lr: LrDetails = {
+      const lr = buildDetails();
+      const updated: Booking = await assignBookingToTrip(b.id, tripId, lr);
+      onIssued(updated);
+      const doc = updated.docs?.find((x) => x.type === "LR" && x.no === updated.lr?.no);
+      if (doc) setIssued({ booking: updated, doc }); else onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+  function buildDetails(): LrDetails {
+      return {
         consignor: f.consignor, consignorMobile: f.consignorMobile, consignorGstin: f.consignorGstin || undefined,
         consignee: f.consignee, consigneeMobile: f.consigneeMobile, consigneeGstin: f.consigneeGstin || undefined,
         billedTo: f.billedTo || undefined, billedToGstin: f.billedToGstin || undefined,
@@ -335,64 +375,56 @@ function MakeLr({ b, trips, onIssued, onClose }: { b: Booking; trips: Trip[]; on
         insured: f.insured, gstPayableBy: f.gstPayableBy, paymentTerms: f.paymentTerms, lrType: f.lrType, deliveryAt: f.deliveryAt,
         note: f.note || undefined,
       };
-      const updated: Booking = await assignBookingToTrip(b.id, tripId, lr);
-      onIssued(updated);
-      const doc = updated.docs?.find((x) => x.type === "LR" && x.no === updated.lr?.no);
-      if (doc) setIssued({ booking: updated, doc }); else onClose();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
   }
 
   return (
-    <div className="anim-in mt-3 rounded-xl border border-line bg-paper/60 p-4">
-      <h4 className="mb-1 font-display text-[13px] font-bold">LR for {b.id} <span className="font-normal text-faint">full consignment-note fields, pre-filled — adjust anything, then issue</span></h4>
+    <div className="anim-in rounded-xl border-2 border-brand/40 bg-white p-5" data-lr-form>
+      <h4 className="mb-1 font-display text-[15px] font-bold">{editing ? `Edit LR ${b.lr?.no} · ${b.id}` : `LR for ${b.id}`} <span className="font-normal text-faint">{editing ? `the number stays; every change is logged on the booking (version ${((b.admin as { lrVersion?: number }).lrVersion ?? 1) + 1} after save)` : "full consignment-note fields, pre-filled — adjust anything, then issue"}</span></h4>
 
       <p className={sec}>Consignor · Consignee · Billed to</p>
-      <div className="grid gap-x-3 sm:grid-cols-3">
-        <Field label="Consignor"><Input className="py-2 text-xs" value={f.consignor} onChange={(e) => setF({ ...f, consignor: e.target.value })} /></Field>
-        <Field label="Consignor mobile"><Input className="py-2 text-xs" value={f.consignorMobile} onChange={(e) => setF({ ...f, consignorMobile: e.target.value })} /></Field>
-        <Field label="Consignor GSTIN"><Input className="py-2 text-xs font-mono" value={f.consignorGstin} onChange={(e) => setF({ ...f, consignorGstin: e.target.value.toUpperCase() })} /></Field>
-        <Field label="Consignee (receiver)"><Input className="py-2 text-xs" value={f.consignee} onChange={(e) => setF({ ...f, consignee: e.target.value })} /></Field>
-        <Field label="Consignee mobile"><Input className="py-2 text-xs" inputMode="tel" value={f.consigneeMobile} onChange={(e) => setF({ ...f, consigneeMobile: e.target.value })} /></Field>
-        <Field label="Consignee GSTIN"><Input className="py-2 text-xs font-mono" value={f.consigneeGstin} onChange={(e) => setF({ ...f, consigneeGstin: e.target.value.toUpperCase() })} placeholder="—" /></Field>
-        <Field label="Billed to (service receiver)"><Input className="py-2 text-xs" value={f.billedTo} onChange={(e) => setF({ ...f, billedTo: e.target.value })} /></Field>
-        <Field label="Billed-to GSTIN"><Input className="py-2 text-xs font-mono" value={f.billedToGstin} onChange={(e) => setF({ ...f, billedToGstin: e.target.value.toUpperCase() })} placeholder="—" /></Field>
+      <div className="grid gap-x-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Field label="Consignor"><Input className="text-[13px]" value={f.consignor} onChange={(e) => setF({ ...f, consignor: e.target.value })} /></Field>
+        <Field label="Consignor mobile"><Input className="text-[13px]" value={f.consignorMobile} onChange={(e) => setF({ ...f, consignorMobile: e.target.value })} /></Field>
+        <Field label="Consignor GSTIN"><Input className="text-[13px] font-mono" value={f.consignorGstin} onChange={(e) => setF({ ...f, consignorGstin: e.target.value.toUpperCase() })} /></Field>
+        <Field label="Consignee (receiver)"><Input className="text-[13px]" value={f.consignee} onChange={(e) => setF({ ...f, consignee: e.target.value })} /></Field>
+        <Field label="Consignee mobile"><Input className="text-[13px]" inputMode="tel" value={f.consigneeMobile} onChange={(e) => setF({ ...f, consigneeMobile: e.target.value })} /></Field>
+        <Field label="Consignee GSTIN"><Input className="text-[13px] font-mono" value={f.consigneeGstin} onChange={(e) => setF({ ...f, consigneeGstin: e.target.value.toUpperCase() })} placeholder="—" /></Field>
+        <Field label="Billed to (service receiver)"><Input className="text-[13px]" value={f.billedTo} onChange={(e) => setF({ ...f, billedTo: e.target.value })} /></Field>
+        <Field label="Billed-to GSTIN"><Input className="text-[13px] font-mono" value={f.billedToGstin} onChange={(e) => setF({ ...f, billedToGstin: e.target.value.toUpperCase() })} placeholder="—" /></Field>
       </div>
 
       <p className={sec}>Transport · addresses</p>
-      <div className="grid gap-x-3 sm:grid-cols-4">
-        <Field label="Trip (vehicle run)">
-          <Select className="py-2 text-xs" value={f.tripId} onChange={(e) => { const t = openTrips.find((x) => x.id === e.target.value); setF({ ...f, tripId: e.target.value, vehicleNo: t?.vehicle || f.vehicleNo }); }}>
+      <div className="grid gap-x-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+        {!editing && <Field label="Trip (vehicle run)">
+          <Select className="text-[13px]" value={f.tripId} onChange={(e) => { const t = openTrips.find((x) => x.id === e.target.value); setF({ ...f, tripId: e.target.value, vehicleNo: t?.vehicle || f.vehicleNo }); }}>
             {openTrips.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.route} · {t.date}</option>)}
             <option value="">+ new trip on this lane</option>
           </Select>
-        </Field>
-        <Field label="Vehicle no."><Input className="py-2 text-xs font-mono" value={f.vehicleNo} onChange={(e) => setF({ ...f, vehicleNo: e.target.value.toUpperCase() })} placeholder="GJ06 AB 4412" /></Field>
-        <Field label="Mode"><Select className="py-2 text-xs" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value })}><option value="air">Air</option><option value="road">Road</option><option value="rail">Rail</option><option value="sea">Sea</option></Select></Field>
-        <Field label="E-way bill no."><Input className="py-2 text-xs font-mono" value={f.ewayBill} onChange={(e) => setF({ ...f, ewayBill: e.target.value })} placeholder="—" /></Field>
-        <Field label="Pickup address (from)"><Input className="py-2 text-xs" value={f.fromAddr} onChange={(e) => setF({ ...f, fromAddr: e.target.value })} /></Field>
-        <Field label="Delivery address (to)"><Input className="py-2 text-xs" value={f.toAddr} onChange={(e) => setF({ ...f, toAddr: e.target.value })} /></Field>
-        <Field label="Invoice / quote ref"><Input className="py-2 text-xs font-mono" value={f.invoiceRef} onChange={(e) => setF({ ...f, invoiceRef: e.target.value })} /></Field>
-        <Field label="Declared value ₹"><Input className="py-2 text-xs" inputMode="numeric" value={f.declaredValue} onChange={(e) => setF({ ...f, declaredValue: e.target.value })} /></Field>
+        </Field>}
+        <Field label="Vehicle no."><Input className="text-[13px] font-mono" value={f.vehicleNo} onChange={(e) => setF({ ...f, vehicleNo: e.target.value.toUpperCase() })} placeholder="GJ06 AB 4412" /></Field>
+        <Field label="Mode"><Select className="text-[13px]" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value })}><option value="air">Air</option><option value="road">Road</option><option value="rail">Rail</option><option value="sea">Sea</option></Select></Field>
+        <Field label="E-way bill no."><Input className="text-[13px] font-mono" value={f.ewayBill} onChange={(e) => setF({ ...f, ewayBill: e.target.value })} placeholder="—" /></Field>
+        <Field label="Pickup address (from)"><Input className="text-[13px]" value={f.fromAddr} onChange={(e) => setF({ ...f, fromAddr: e.target.value })} /></Field>
+        <Field label="Delivery address (to)"><Input className="text-[13px]" value={f.toAddr} onChange={(e) => setF({ ...f, toAddr: e.target.value })} /></Field>
+        <Field label="Invoice / quote ref"><Input className="text-[13px] font-mono" value={f.invoiceRef} onChange={(e) => setF({ ...f, invoiceRef: e.target.value })} /></Field>
+        <Field label="Declared value ₹"><Input className="text-[13px]" inputMode="numeric" value={f.declaredValue} onChange={(e) => setF({ ...f, declaredValue: e.target.value })} /></Field>
       </div>
 
       <p className={sec}>Package</p>
-      <div className="grid grid-cols-2 gap-x-3 sm:grid-cols-7">
-        <Field label="Pkgs"><Input className="py-2 text-xs" inputMode="numeric" value={f.pieces} onChange={(e) => setF({ ...f, pieces: e.target.value })} /></Field>
-        <div className="col-span-2"><Field label="Content"><Input className="py-2 text-xs" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} /></Field></div>
-        <Field label="A. weight kg"><Input className="py-2 text-xs" inputMode="numeric" value={f.weightKg} onChange={(e) => setF({ ...f, weightKg: e.target.value })} /></Field>
-        <Field label="C. weight kg"><Input className="py-2 text-xs" inputMode="numeric" value={f.chargedWeightKg} onChange={(e) => setF({ ...f, chargedWeightKg: e.target.value })} placeholder="—" /></Field>
-        <Field label="Size L×W×H"><Input className="py-2 text-xs" value={f.size} onChange={(e) => setF({ ...f, size: e.target.value })} placeholder="—" /></Field>
-        <Field label="Private mark"><Input className="py-2 text-xs" value={f.privateMark} onChange={(e) => setF({ ...f, privateMark: e.target.value })} placeholder="—" /></Field>
+      <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-4 xl:grid-cols-7">
+        <Field label="Pkgs"><Input className="text-[13px]" inputMode="numeric" value={f.pieces} onChange={(e) => setF({ ...f, pieces: e.target.value })} /></Field>
+        <div className="col-span-2"><Field label="Content"><Input className="text-[13px]" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} /></Field></div>
+        <Field label="A. weight kg"><Input className="text-[13px]" inputMode="numeric" value={f.weightKg} onChange={(e) => setF({ ...f, weightKg: e.target.value })} /></Field>
+        <Field label="C. weight kg"><Input className="text-[13px]" inputMode="numeric" value={f.chargedWeightKg} onChange={(e) => setF({ ...f, chargedWeightKg: e.target.value })} placeholder="—" /></Field>
+        <Field label="Size L×W×H"><Input className="text-[13px]" value={f.size} onChange={(e) => setF({ ...f, size: e.target.value })} placeholder="—" /></Field>
+        <Field label="Private mark"><Input className="text-[13px]" value={f.privateMark} onChange={(e) => setF({ ...f, privateMark: e.target.value })} placeholder="—" /></Field>
       </div>
-      <Field label="TI-Tag (bag tags)"><Input className="py-2 text-xs font-mono" value={f.tiTag} onChange={(e) => setF({ ...f, tiTag: e.target.value })} placeholder="auto-fills from printed bag tags" /></Field>
+      <Field label="TI-Tag (bag tags)"><Input className="text-[13px] font-mono" value={f.tiTag} onChange={(e) => setF({ ...f, tiTag: e.target.value })} placeholder="auto-fills from printed bag tags" /></Field>
 
       <p className={sec}>Charges (₹) — Sub Total + CGST 2.5% + SGST 2.5%</p>
-      <div className="grid grid-cols-3 gap-x-3 sm:grid-cols-6">
+      <div className="grid grid-cols-3 gap-x-4 sm:grid-cols-6 2xl:grid-cols-12">
         {CHARGE_HEADS.map(([k, name]) => (
-          <Field key={k} label={name}><Input className="py-2 text-xs text-right font-mono" inputMode="numeric" value={f.charges[k]} onChange={(e) => setF({ ...f, charges: { ...f.charges, [k]: e.target.value } })} placeholder="0" /></Field>
+          <Field key={k} label={name}><Input className="text-[13px] text-right font-mono" inputMode="numeric" value={f.charges[k]} onChange={(e) => setF({ ...f, charges: { ...f.charges, [k]: e.target.value } })} placeholder="0" /></Field>
         ))}
       </div>
       <p className="mb-2 rounded-lg bg-white px-3 py-2 text-xs">
@@ -400,24 +432,26 @@ function MakeLr({ b, trips, onIssued, onClose }: { b: Booking; trips: Trip[]; on
       </p>
 
       <p className={sec}>Terms</p>
-      <div className="grid grid-cols-2 gap-x-3 sm:grid-cols-5">
-        <Field label="Insured by customer"><Select className="py-2 text-xs" value={f.insured} onChange={(e) => setF({ ...f, insured: e.target.value as "Yes" | "No" })}><option>No</option><option>Yes</option></Select></Field>
-        <Field label="GST payable by"><Select className="py-2 text-xs" value={f.gstPayableBy} onChange={(e) => setF({ ...f, gstPayableBy: e.target.value })}>{GST_PAYABLE.map((x) => <option key={x}>{x}</option>)}</Select></Field>
-        <Field label="Payment terms"><Select className="py-2 text-xs" value={f.paymentTerms} onChange={(e) => setF({ ...f, paymentTerms: e.target.value })}>{PAYMENT_TERMS.map((x) => <option key={x}>{x}</option>)}</Select></Field>
-        <Field label="LR type"><Select className="py-2 text-xs" value={f.lrType} onChange={(e) => setF({ ...f, lrType: e.target.value })}>{LR_TYPES.map((x) => <option key={x}>{x}</option>)}</Select></Field>
-        <Field label="Delivery at"><Select className="py-2 text-xs" value={f.deliveryAt} onChange={(e) => setF({ ...f, deliveryAt: e.target.value })}>{DELIVERY_AT.map((x) => <option key={x}>{x}</option>)}</Select></Field>
+      <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-5">
+        <Field label="Insured by customer"><Select className="text-[13px]" value={f.insured} onChange={(e) => setF({ ...f, insured: e.target.value as "Yes" | "No" })}><option>No</option><option>Yes</option></Select></Field>
+        <Field label="GST payable by"><Select className="text-[13px]" value={f.gstPayableBy} onChange={(e) => setF({ ...f, gstPayableBy: e.target.value })}>{GST_PAYABLE.map((x) => <option key={x}>{x}</option>)}</Select></Field>
+        <Field label="Payment terms"><Select className="text-[13px]" value={f.paymentTerms} onChange={(e) => setF({ ...f, paymentTerms: e.target.value })}>{PAYMENT_TERMS.map((x) => <option key={x}>{x}</option>)}</Select></Field>
+        <Field label="LR type"><Select className="text-[13px]" value={f.lrType} onChange={(e) => setF({ ...f, lrType: e.target.value })}>{LR_TYPES.map((x) => <option key={x}>{x}</option>)}</Select></Field>
+        <Field label="Delivery at"><Select className="text-[13px]" value={f.deliveryAt} onChange={(e) => setF({ ...f, deliveryAt: e.target.value })}>{DELIVERY_AT.map((x) => <option key={x}>{x}</option>)}</Select></Field>
       </div>
-      <Field label="Remarks on the LR"><Input className="py-2 text-xs" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="handle with care, fragile…" /></Field>
+      <Field label="Remarks on the LR"><Input className="text-[13px]" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="handle with care, fragile…" /></Field>
 
-      {!f.tripId && (
+      {editing && <Field label="What changed and why (goes on the booking's log)"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Consignee corrected: the hotel is the receiver" /></Field>}
+      {!f.tripId && !editing && (
         <div className="mb-2 grid gap-x-3 rounded-lg border border-dashed border-line p-2.5 sm:grid-cols-3">
-          <Field label="New trip · vehicle no."><Input className="py-2 text-xs" value={newTrip.vehicle} onChange={(e) => setNewTrip({ ...newTrip, vehicle: e.target.value })} placeholder="GJ06 AB 4412" /></Field>
-          <Field label="Driver"><Input className="py-2 text-xs" value={newTrip.driver} onChange={(e) => setNewTrip({ ...newTrip, driver: e.target.value })} /></Field>
-          <Field label="Driver mobile"><Input className="py-2 text-xs" inputMode="tel" value={newTrip.driverMobile} onChange={(e) => setNewTrip({ ...newTrip, driverMobile: e.target.value })} /></Field>
+          <Field label="New trip · vehicle no."><Input className="text-[13px]" value={newTrip.vehicle} onChange={(e) => setNewTrip({ ...newTrip, vehicle: e.target.value })} placeholder="GJ06 AB 4412" /></Field>
+          <Field label="Driver"><Input className="text-[13px]" value={newTrip.driver} onChange={(e) => setNewTrip({ ...newTrip, driver: e.target.value })} /></Field>
+          <Field label="Driver mobile"><Input className="text-[13px]" inputMode="tel" value={newTrip.driverMobile} onChange={(e) => setNewTrip({ ...newTrip, driverMobile: e.target.value })} /></Field>
         </div>
       )}
       <div className="flex items-center gap-3">
-        <Button size="sm" disabled={busy || !f.consignee || !f.consigneeMobile} onClick={() => void issue()}>{busy ? "Issuing…" : `Issue LR · ${inr(totals.total)}`}</Button>
+        <Button size="sm" disabled={busy || !f.consignee || !f.consigneeMobile || (editing && reason.trim().length < 3)} onClick={() => void issue()}>{busy ? (editing ? "Saving…" : "Issuing…") : editing ? `Save LR changes · ${inr(totals.total)}` : `Issue LR · ${inr(totals.total)}`}</Button>
+        {editing && <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>}
         {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
       {issued && <DocumentView booking={issued.booking} doc={issued.doc} onClose={() => { setIssued(null); onClose(); }} />}

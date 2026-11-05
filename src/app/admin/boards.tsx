@@ -54,7 +54,7 @@ function DeltaChip({ d, goodDown }: { d: Delta; goodDown?: boolean }) {
   return (
     <span title={`Previous period: ${d.prev.toLocaleString("en-IN")}`}
       className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${good ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
-      {up ? "▲" : "▼"} {Math.abs(d.pct)}%
+      {up ? "+" : "-"}{Math.abs(d.pct)}%
     </span>
   );
 }
@@ -172,7 +172,7 @@ export function AttentionCard({ items, onNav }: { items: Attention[]; onNav?: Na
   return (
     <Card>
       <h3 className="mb-2 font-display text-sm font-bold">Needs attention</h3>
-      {items.length === 0 && <p className="text-sm text-muted">Nothing. Clean board. ✅</p>}
+      {items.length === 0 && <p className="text-sm text-muted">Nothing. Clean board.</p>}
       <ul className="space-y-1.5">
         {items.map((a, i) => (
           <li key={i} className="flex items-start gap-1.5 text-xs">
@@ -183,7 +183,7 @@ export function AttentionCard({ items, onNav }: { items: Attention[]; onNav?: Na
                 <>
                   {" "}
                   <button type="button" className="cursor-pointer font-semibold text-brand hover:underline" onClick={() => onNav(a.module!, a.id)}>
-                    {a.id ? `open ${a.id} →` : "open →"}
+                    {a.id ? `open ${a.id}` : "open"}
                   </button>
                 </>
               )}
@@ -213,7 +213,7 @@ export function CeoBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
             className="cursor-pointer rounded-2xl border border-line bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-card-lg">
             <span className="flex items-center justify-between font-display text-[13px] font-bold">{d.name} <i className={`size-2 rounded-full ${d.ok ? "bg-green-500" : "bg-amber-500"}`} /></span>
             <span className="mt-1 block text-[11px] text-muted">{d.note}</span>
-            {onNav && <span className="mt-1.5 block text-[11px] font-semibold text-brand">Open board →</span>}
+            {onNav && <span className="mt-1.5 block text-[11px] font-semibold text-brand">Open board</span>}
           </button>
         ))}
       </div>
@@ -247,7 +247,7 @@ export function OpsBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
             </tbody>
           </table>
         </div>
-        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("lr")}>Open LR &amp; trips →</Button>}
+        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("lr")}>Open LR &amp; trips</Button>}
       </Card>
       <Card>
         <h3 className="mb-2 font-display text-sm font-bold">Shipments by stage</h3>
@@ -283,7 +283,7 @@ export function FinBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
         <Card>
           <h3 className="mb-2 font-display text-sm font-bold">Document engine</h3>
           <p className="text-sm text-muted">{m.fin.docsCount} documents issued through the FY-numbered series (PI / INV / RCT / CSH / CV). Generate and reconcile in the Finance module.</p>
-          {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("fin")}>Open Finance →</Button>}
+          {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("fin")}>Open Finance</Button>}
         </Card>
       </div>
     </>
@@ -304,7 +304,7 @@ export function SalesBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
           {m.sales.rorPending > 0 ? `${m.sales.rorPending} rate-on-request route${m.sales.rorPending > 1 ? "s" : ""} waiting for a price — these are live customers asking to pay. ` : "No ROR routes waiting. "}
           {m.sales.overdueFollowups > 0 ? `${m.sales.overdueFollowups} follow-up${m.sales.overdueFollowups > 1 ? "s are" : " is"} past due in CRM.` : "Follow-ups are on time."}
         </p>
-        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("crm")}>Open CRM →</Button>}
+        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("crm")}>Open CRM</Button>}
       </Card>
     </>
   );
@@ -334,7 +334,7 @@ export function CommBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
             </tbody>
           </table>
         </div>
-        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("price")}>Open Pricing →</Button>}
+        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("price")}>Open Pricing</Button>}
       </Card>
     </>
   );
@@ -359,7 +359,7 @@ export function WedBoard({ m, onNav }: { m: Metrics; onNav?: Nav }) {
             </li>
           ))}
         </ul>
-        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("wed")}>Open Weddings →</Button>}
+        {onNav && <Button size="sm" variant="outline" className="mt-3" onClick={() => onNav("wed")}>Open Weddings</Button>}
       </Card>
     </>
   );
@@ -381,12 +381,12 @@ export function digest(view: ViewKey, m: Metrics): { title: string; body: string
   const L: string[] = [`*BAGDROP · ${name}* — ${m.periodLabel}`, `_as of ${at}_`, ""];
   for (const k of kpisFor(view, m)) {
     const val = k.text ?? (k.format ? k.format(k.value) : k.value.toLocaleString("en-IN"));
-    const d = k.delta && k.delta.pct !== null ? ` (${k.delta.pct >= 0 ? "▲" : "▼"}${Math.abs(k.delta.pct)}% vs prev)` : "";
+    const d = k.delta && k.delta.pct !== null ? ` (${k.delta.pct >= 0 ? "+" : "-"}${Math.abs(k.delta.pct)}% vs prev)` : "";
     L.push(`${k.label}: ${val}${d}${k.hint ? ` · ${k.hint}` : ""}`);
   }
   const att = m.attention[view];
   if (att.length) { L.push("", "*Needs attention:*"); att.forEach((a) => L.push(`• ${a.text}`)); }
-  else L.push("", "No exceptions. ✅");
+  else L.push("", "No exceptions.");
   if (view === "comm" && m.comm.lanes.length) { L.push("", "*Top lanes:*"); m.comm.lanes.slice(0, 4).forEach((l) => L.push(`• ${l.lane} — ${inr(l.revenue)} (${l.bags} bags)`)); }
   if (view === "wed" && m.wed.events.length) { L.push("", "*Events:*"); m.wed.events.forEach((e) => L.push(`• ${e.name} (${e.code}) — ${e.families} families`)); }
   return { title: `Bagdrop ${name} — ${m.periodLabel}`, body: L.join("\n") };

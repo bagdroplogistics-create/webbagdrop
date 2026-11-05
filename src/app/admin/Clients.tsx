@@ -194,8 +194,8 @@ function ClientDetail({ c, onSaved }: { c: ClientView; onSaved: () => Promise<vo
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || !f.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save client"}</Button>
-        <Button size="sm" variant="outline" onClick={() => window.open(wa, "_blank")}>WhatsApp →</Button>
-        {mail && <Button size="sm" variant="outline" onClick={() => window.open(mail, "_blank")}>Email →</Button>}
+        <Button size="sm" variant="outline" onClick={() => window.open(wa, "_blank")}>WhatsApp</Button>
+        {mail && <Button size="sm" variant="outline" onClick={() => window.open(mail, "_blank")}>Email</Button>}
         <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(`${f.name} · +${f.mobile}${f.email ? ` · ${f.email}` : ""}${f.address ? ` · ${f.address}` : ""}`)}>Copy for quote desk</Button>
         {msg && <span className="text-xs text-muted">{msg}</span>}
       </div>
@@ -289,10 +289,10 @@ function ImportWizard({ onDone }: { onDone: () => Promise<void> }) {
       {preview && summary && (
         <div className="grid gap-2">
           <div className="flex flex-wrap gap-3 rounded-xl bg-paper p-2.5 text-xs">
-            <span>✅ New: <b>{summary.new}</b></span>
-            <span>🔁 Match: <b>{summary.match}</b></span>
-            <span>⚠️ Conflict: <b className={summary.conflict ? "text-amber-600" : ""}>{summary.conflict}</b></span>
-            <span>❌ Invalid: <b className={summary.invalid ? "text-red-600" : ""}>{summary.invalid}</b></span>
+            <span>New: <b>{summary.new}</b></span>
+            <span>Match: <b>{summary.match}</b></span>
+            <span>Conflict: <b className={summary.conflict ? "text-amber-600" : ""}>{summary.conflict}</b></span>
+            <span>Invalid: <b className={summary.invalid ? "text-red-600" : ""}>{summary.invalid}</b></span>
             {summary.conflict > 0 && (
               <span className="ml-auto flex gap-1.5">
                 <Button size="sm" variant="ghost" onClick={() => setAllConflicts("fillBlanks")}>All: fill blanks</Button>
@@ -305,18 +305,18 @@ function ImportWizard({ onDone }: { onDone: () => Promise<void> }) {
           <div className="max-h-96 overflow-y-auto rounded-xl border border-line">
             {preview.map((p) => (
               <div key={p.n} className="border-b border-dashed border-line p-2.5 text-xs last:border-0">
-                {p.status === "invalid" && <p className="text-red-700">❌ {p.reason}</p>}
+                {p.status === "invalid" && <p className="text-red-700">Invalid · {p.reason}</p>}
                 {p.status === "new" && p.incoming && (
-                  <p>✅ <b>{p.incoming.name}</b> · +{p.incoming.mobile} — new client, will be created.</p>
+                  <p>New · <b>{p.incoming.name}</b> · +{p.incoming.mobile} — new client, will be created.</p>
                 )}
                 {p.status === "match" && p.incoming && (
-                  <p>🔁 <b>{p.incoming.name}</b> · +{p.incoming.mobile} — already in the master · {p.reason}
+                  <p>Match · <b>{p.incoming.name}</b> · +{p.incoming.mobile} — already in the master · {p.reason}
                     {p.reason?.includes("blank") && <Select className="ml-2 inline-block w-auto !py-0.5 !text-[11px]" value={choices[p.incoming.mobile] ?? "skip"} onChange={(e) => setChoices({ ...choices, [p.incoming!.mobile]: e.target.value as never })}><option value="fillBlanks">fill the blanks</option><option value="skip">skip</option></Select>}
                   </p>
                 )}
                 {p.status === "conflict" && p.incoming && (
                   <div>
-                    <p className="font-semibold text-amber-700">⚠️ +{p.incoming.mobile} — details differ. Decide:</p>
+                    <p className="font-semibold text-amber-700">Conflict · +{p.incoming.mobile} — details differ. Decide:</p>
                     <table className="mt-1 w-full text-[11px]">
                       <thead><tr className="text-left text-[9px] uppercase text-muted"><th className="pr-2">Field</th><th className="pr-2">In master</th><th>In your file</th></tr></thead>
                       <tbody>{(p.diffs ?? []).map((d) => (

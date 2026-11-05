@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { applyGatewayPayment, gatewayOrderOf, verifyWebhook } from "@/lib/razorpay";
 import { confirmLinkPayment, dropPaymentLink } from "@/lib/paymentLinks";
 import { serviceClient } from "@/lib/supabaseAdmin";
-import { announcePayment } from "@/lib/automation";
+import { announcePayment, opsNotify } from "@/lib/automation";
 import type { Booking } from "@/lib/types";
 
 /** Razorpay webhook — the safety net for online payments (subscribe to
@@ -54,7 +54,9 @@ async function handlePOST(req: Request) {
   /* a payment-link payment also raises payment.captured — payment_link.paid handles it */
   if (!order || order.id !== p.order_id) return NextResponse.json({ ok: true, ignored: "not this booking's checkout order" });
   if ((p.amount ?? 0) !== Math.round(order.amount * 100)) {
-    return NextResponse.json({ error: "AMOUNT_MISMATCH", expected: order.amount, got: (p.amount ?? 0) / 100 }, { status: 409 });
+    /* never marked paid; tell the team once and answer 200 so Razorpay doesn't retry for days */
+    await opsNotify(`Razorpay payment ${p.id} on ${b.id} is ₹${(p.amount ?? 0) / 100}, but the order was for ₹${order.amount} — NOT marked paid. Check it in Razorpay and Finance → Gateway.`, `Payment amount mismatch · ${b.id}`, `ops:amountmismatch:${p.id}`).catch(() => 0);
+    return NextResponse.json({ ok: true, ignored: "AMOUNT_MISMATCH", expected: order.amount, got: (p.amount ?? 0) / 100 });
   }
 
   const r = applyGatewayPayment(b, { paymentId: p.id, orderId: p.order_id, amountInr: order.amount, kind: order.kind, method: p.method, via: "webhook" });

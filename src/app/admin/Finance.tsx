@@ -124,7 +124,7 @@ function PaymentVerification({ all }: { all: Booking[] }) {
     <div className="grid gap-5">
       <Card className="border-l-4 border-l-emerald-500">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-display text-sm font-bold">💳 Payments to verify</h3>
+          <h3 className="font-display text-sm font-bold">Payments to verify</h3>
           <div className="flex gap-1">
             {(["open", "all"] as const).map((k) => (
               <button key={k} onClick={() => setShow(k)} className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-semibold ${show === k ? "bg-emerald-600 text-white" : "bg-paper text-muted"}`}>{k === "open" ? `To verify · ${rows.filter((r) => r.status === "submitted").length}` : "All"}</button>
@@ -480,7 +480,7 @@ function PayConfigCard() {
       </div>
       <Button size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save acceptance details"}</Button>
       {msg && <p className="mt-2 rounded-xl bg-paper p-2.5 text-xs">{msg}</p>}
-      <p className="mt-2 text-[11px] text-faint">Client payment proofs arrive in Finance → Payments to verify (💳 alert in the bell) — match them against the bank, then verify. Clearing the UPI ID switches the payment page back to the gateway button.</p>
+      <p className="mt-2 text-[11px] text-faint">Client payment proofs arrive in Finance → Payments to verify (an alert in Alerts) — match them against the bank, then verify. Clearing the UPI ID switches the payment page back to the gateway button.</p>
     </Card>
   );
 }
@@ -561,7 +561,7 @@ function BankRecon() {
 
       <Card>
         <h3 className="mb-2 font-display text-sm font-bold">To reconcile <Badge tone={open.length ? "warn" : "ok"}>{open.length}</Badge></h3>
-        {open.length === 0 && <p className="py-3 text-center text-sm text-muted">Nothing open — the bank and the ledger agree. 🎉</p>}
+        {open.length === 0 && <p className="py-3 text-center text-sm text-muted">Nothing open — the bank and the ledger agree.</p>}
         <div className="grid gap-2">
           {open.map((r) => {
             const match = ledger.find((e) => e.id === r.matchId);
@@ -575,7 +575,7 @@ function BankRecon() {
                   {r.status === "suggested" && match ? (
                     <>
                       <Badge tone="info">suggested</Badge>
-                      <span className="text-muted">↔ {match.label} · {match.date}</span>
+                      <span className="text-muted">matched with {match.label} · {match.date}</span>
                       <Button size="sm" disabled={busyId === r.id} onClick={() => void setStatus(r, "reconciled")}>Confirm match</Button>
                       <Button size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => void setStatus(r, "unmatched", "")}>Reject</Button>
                     </>

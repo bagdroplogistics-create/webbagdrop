@@ -76,23 +76,11 @@ html[data-motion] [data-fill][data-in] { transform: scaleX(1); }
 /* Live board — status flip-letters and the zone-diagram walking dot */
 @keyframes bd-flip { 0% { transform: rotateX(90deg); } 100% { transform: none; } }
 .bd-flip-char { animation: bd-flip .35s both; }
-/* Same "row just updated" cue on the service cell — a quick dim/restore
- * flash, keyed to remount (and so replay) every time that row's status
- * changes, right alongside the status letters flipping in. */
-@keyframes bd-row-flash { 0% { opacity: .25; } 100% { opacity: 1; } }
-.bd-row-flash { animation: bd-row-flash .4s ease-out both; }
 @keyframes bd-walk { 0% { left: 0%; } 90%, 100% { left: calc(100% - 14px); } }
 .bd-walk-dot { animation: bd-walk 4s cubic-bezier(.65,0,.35,1) infinite; }
 
-/* Live board rows — airport-style vertical scroll: the row list is
- * rendered twice back to back and drifts up by exactly one copy's
- * height, looping seamlessly forever. */
-@keyframes bd-board-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
-.bd-board-track { animation: bd-board-scroll linear infinite; }
-.bd-board-track:hover { animation-play-state: paused; }
-
 @media (prefers-reduced-motion: reduce) {
-  .bd-blink-dot, .bd-flip-char, .bd-walk-dot, .bd-board-track, .bd-row-flash { animation: none; }
+  .bd-blink-dot, .bd-flip-char, .bd-walk-dot { animation: none; }
 }
 .bd-marquee-track { animation: bd-marquee linear infinite; }
 .bd-marquee-track:hover { animation-play-state: paused; }
@@ -108,18 +96,21 @@ html[data-motion] .bd-step-in { animation: bd-step-in .5s cubic-bezier(.2,.7,.2,
 }
 
 /* Admin OS — scoped to .admin-os only, so the booking site's own brand
- * tokens above (customer wizard, weddings, Y2K) are never touched. Matches
- * the team's reference design: warm paper background, navy rail, mono
- * accents, Manrope/IBM Plex type. */
+ * tokens above (customer wizard, weddings, Y2K) are never touched.
+ * Brand kit "Signal Light, Orange Led": Runway Ink on Concourse, Bagdrop
+ * Orange as the one accent. One family everywhere (Geist), one type scale:
+ * page title 20 · section 14 · body 13 · caption 11.5 · codes mono 11.5. */
 .admin-os {
-  --a-bg: #FAFAF9;
+  --a-bg: #F4F6F9;
   --a-surface: #FFFFFF;
-  --a-surface-2: #F0ECE6;
-  --a-line: #DDD6CC;
-  --a-fg: #1A1714;
-  --a-muted: #5C544A; /* darkened for small-text contrast on warm paper */
-  --a-accent: #F25C05;
-  --a-navy: #1B2A4A;
+  --a-surface-2: #EEF1F5;
+  --a-line: #DCE2EA;
+  --a-fg: #0A1628;
+  --a-body: #31415A;
+  --a-muted: #5B6B82;
+  --a-faint: #8A97AA;
+  --a-accent: #FD6201;
+  --a-navy: #0A1628;
   --a-ok: #1E7F4F;
   --a-warn: #B7791F;
   --a-bad: #C0392B;
@@ -128,36 +119,83 @@ html[data-motion] .bd-step-in { animation: bd-step-in .5s cubic-bezier(.2,.7,.2,
   --a-warn-bg: #FBF1DC;
   --a-bad-bg: #FBE6E3;
   --a-info-bg: #E4EEFA;
-  --a-display: "Inter", "Manrope", system-ui, sans-serif;
-  --a-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --a-display: var(--font-geist-sans), system-ui, sans-serif;
+  --a-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --a-radius: 10px;
+  --a-field-h: 36px;
   background: var(--a-bg);
   color: var(--a-fg);
-  font-family: "Inter", "IBM Plex Sans", system-ui, sans-serif;
-  /* Inter legibility set: open digits/letters (cv05/cv11), case-sensitive
-   * punctuation; numerals in data views align via tabular-nums above. */
-  font-feature-settings: "cv05", "cv11", "case";
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-feature-settings: "cv05", "cv11", "case", "tnum";
+  font-size: 13px;
   letter-spacing: 0.002em;
 
-  /* Re-point the shared Tailwind theme tokens (globals.css's @theme above)
-   * to these same admin-os values. Every existing module already uses
-   * ordinary utilities like text-muted/font-display/border-line/bg-brand —
-   * CSS custom properties cascade, so overriding the token here retints
-   * all of them automatically, with no per-file changes. Scoped to
-   * .admin-os only, so the booking site's own pages (which never render
-   * inside this wrapper) keep the original tokens untouched. */
+  /* Re-point the shared Tailwind theme tokens to these values: every module
+   * uses ordinary utilities (text-muted, border-line, bg-brand…), so the whole
+   * admin retints from here with no per-file changes. */
   --color-brand: var(--a-accent);
-  --color-brand-dark: #C94E04;
-  --color-brand-soft: var(--a-ok-bg);
+  --color-brand-dark: #D95300;
+  --color-brand-soft: #FFF1E8;
   --color-ink: var(--a-fg);
   --color-muted: var(--a-muted);
-  --color-faint: #948C82;
+  --color-faint: var(--a-faint);
   --color-line: var(--a-line);
   --color-paper: var(--a-surface-2);
   --color-canvas: var(--a-bg);
   --font-display: var(--a-display);
-  --font-sans: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--a-mono);
 }
+/* ---- type scale ---- */
+.admin-os h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; }
+.admin-os h2, .admin-os h3 { letter-spacing: -0.005em; }
+.admin-os p, .admin-os td, .admin-os li, .admin-os label { color: var(--a-body); }
+.admin-os h1, .admin-os h2, .admin-os h3, .admin-os h4, .admin-os b, .admin-os strong, .admin-os th { color: var(--a-fg); }
+.admin-os .text-muted, .admin-os .text-faint { color: var(--a-muted); }
+.admin-os .text-faint { color: var(--a-faint); }
+.admin-os code, .admin-os .font-mono { font-family: var(--a-mono); font-size: 0.92em; }
+
+/* ---- fields: one height, one radius ---- */
+.admin-os input.rounded-xl, .admin-os select.rounded-xl, .admin-os textarea.rounded-xl,
+.admin-os input[type="text"], .admin-os input[type="tel"], .admin-os input[type="date"], .admin-os input[type="datetime-local"], .admin-os input[type="number"], .admin-os input[type="password"], .admin-os input[type="email"], .admin-os input[type="search"], .admin-os select {
+  min-height: var(--a-field-h); padding-top: 6px; padding-bottom: 6px; font-size: 13px; border-radius: 8px; border-color: var(--a-line); background: var(--a-surface); color: var(--a-fg);
+}
+.admin-os input:focus, .admin-os select:focus, .admin-os textarea:focus { border-color: var(--a-accent); box-shadow: 0 0 0 3px rgba(253, 98, 1, 0.14); outline: none; }
+.admin-os input::placeholder { color: var(--a-faint); }
+.admin-os input, .admin-os select, .admin-os textarea { max-width: 100%; box-sizing: border-box; }
+.admin-os select { background-image: linear-gradient(45deg, transparent 50%, var(--a-muted) 50%), linear-gradient(135deg, var(--a-muted) 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 28px; }
+.admin-os label > span.block { font-size: 11.5px; font-weight: 600; color: var(--a-muted); margin-bottom: 4px; }
+.admin-os label.mb-3 { margin-bottom: 10px; }
+
+/* ---- tables: sticky headers, hairlines, quiet hover, aligned numbers ---- */
+.admin-os table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.admin-os thead th { position: sticky; top: 0; z-index: 1; background: var(--a-surface); font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--a-muted); padding: 8px 10px 8px 0; border-bottom: 1px solid var(--a-line); white-space: nowrap; }
+.admin-os tbody td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--a-line); vertical-align: middle; }
+.admin-os tbody tr:last-child td { border-bottom: 0; }
+.admin-os tbody tr:hover td { background: #F8FAFC; }
+.admin-os tbody tr.bg-paper td, .admin-os tbody tr.bg-brand-soft td { background: var(--color-brand-soft); }
+.admin-os td.text-right, .admin-os th.text-right { font-variant-numeric: tabular-nums; }
+.admin-os[data-density="compact"] tbody td { padding-top: 5px; padding-bottom: 5px; }
+.admin-os[data-density="compact"] thead th { padding-top: 6px; padding-bottom: 6px; }
+.admin-os .a-table { max-height: min(70vh, 760px); max-width: 100%; min-width: 0; overflow: auto; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-surface); }
+.admin-os main, .admin-os main > * { min-width: 0; }
+/* grid children default to min-width:auto, which lets a wide table push the page sideways on a phone */
+.admin-os .grid > * { min-width: 0; }
+.admin-os main { overflow-x: clip; }
+.admin-os .a-table table { width: 100%; }
+.admin-os .a-table thead th:first-child, .admin-os .a-table tbody td:first-child { padding-left: 12px; }
+.admin-os .a-table thead th:last-child, .admin-os .a-table tbody td:last-child { padding-right: 12px; }
+
+/* ---- side drawer for a record's detail: the list keeps the full width ---- */
+.admin-os .a-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 45; width: min(600px, 100vw); background: var(--a-surface); border-left: 1px solid var(--a-line); box-shadow: -16px 0 48px -24px rgba(10, 22, 40, 0.35); overflow-y: auto; animation: a-slide 0.22s ease both; }
+.admin-os .a-drawer-backdrop { position: fixed; inset: 0; z-index: 44; background: rgba(10, 22, 40, 0.18); }
+@keyframes a-slide { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 1680px) { .admin-os .a-drawer { width: 680px; } }
+@media (prefers-reduced-motion: reduce) { .admin-os .a-drawer { animation: none; } }
+
+/* ---- section headings inside cards ---- */
+.admin-os .a-card h3, .admin-os .rounded-2xl.p-5.shadow-card > h3 { font-size: 14px; }
+
 .admin-os .a-card { background: var(--a-surface); border: 1.5px solid var(--a-line); border-radius: 10px; padding: 14px; }
 .admin-os .a-stripe { border-left-width: 4px; border-left-style: solid; border-left-color: var(--a-line); padding-left: 10px; }
 .admin-os .a-stripe-ok { border-left-color: var(--a-ok); }
@@ -194,16 +232,16 @@ html[data-motion] .bd-step-in { animation: bd-step-in .5s cubic-bezier(.2,.7,.2,
  * own rule (higher specificity: element+class vs. class alone) without
  * touching Input/Select/Tile, which share the radius utilities but
  * never the height ones. */
-.admin-os button.h-11 { height: auto; padding: 7px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; }
-.admin-os button.h-8 { height: auto; padding: 4px 9px; border-radius: 8px; font-size: 11.5px; font-weight: 700; }
-.admin-os button.h-13 { height: auto; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+.admin-os button.h-11 { height: 34px; padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; }
+.admin-os button.h-8 { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 11.5px; font-weight: 600; }
+.admin-os button.h-13 { height: 40px; padding: 0 18px; border-radius: 8px; font-size: 13px; font-weight: 600; }
 
 /* Reference cards are flat 10px-radius with no shadow, not the customer
  * flow's rounded-2xl/shadow-card look the shared <Card> renders by
  * default. The three-class combo only matches Card's own output (the
  * one other rounded-2xl user, DocumentView's print preview, uses
  * different padding/shadow classes, so it's untouched). */
-.admin-os .rounded-2xl.p-5.shadow-card { border-radius: 12px; padding: 14px; box-shadow: 0 4px 18px -8px rgba(25, 30, 50, 0.08); border-width: 1px; border-color: var(--a-line); }
+.admin-os .rounded-2xl.p-5.shadow-card { border-radius: var(--a-radius); padding: 14px 16px; box-shadow: none; border-width: 1px; border-color: var(--a-line); }
 .admin-os .rounded-2xl.p-5.shadow-card:hover { box-shadow: none; }
 
 /* Executive dashboard motion: boards crossfade in, ticker rows slide. */
@@ -215,3 +253,82 @@ html[data-motion] .bd-step-in { animation: bd-step-in .5s cubic-bezier(.2,.7,.2,
 @media (prefers-reduced-motion: reduce) {
   .anim-in { animation: none; }
 }
+
+/* Admin OS glass rail — the sidebar is frosted glass over soft colour
+ * washes on the page background. Three looks share one set of rail tokens
+ * (data-look on .admin-os); Midnight is the default, Frost the base tokens. */
+.admin-os {
+  --r-bg: rgba(255, 255, 255, 0.52);
+  --r-edge: rgba(255, 255, 255, 0.75);
+  --r-fg: #3A4A66;
+  --r-strong: #1B2A4A;
+  --r-label: #7A879E;
+  --r-hover: rgba(27, 42, 74, 0.07);
+  --r-badge: rgba(27, 42, 74, 0.08);
+  --r-badge-fg: #3A4A66;
+  --r-line: rgba(27, 42, 74, 0.1);
+  --r-active: var(--a-accent);
+  --r-active-shadow: 0 4px 14px -6px rgba(253, 98, 1, 0.5);
+  --r-wash-1: rgba(253, 98, 1, 0.10);
+  --r-wash-2: rgba(31, 95, 168, 0.10);
+  --r-wash-3: rgba(253, 98, 1, 0.06);
+  background:
+    radial-gradient(38rem 30rem at -6% -8%, var(--r-wash-1), transparent 70%),
+    radial-gradient(34rem 30rem at 8% 108%, var(--r-wash-2), transparent 70%),
+    radial-gradient(30rem 24rem at 60% -10%, var(--r-wash-3), transparent 70%),
+    var(--a-bg);
+  background-attachment: fixed;
+}
+.admin-os[data-look="midnight"] {
+  --r-bg: rgba(10, 22, 40, 0.92);
+  --r-edge: rgba(255, 255, 255, 0.12);
+  --r-fg: #C3CDE0;
+  --r-strong: #FFFFFF;
+  --r-label: #94A3BF;
+  --r-hover: rgba(255, 255, 255, 0.08);
+  --r-badge: rgba(255, 255, 255, 0.12);
+  --r-badge-fg: #DCE3F0;
+  --r-line: rgba(255, 255, 255, 0.12);
+  --r-wash-1: rgba(253, 98, 1, 0.12);
+  --r-wash-2: rgba(10, 22, 40, 0.12);
+  --r-wash-3: rgba(31, 95, 168, 0.08);
+}
+.admin-os[data-look="sunrise"] {
+  --r-bg: rgba(255, 244, 235, 0.5);
+  --r-edge: rgba(255, 255, 255, 0.8);
+  --r-fg: #5A3E2E;
+  --r-strong: #2B1A10;
+  --r-label: #A07D66;
+  --r-hover: rgba(242, 92, 5, 0.09);
+  --r-badge: rgba(242, 92, 5, 0.12);
+  --r-badge-fg: #8A3A0A;
+  --r-line: rgba(120, 60, 20, 0.12);
+  --r-wash-1: rgba(255, 140, 80, 0.42);
+  --r-wash-2: rgba(255, 190, 210, 0.38);
+  --r-wash-3: rgba(255, 220, 150, 0.36);
+}
+.admin-os .a-rail {
+  background: var(--r-bg);
+  color: var(--r-fg);
+  border-right: 1px solid var(--r-edge);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.35) inset, 8px 0 32px -16px rgba(27, 42, 74, 0.25);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+.admin-os .a-rail-item { color: var(--r-fg); transition: background 0.15s, color 0.15s; }
+.admin-os .a-rail-item:hover { background: var(--r-hover); color: var(--r-strong); }
+.admin-os .a-rail-item[data-on] { background: var(--r-active); color: #fff; box-shadow: var(--r-active-shadow); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .admin-os .a-rail { background: #F4F1EE; }
+  .admin-os[data-look="midnight"] .a-rail { background: var(--a-navy); }
+}
+
+/* ---- rail: full (232px) or collapsed (72px, short labels); focus mode hides it ---- */
+.admin-os .a-rail[data-collapsed] { width: 72px; padding: 10px 8px; }
+.admin-os .a-rail[data-collapsed] .a-rail-item { justify-content: center; padding: 8px 4px; font-size: 10.5px; letter-spacing: 0.02em; text-align: center; }
+.admin-os .a-rail[data-collapsed] .a-rail-group { font-size: 0; height: 0; padding: 0; margin: 10px 8px 6px; border-top: 1px solid var(--r-line); }
+.admin-os .a-rail-toggle { font-family: var(--a-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--r-label); }
+.admin-os .a-rail-toggle:hover { color: var(--r-strong); }
+.admin-os[data-focus] .a-rail { display: none; }
+.admin-os[data-focus] main { padding-top: 10px; }
+@media print { .admin-os .a-rail, .admin-os .a-topbar { display: none !important; } }

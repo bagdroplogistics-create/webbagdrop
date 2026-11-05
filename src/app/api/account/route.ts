@@ -2,7 +2,7 @@ import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { serviceClient, newToken } from "@/lib/supabaseAdmin";
-import { checkOtp } from "@/lib/otp";
+import { checkOtpLimited } from "@/lib/otp";
 import { quote, isChartPriced, inr } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
@@ -120,18 +120,18 @@ async function handlePOST(req: Request) {
       next = {
         ...b,
         pay: { mode: "full", amount, status: "submitted", gateway: "UPI / bank transfer (manual)", at: now, utr: utr || undefined, proof, submittedAt: now, history: b.pay?.history },
-        events: [...b.events, { at: now, by: "customer", text: `💳 Payment proof submitted for ${inr(amount)}${utr ? ` · UTR ${utr}` : ""}${proof ? " · screenshot uploaded" : ""} — awaiting finance verification` }],
+        events: [...b.events, { at: now, by: "customer", text: `Payment proof submitted for ${inr(amount)}${utr ? ` · UTR ${utr}` : ""}${proof ? " · screenshot uploaded" : ""} — awaiting finance verification` }],
       };
     } else {
       amount = b.pay!.topup!.amount;
       next = {
         ...b,
         pay: { ...b.pay!, topup: { ...b.pay!.topup!, status: "submitted", utr: utr || undefined, proof, submittedAt: now, rejectedNote: undefined } },
-        events: [...b.events, { at: now, by: "customer", text: `💳 Extra-bags payment proof submitted for ${inr(amount)}${utr ? ` · UTR ${utr}` : ""} — awaiting finance verification` }],
+        events: [...b.events, { at: now, by: "customer", text: `Extra-bags payment proof submitted for ${inr(amount)}${utr ? ` · UTR ${utr}` : ""} — awaiting finance verification` }],
       };
     }
     await save(sb, next);
-    const msg = `💳 PAYMENT PROOF RECEIVED · ${b.id} · ${b.traveller.name} · ${inr(amount)}${kind === "topup" ? " (extra bags)" : ""}${utr ? ` · UTR ${utr}` : ""}${proof ? " · screenshot attached" : ""}\nVerify against the bank in BAGDROP OS → Finance → Payments to verify.`;
+    const msg = `PAYMENT PROOF RECEIVED · ${b.id} · ${b.traveller.name} · ${inr(amount)}${kind === "topup" ? " (extra bags)" : ""}${utr ? ` · UTR ${utr}` : ""}${proof ? " · screenshot attached" : ""}\nVerify against the bank in BAGDROP OS → Finance → Payments to verify.`;
     await opsNotify(msg, `Payment proof · ${inr(amount)} · ${b.id}`, `proof:${b.id}:${kind}:${now}`);
     await notifyInquiryDesk(msg, `Payment proof to verify · ${b.id}`, `proofdesk:${b.id}:${kind}:${now}`);
     kickSweep();
@@ -144,7 +144,7 @@ async function handlePOST(req: Request) {
   /* ================= login / logout ================= */
   if (body.action === "login") {
     const o = body.otp ?? {};
-    if (!o.to || !o.code || !o.exp || !o.token || !checkOtp(o.to, o.code, Number(o.exp), o.token)) {
+    if (!o.to || !o.code || !o.exp || !o.token || !(await checkOtpLimited(o.to, o.code, Number(o.exp), o.token))) {
       return NextResponse.json({ error: "OTP_INVALID" }, { status: 401 });
     }
     if (!(await claimOnce(`otpuse:login:${o.token.slice(0, 40)}`))) return NextResponse.json({ error: "OTP_USED" }, { status: 409 });
@@ -188,7 +188,7 @@ async function handlePOST(req: Request) {
         /* team-priced booking: the team prices the extra bags */
         const next: Booking = { ...b, admin: { ...b.admin, bagAddRequest: { bags, oversize, at: now } }, events: [...b.events, { at: now, by: "customer", text: `Client asked to ADD bags after payment (${change}) — needs a price from the team` }] };
         await save(sb, next);
-        await opsNotify(`➕ Bags added after payment · ${b.id} · ${change} · team-priced route — set the extra amount.`, `Bag add request · ${b.id}`, `bagadd:${b.id}:${now}`);
+        await opsNotify(`Bags added after payment · ${b.id} · ${change} · team-priced route — set the extra amount.`, `Bag add request · ${b.id}`, `bagadd:${b.id}:${now}`);
         return NextResponse.json({ ok: true, booking: clientView(next), note: "The Bagdrop team will confirm the extra amount shortly." });
       }
       const extra = Math.max(0, cq.q.total - b.pay!.amount);
@@ -198,7 +198,7 @@ async function handlePOST(req: Request) {
         events: [...b.events, { at: now, by: "customer", text: `Client ADDED bags after payment (${change}) · extra ${inr(extra)} due` }],
       };
       await save(sb, next);
-      await opsNotify(`➕ Bags added after payment · ${b.id} · ${change} · extra ${inr(extra)} due from the client.`, `Bags added · ${b.id}`, `bagadd:${b.id}:${now}`);
+      await opsNotify(`Bags added after payment · ${b.id} · ${change} · extra ${inr(extra)} due from the client.`, `Bags added · ${b.id}`, `bagadd:${b.id}:${now}`);
       kickSweep();
       return NextResponse.json({ ok: true, booking: clientView(next) });
     }
@@ -221,7 +221,7 @@ async function handlePOST(req: Request) {
     }
     await save(sb, next);
     await dropPaymentLink(sb, next); /* the old amount's link must not be paid any more */
-    await opsNotify(`✏️ Client changed ${b.id} · ${change}${cq ? ` · new chart price ${inr(cq.q.total)}${wasApproved ? " (booking stays approved — payment link shows the new amount)" : ""}` : " · needs re-pricing + approval"}`, `Booking changed · ${b.id}`, `edit:${b.id}:${now}`);
+    await opsNotify(`Client changed ${b.id} · ${change}${cq ? ` · new chart price ${inr(cq.q.total)}${wasApproved ? " (booking stays approved — payment link shows the new amount)" : ""}` : " · needs re-pricing + approval"}`, `Booking changed · ${b.id}`, `edit:${b.id}:${now}`);
     kickSweep();
     return NextResponse.json({ ok: true, booking: clientView(next) });
   }

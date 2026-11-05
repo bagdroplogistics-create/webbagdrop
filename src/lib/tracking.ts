@@ -65,7 +65,12 @@ export function trackState(b: Booking, nowMs: number, gps?: GpsPoint | null): Tr
   const leg: TrackLeg | null = delivered ? null : next ? LEG_OF[next.key] : null;
 
   const e = etaOf(b);
-  const eta = e && next && e.next === next.key ? e.at : null;
+  /* the ETA ops typed on the tracking desk wins; otherwise the one entered
+   * with the step before (line-haul departed → arrival, out for delivery →
+   * delivery); an open problem with a new ETA overrides both */
+  const stepEta = next?.key === "arrive" ? ms.depart?.detail?.eta : next?.key === "pod" ? ms.ofd?.detail?.eta : undefined;
+  const prob = openProblem(b);
+  const eta = prob?.eta ?? (e && next && e.next === next.key ? e.at : stepEta && Number.isFinite(Date.parse(stepEta)) ? stepEta : null);
   const lateByMin = eta && !delivered ? Math.max(0, Math.round((nowMs - Date.parse(eta)) / 60_000)) : 0;
 
   /* estimated progress along the lane */
@@ -73,7 +78,7 @@ export function trackState(b: Booking, nowMs: number, gps?: GpsPoint | null): Tr
   if (delivered || ms.arrive) progress = 1;
   else if (ms.depart) {
     const t0 = Date.parse(ms.depart.at);
-    const t1 = eta && e?.next === "arrive" ? Date.parse(eta) : NaN;
+    const t1 = eta && next?.key === "arrive" ? Date.parse(eta) : NaN;
     progress = Number.isFinite(t1) && t1 > t0 ? Math.min(0.97, Math.max(0.03, (nowMs - t0) / (t1 - t0))) : 0.08;
   }
   const lerp = (a: LatLng, z: LatLng, t: number): LatLng => ({ lat: a.lat + (z.lat - a.lat) * t, lng: a.lng + (z.lng - a.lng) * t });
@@ -94,6 +99,13 @@ export function trackState(b: Booking, nowMs: number, gps?: GpsPoint | null): Tr
 
 /** What the public tracking link may show — first name only, no address,
  *  no phone, no price. */
+/** The latest problem ops raised and haven't cleared — shown to the client. */
+export function openProblem(b: Booking): { kind: string; note: string; eta: string | null; at: string } | null {
+  const open = (opsOf(b).exceptions ?? []).filter((x) => !x.resolved);
+  const e = open[open.length - 1];
+  return e ? { kind: e.kind, note: e.note, eta: e.eta && Number.isFinite(Date.parse(e.eta)) ? e.eta : null, at: e.at } : null;
+}
+
 export interface PublicTrack {
   ref: string; name: string; from: string; to: string; mode: Mode; pieces: number; oversize: number;
   pickupDate: string; slot: string; deliveryDate: string | null;
@@ -102,6 +114,7 @@ export interface PublicTrack {
   progress: number; position: TrackState["position"];
   fromGeo: LatLng | null; toGeo: LatLng | null;
   ended: boolean; deliveredAt: string | null;
+  problem: { kind: string; note: string; eta: string | null; at: string } | null;
 }
 export function publicTrack(b: Booking, nowMs: number, gps?: GpsPoint | null): PublicTrack {
   const s = trackState(b, nowMs, gps);
@@ -112,5 +125,6 @@ export function publicTrack(b: Booking, nowMs: number, gps?: GpsPoint | null): P
     stages: MILESTONES.filter((m) => m.key !== "lr").map((m) => ({ key: m.key as MilestoneKey, name: m.name, at: ms[m.key]?.at ?? null })),
     next: s.next?.name ?? null, eta: s.eta, late: s.late, progress: s.progress, position: s.position,
     fromGeo: s.fromGeo, toGeo: s.toGeo, ended: s.delivered, deliveredAt: s.deliveredAt,
+    problem: s.delivered ? null : openProblem(b),
   };
 }

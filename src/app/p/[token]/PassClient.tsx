@@ -15,7 +15,7 @@ import type { PassView } from "@/lib/movePass";
 
 interface PassResp { pass: PassView; passUrl: string; qrSvg: string; pdf417Svg: string; trackUrl: string | null; wallet: { apple: boolean; google: boolean } }
 type State = { kind: "loading" } | { kind: "bad" } | { kind: "ok"; r: PassResp };
-const MODE_ICON: Record<string, string> = { road: "🚚", air: "✈️", rail: "🚆", sea: "⛴" };
+const MODE_NAME: Record<string, string> = { road: "ROAD", air: "AIR", rail: "RAIL", sea: "SEA" };
 const day = (d: string | null, o: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short", year: "numeric" }) =>
   d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-IN", o) : "—";
 const WA = `https://wa.me/${COMPANY.phone.replace(/\D/g, "")}`;
@@ -76,7 +76,7 @@ function Pass({ r }: { r: PassResp }) {
             <span className="font-display text-xl font-extrabold tracking-tight">BAGDROP</span>
             <span className="text-[11px] font-semibold uppercase tracking-[.2em] opacity-90">Move pass</span>
           </div>
-          <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold">{p.delivered ? "✓ Delivered" : p.stage}</span>
+          <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold">{p.delivered ? "Delivered" : p.stage}</span>
         </div>
 
         <div className="grid md:grid-cols-[minmax(0,1fr)_230px]">
@@ -90,7 +90,7 @@ function Pass({ r }: { r: PassResp }) {
               </div>
               <div className="mb-6 flex flex-1 items-center gap-2 px-2 text-muted" aria-hidden>
                 <span className="h-px flex-1 border-t-2 border-dashed border-line" />
-                <span className="text-2xl">{MODE_ICON[p.mode] ?? "🚚"}</span>
+                <span className="font-mono text-xs font-bold tracking-[0.2em]">{MODE_NAME[p.mode] ?? p.mode.toUpperCase()}</span>
                 <span className="h-px flex-1 border-t-2 border-dashed border-line" />
               </div>
               <div className="text-right">
@@ -108,7 +108,7 @@ function Pass({ r }: { r: PassResp }) {
               <Field label="Delivery by" value={p.deliveryDate ? day(p.deliveryDate) : "As planned"} />
               <Field label="Pieces" value={pcsLabel(p.pieces - p.xl, p.xl)} />
               <Field label="Service" value={p.service} wide />
-              <Field label="Mode" value={`${MODE_ICON[p.mode] ?? ""} ${p.mode.charAt(0).toUpperCase()}${p.mode.slice(1)}`} />
+              <Field label="Mode" value={`${p.mode.charAt(0).toUpperCase()}${p.mode.slice(1)}`} />
               <Field label="Issued" value={day(p.issuedAt.slice(0, 10), { day: "numeric", month: "short" })} />
             </div>
 
@@ -149,10 +149,10 @@ function Pass({ r }: { r: PassResp }) {
       </motion.article>
 
       <div className="flex flex-wrap gap-2 print:hidden">
-        <button onClick={() => window.print()} className="cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">⬇ Download PDF</button>
+        <button onClick={() => window.print()} className="cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Download PDF</button>
         {r.wallet.apple && <a href={`/api/pass/wallet?kind=apple&t=${encodeURIComponent(r.passUrl.split("/p/")[1])}`} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white">Add to Apple Wallet</a>}
         {r.wallet.google && <a href={`/api/pass/wallet?kind=google&t=${encodeURIComponent(r.passUrl.split("/p/")[1])}`} className="rounded-xl bg-[#1a73e8] px-4 py-2.5 text-sm font-bold text-white">Save to Google Wallet</a>}
-        {r.trackUrl && <a href={r.trackUrl} className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">📍 Track live</a>}
+        {r.trackUrl && <a href={r.trackUrl} className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">Track live</a>}
         <a href={WA} className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">WhatsApp Bagdrop</a>
       </div>
       <p className="text-xs text-muted print:hidden">This pass is private — it carries your addresses. Share it only with someone collecting or handing over the bags. {COMPANY.name} · {COMPANY.phone}</p>

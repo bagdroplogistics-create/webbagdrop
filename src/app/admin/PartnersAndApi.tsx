@@ -54,7 +54,7 @@ function InviteButtons({ a }: { a: AgentRow }) {
       <span className="text-muted">Invite:</span>
       <Button size="sm" variant="outline" disabled={!wa} onClick={() => window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text())}`, "_blank", "noopener,noreferrer")}>WhatsApp</Button>
       <Button size="sm" variant="outline" disabled={!a.email} onClick={() => { window.location.href = `mailto:${a.email}?subject=${encodeURIComponent("Your Bagdrop partner account")}&body=${encodeURIComponent(text())}`; }}>Email</Button>
-      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(text()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); })}>{copied ? "Copied ✓" : "Copy invite"}</Button>
+      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(text()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); })}>{copied ? "Copied" : "Copy invite"}</Button>
     </span>
   );
 }

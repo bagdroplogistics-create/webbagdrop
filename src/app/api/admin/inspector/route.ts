@@ -30,7 +30,7 @@ export async function GET() {
   /* which flags were already dispatched? the booking's events carry the stamp */
   const dispatched = new Set<string>();
   for (const b of bookings) for (const e of b.events) {
-    const m = e.text.match(/^⚑ Flagged (\S+)/);
+    const m = e.text.match(/^(?:\u2691 )?Flagged (\S+)/);
     if (m) dispatched.add(`${b.id}:${m[1]}`);
   }
   return NextResponse.json({
@@ -75,8 +75,8 @@ async function handlePOST(req: Request) {
       return NextResponse.json({ error: "NO_CONTACT", detail: "Give the department a contact (Inspector → Departments) or enter a number/email for this flag." }, { status: 400 });
     }
 
-    const text = `⚑ BAGDROP OS flag · ${doc.id} · ${b.title}\n${b.detail}${b.note ? `\nNote: ${b.note}` : ""}\nLane: ${doc.from} → ${doc.to} · ${doc.date} ${doc.slot} · client ${doc.traveller.name} ${doc.traveller.mobile}\nAct and update the Inspector.`;
-    const subject = `⚑ Flag · ${b.title} · ${doc.id}`;
+    const text = `BAGDROP OS flag · ${doc.id} · ${b.title}\n${b.detail}${b.note ? `\nNote: ${b.note}` : ""}\nLane: ${doc.from} → ${doc.to} · ${doc.date} ${doc.slot} · client ${doc.traveller.name} ${doc.traveller.mobile}\nAct and update the Inspector.`;
+    const subject = `Flag · ${b.title} · ${doc.id}`;
     const ts = Date.now().toString(36);
     let queued = 0;
     if (dept && (dept.mobile || dept.email)) {
@@ -90,7 +90,7 @@ async function handlePOST(req: Request) {
       ...doc,
       events: [...doc.events, {
         at: new Date().toISOString(), by: "admin",
-        text: `⚑ Flagged ${b.rule} → ${dept?.name ?? "direct contact"}${extraMobile ? ` + ${extraMobile}` : ""}${b.note ? ` · ${b.note}` : ""}`,
+        text: `Flagged ${b.rule} → ${dept?.name ?? "direct contact"}${extraMobile ? ` + ${extraMobile}` : ""}${b.note ? ` · ${b.note}` : ""}`,
       }],
     };
     const up = await saveOrThrow(sb, next);

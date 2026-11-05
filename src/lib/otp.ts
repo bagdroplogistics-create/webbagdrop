@@ -29,6 +29,19 @@ export function checkOtp(to: string, code: string, exp: number, token: string): 
   return want.length === got.length && timingSafeEqual(want, got);
 }
 
+/** Normalisers shared by the OTP route and the wizard's server paths. */
+export function cleanMobile(raw: string): string | null {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length === 10) return "91" + d;
+  if (d.length === 12 && d.startsWith("91")) return d;
+  if (d.length === 11 && d.startsWith("0")) return "91" + d.slice(1);
+  return null;
+}
+export function cleanEmail(raw: string): string | null {
+  const e = (raw ?? "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) ? e : null;
+}
+
 /** checkOtp with a guess limit: after OTP_MAX_TRIES wrong codes against one
  *  issued code, that code is dead (even the right digits) and the person
  *  asks for a new one — so a 6-digit code can't be guessed in its 10 minutes.
@@ -44,17 +57,4 @@ export async function checkOtpLimited(to: string, code: string, exp: number, tok
   if (checkOtp(to, code, exp, token)) return true;
   if (sb) await sb.from("settings").upsert({ id, doc: { n: tries + 1, exp }, status: "otpfail", created: new Date().toISOString() });
   return false;
-}
-
-/** Normalisers shared by the OTP route and the wizard's server paths. */
-export function cleanMobile(raw: string): string | null {
-  const d = (raw ?? "").replace(/\D/g, "");
-  if (d.length === 10) return "91" + d;
-  if (d.length === 12 && d.startsWith("91")) return d;
-  if (d.length === 11 && d.startsWith("0")) return "91" + d.slice(1);
-  return null;
-}
-export function cleanEmail(raw: string): string | null {
-  const e = (raw ?? "").trim().toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) ? e : null;
 }

@@ -55,6 +55,20 @@ export async function adminSaveEvent(doc: BagdropEvent): Promise<void> {
   if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP_${r.status}`);
 }
 
+/** Generates the final, real host invoice for a host-billed event (see
+ *  /api/admin/events/host-invoice/route.ts) — a deliberate admin action,
+ *  not available in local-demo mode (same as Finance's own document
+ *  issuance, which always calls the server too). Throws ALREADY_INVOICED
+ *  if one was already generated for this event. */
+export async function generateHostInvoice(eventId: string): Promise<{ event: BagdropEvent; hostInvoice: NonNullable<BagdropEvent["hostInvoice"]> }> {
+  const r = await fetch("/api/admin/events/host-invoice", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error ?? `HTTP_${r.status}`);
+  return { event: j.event as BagdropEvent, hostInvoice: j.hostInvoice };
+}
+
 export function watchAdminEvents(cb: (list: BagdropEvent[]) => void, onError?: (e: unknown) => void): () => void {
   if (backend === "local") {
     cb(lsList());
@@ -90,7 +104,9 @@ export function y2kSeedEvent(): BagdropEvent {
     dates: { in: "2026-12-17", out: "2026-12-18" }, direction: "both", billing: "host",
     expected: { families: 40, bags: 120 },
     rates: { oversize: 900, minBags: 2, slabPct: 18, depositPct: 50 },
-    sectors: [{ city: "Mumbai", rate: 3500, pickDay: "2026-12-10", retDay: "2026-12-19" }],
+    sectors: [{ city: "Mumbai", rate: 3500, pickDay: "2026-12-09", retDay: "2026-12-19" }],
+    pickupDays: ["2026-12-09", "2026-12-10", "2026-12-11"],
+    bookingCloses: "2026-11-15",
     contacts: { host: "Host family", hostMobile: "", planner: "", onsite: "" },
     landing: {
       names: "Yashna & Yash", hashtag: "#Y2K", datesText: "17 & 18 December 2026",

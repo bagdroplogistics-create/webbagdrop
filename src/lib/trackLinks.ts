@@ -10,8 +10,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GpsPoint, TrackLeg } from "./tracking";
+import { requiredSecret } from "./secrets";
 
-const SECRET = process.env.QUOTE_SIGNING_SECRET ?? "dev-secret-change-me";
+const SECRET = requiredSecret("QUOTE_SIGNING_SECRET", "dev-secret-change-me");
 const mac = (payload: string) => createHmac("sha256", SECRET).update(payload).digest("base64url").slice(0, 22);
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const ID = /^[A-Z0-9-]{6,40}$/;

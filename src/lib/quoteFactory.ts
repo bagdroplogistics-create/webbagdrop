@@ -8,6 +8,7 @@ import { loadMasters } from "./pricingSettings";
 import { quotePayload, sign } from "./sign";
 import { newToken } from "./supabaseAdmin";
 import type { Booking, Mode, UseCase } from "./types";
+import { withAirportAddress } from "./airports";
 
 export interface LeadInput {
   name: string; mobile: string; email?: string;
@@ -42,7 +43,7 @@ export async function makeQuotedBooking(b: LeadInput): Promise<{ doc: Booking; r
   const doc: Booking = {
     id, created: nowIso, status: "quoted",
     uc: b.uc ?? "d2d", ucName: b.ucName ?? "Door → Door", mode,
-    from: b.fromName, to: b.toName, pickAddr: b.pickAddr?.trim() ?? "", dropAddr: b.dropAddr?.trim() ?? "",
+    from: b.fromName, to: b.toName, ...withAirportAddress(b.uc ?? "d2d", b.fromName, b.toName, b.pickAddr?.trim() ?? "", b.dropAddr?.trim() ?? ""),
     zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
     date: b.date ?? "", ref: b.flight?.trim().toUpperCase() ?? "", slot: b.slot ?? "",
     bags, oversize, billed: ror ? bags + oversize : (signedQuote.breakdown.billed ?? bags),

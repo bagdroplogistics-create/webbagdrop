@@ -59,7 +59,7 @@ async function handlePOST(req: Request) {
       const fail = await save({
         ...doc,
         kyc: { ...doc.kyc, status: approve ? "docs_approved" : "docs_rejected", note: approve ? undefined : note, reviewedAt: now, reviewedBy: "compliance" },
-        events: [...doc.events, { at: now, by: "admin", text: approve ? `🛂 Passport + visa APPROVED by compliance${note ? ` · ${note}` : ""} — guest may sign the bond` : `🛂 Documents REJECTED by compliance · ${note}` }],
+        events: [...doc.events, { at: now, by: "admin", text: approve ? `Passport + visa APPROVED by compliance${note ? ` · ${note}` : ""} — guest may sign the bond` : `Documents REJECTED by compliance · ${note}` }],
       });
       if (fail) return fail;
       await notify("kyc_issue", to, {

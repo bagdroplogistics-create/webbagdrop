@@ -24,7 +24,7 @@ export interface MapMove {
 }
 
 const COLOR: Record<Mode, string> = { road: "#ea580c", air: "#0284c7", rail: "#7c3aed", sea: "#0d9488" };
-const ICON: Record<Mode, string> = { road: "🚚", air: "✈️", rail: "🚆", sea: "⛴" };
+const MODE_LETTER: Record<Mode, string> = { road: "R", air: "A", rail: "T", sea: "S" };
 const BEND: Record<Mode, number> = { road: 0.06, rail: 0.12, air: 0.28, sea: 0.15 };
 
 type Pt = { x: number; y: number };
@@ -177,15 +177,15 @@ export default function TrackMap({ moves, selected, onSelect, className = "h-[48
             {m.late && <circle r={14 * s} fill="#ef4444" className="tm-pulse" />}
             {m.source === "gps" && <circle r={11 * s} fill="none" stroke="#16a34a" strokeWidth={2.5 * s} />}
             <circle r={(selected === m.id ? 10 : 8.5) * s} fill="#fff" stroke={m.late ? "#ef4444" : COLOR[m.mode]} strokeWidth={(selected === m.id ? 3 : 2) * s} />
-            <text textAnchor="middle" dominantBaseline="central" fontSize={10 * s}>{ICON[m.mode]}</text>
+            <text textAnchor="middle" dominantBaseline="central" fontSize={9 * s} fontWeight={700} fill={m.late ? "#ef4444" : COLOR[m.mode]}>{MODE_LETTER[m.mode]}</text>
           </g>
         ); })}
       </svg>
 
       <div className="absolute right-2 top-2 flex flex-col gap-1">
-        {([["+", () => zoom(1.6)], ["−", () => zoom(1 / 1.6)], ["⤢", () => setView(null)]] as const).map(([t, fn]) => (
-          <button key={t} onClick={fn} title={t === "⤢" ? "Fit to moves" : t === "+" ? "Zoom in" : "Zoom out"}
-            className="grid size-7 cursor-pointer place-items-center rounded-md border border-line bg-white text-sm font-bold shadow-sm hover:bg-paper">{t}</button>
+        {([["+", () => zoom(1.6)], ["−", () => zoom(1 / 1.6)], ["Fit", () => setView(null)]] as const).map(([t, fn]) => (
+          <button key={t} onClick={fn} title={t === "Fit" ? "Fit to moves" : t === "+" ? "Zoom in" : "Zoom out"}
+            className="grid h-7 min-w-7 cursor-pointer place-items-center rounded-md border border-line bg-white px-1.5 text-xs font-bold shadow-sm hover:bg-paper">{t}</button>
         ))}
       </div>
       <p className="pointer-events-none absolute bottom-1.5 left-2 text-[10px] text-slate-500">Stylised map · positions are estimates unless marked live GPS</p>

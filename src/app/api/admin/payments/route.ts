@@ -1,6 +1,6 @@
 import { retryOnConflict, saveOrThrow } from "@/lib/bookingStore";
 import { NextResponse } from "next/server";
-import { isAdminRequest } from "@/lib/adminAuth";
+import { actorCan, actorName, isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { inr } from "@/lib/pricing";
 import { notify, kickSweep } from "@/lib/automation";
@@ -35,6 +35,8 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ url: s.data.signedUrl });
   }
 
+  if (!(await actorCan("act.verify_payments"))) return NextResponse.json({ error: "FORBIDDEN", detail: "Your login doesn't have “Verify payments and refunds”." }, { status: 403 });
+  const who = await actorName();
   if (target.status !== "submitted") return NextResponse.json({ error: "NOT_SUBMITTED", detail: "Only a submitted payment can be verified or rejected." }, { status: 409 });
   const note = (b.note ?? "").trim().slice(0, 200);
   const ref = (b.ref ?? "").trim().slice(0, 60);
@@ -47,10 +49,10 @@ async function handlePOST(req: Request) {
     if (kind === "full") {
       next = {
         ...doc,
-        pay: { ...doc.pay, status: "captured", verifiedAt: now, verifiedBy: "finance", rejectedNote: undefined,
+        pay: { ...doc.pay, status: "captured", verifiedAt: now, verifiedBy: who, rejectedNote: undefined,
           recon: ref ? { at: now, ref } : doc.pay.recon,
           history: [...(doc.pay.history ?? []), { at: now, amount: doc.pay.amount, kind: "full", utr: doc.pay.utr, verifiedBy: "finance" }] },
-        events: [...doc.events, { at: now, by: "admin", text: `✅ Payment ${inr(doc.pay.amount)} VERIFIED by finance against the bank${ref ? ` · bank ref ${ref}` : ""}${note ? ` · ${note}` : ""}` }],
+        events: [...doc.events, { at: now, by: "admin", text: `Payment ${inr(doc.pay.amount)} VERIFIED by ${who} against the bank${ref ? ` · bank ref ${ref}` : ""}${note ? ` · ${note}` : ""}` }],
       };
       /* the sweep now sends "payment received", issues the tax invoice and asks for identity */
     } else {
@@ -59,15 +61,15 @@ async function handlePOST(req: Request) {
         ...doc,
         pay: { ...doc.pay, amount: doc.pay.amount + amt, topup: null,
           history: [...(doc.pay.history ?? []), { at: now, amount: amt, kind: "topup", utr: doc.pay.topup!.utr, verifiedBy: "finance" }] },
-        events: [...doc.events, { at: now, by: "admin", text: `✅ Extra-bags payment ${inr(amt)} VERIFIED by finance${ref ? ` · bank ref ${ref}` : ""}${note ? ` · ${note}` : ""}` }],
+        events: [...doc.events, { at: now, by: "admin", text: `Extra-bags payment ${inr(amt)} VERIFIED by ${who}${ref ? ` · bank ref ${ref}` : ""}${note ? ` · ${note}` : ""}` }],
       };
       await notify("topup_verified", to, { ref: doc.id, amount: inr(amt) }, `topupok:${doc.id}:${now}`);
     }
   } else if (b.action === "reject") {
     if (!note) return NextResponse.json({ error: "NEEDS_NOTE", detail: "Tell the client why it couldn't be verified." }, { status: 400 });
     next = kind === "full"
-      ? { ...doc, pay: { ...doc.pay, status: "rejected", rejectedAt: now, rejectedNote: note }, events: [...doc.events, { at: now, by: "admin", text: `✖ Payment proof REJECTED by finance · ${note}` }] }
-      : { ...doc, pay: { ...doc.pay, topup: { ...doc.pay.topup!, status: "rejected", rejectedNote: note } }, events: [...doc.events, { at: now, by: "admin", text: `✖ Extra-bags payment proof REJECTED by finance · ${note}` }] };
+      ? { ...doc, pay: { ...doc.pay, status: "rejected", rejectedAt: now, rejectedNote: note }, events: [...doc.events, { at: now, by: "admin", text: `Payment proof REJECTED by ${who} · ${note}` }] }
+      : { ...doc, pay: { ...doc.pay, topup: { ...doc.pay.topup!, status: "rejected", rejectedNote: note } }, events: [...doc.events, { at: now, by: "admin", text: `Extra-bags payment proof REJECTED by ${who} · ${note}` }] };
     await notify("payment_rejected", to, { ref: doc.id, note, dashboard: `${origin}/account` }, `payrej:${doc.id}:${kind}:${now}`);
   } else {
     return NextResponse.json({ error: "BAD_ACTION" }, { status: 400 });
