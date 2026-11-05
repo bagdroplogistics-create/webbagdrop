@@ -12,8 +12,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
     "bwip-js": "4.11.4",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^3.0.1",
+    "html2canvas-pro": "^2.6.3",
+    "jspdf": "^4.2.1",
     "motion": "13.5.1",
     "next": "16.4.2",
     "node-forge": "1.4.2",
