@@ -136,7 +136,7 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
             <Input className="font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp.code} onChange={(e) => setOtp((p) => ({ ...p, code: e.target.value }))} placeholder="••••••" />
             <Button disabled={busy || otp.code.trim().length !== 6} onClick={() => void login()}>{busy ? "…" : "Sign in"}</Button>
           </div>
-          <p className="mt-2 text-xs text-muted">Code sent.{otp.demo ? <span className="font-mono"> (demo: {otp.demo})</span> : null} <button className="font-semibold text-brand underline" onClick={() => void send()}>Resend</button></p>
+          <p className="mt-2 text-xs text-muted">Code sent.{otp.demo ? <span className="font-mono"> Your code: {otp.demo}</span> : null} <button className="font-semibold text-brand underline" onClick={() => void send()}>Resend</button></p>
         </>
       )}
       {err && <p className="mt-2 text-sm text-red-700">{err}</p>}
