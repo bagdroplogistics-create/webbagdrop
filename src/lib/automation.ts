@@ -336,6 +336,38 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
   return { stub: false };
 }
 
+/** A free-form text message (what sendWhatsApp above sends) only reaches a
+ *  number that messaged Bagdrop first within the last 24 hours — WhatsApp's
+ *  Cloud API still answers 200 OK for one outside that window, then silently
+ *  drops it, which is why a first-time guest's OTP looks "sent" here but
+ *  never arrives. The fix is an approved Authentication-category template;
+ *  this sends through it once WHATSAPP_OTP_TEMPLATE_NAME is set (unset =
+ *  identical behaviour to today, falling back to sendWhatsApp above, so this
+ *  is a no-op until that env var exists). Set WHATSAPP_OTP_TEMPLATE_LANG if
+ *  the approved template isn't en_US, and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1
+ *  if Meta's template wizard added its default "Copy code" quick-reply
+ *  button (it adds a second, button-type component the request needs). */
+export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText: string): Promise<{ stub: boolean; link?: string }> {
+  const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME;
+  if (!templateName) return sendWhatsApp(mobile, fallbackText);
+  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  if (!token || !phoneId) return { stub: true, link: `https://wa.me/${msisdn}?text=${encodeURIComponent(code)}` };
+  const components: Record<string, unknown>[] = [{ type: "body", parameters: [{ type: "text", text: code }] }];
+  if (process.env.WHATSAPP_OTP_TEMPLATE_HAS_BUTTON === "1") {
+    components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] });
+  }
+  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp", to: msisdn, type: "template",
+      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US" }, components },
+    }),
+  });
+  if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 200)}`);
+  return { stub: false };
+}
+
 export async function sendEmail(email: string, subject: string, text: string): Promise<{ stub: boolean; link?: string }> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { stub: true, link: `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}` };
