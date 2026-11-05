@@ -16,6 +16,7 @@ export const MODULES = [
   { key: "evt", name: "Bulk & manifest tools", group: "Operate" },
   { key: "drv", name: "Drivers", group: "Operate" },
   { key: "flt", name: "Flights", group: "Operate" },
+  { key: "apt", name: "Airport desk · T2 POC", group: "Operate" },
   { key: "cap", name: "Capacity & roster", group: "Operate" },
   { key: "cli", name: "Clients · master", group: "Commerce" },
   { key: "crm", name: "CRM & follow-ups", group: "Commerce" },
@@ -53,8 +54,8 @@ const withViews = (ps: Perm[]): Perm[] => [...new Set(ps.flatMap((p) => (p.endsW
 
 export const DEPARTMENTS: { key: string; name: string; perms: Perm[] }[] = ([
   { key: "management", name: "Management", perms: [...all("edit"), ...ACTIONS.map((a) => `act.${a.key}` as Perm)] },
-  { key: "operations", name: "Operations", perms: [...mods("edit", "cmd", "ship", "lr", "opsx", "live", "insp", "exc", "wed", "evt", "drv", "flt", "cap", "id"), ...mods("view", "cli", "crm", "rep"), "act.approve_bookings"] },
-  { key: "hub", name: "Hub staff", perms: [...mods("edit", "ship", "lr", "live", "exc"), ...mods("view", "cmd", "opsx", "insp")] },
+  { key: "operations", name: "Operations", perms: [...mods("edit", "cmd", "ship", "lr", "opsx", "live", "insp", "exc", "wed", "evt", "drv", "flt", "apt", "cap", "id"), ...mods("view", "cli", "crm", "rep"), "act.approve_bookings"] },
+  { key: "hub", name: "Hub staff", perms: [...mods("edit", "ship", "lr", "live", "exc", "apt"), ...mods("view", "cmd", "opsx", "insp")] },
   { key: "sales", name: "Sales", perms: [...mods("edit", "ship", "cli", "crm", "ads", "wed", "evt", "part"), ...mods("view", "cmd", "price", "rep"), "act.approve_bookings", "act.export"] },
   { key: "finance", name: "Finance", perms: [...mods("edit", "fin"), ...mods("view", "cmd", "ship", "price", "cli", "part", "rep", "dash"), "act.verify_payments", "act.export"] },
   { key: "auditor", name: "Auditor", perms: [...all("view")] },
@@ -86,9 +87,9 @@ const SHARED_READS = ["bookings", "metrics", "trips", "ops", "events", "flights"
 /** …except these reads, which stay behind their own boxes. */
 const PRIVATE_READS = ["finance/gateway", "finance/recon", "finance/doc", "clients"];
 const ROUTE_MODULE: Record<string, ModKey> = {
-  agents: "part", automation: "rules", "board-link": "dash", clients: "cli", crm: "crm", events: "wed", finance: "fin", payments: "fin",
-  flights: "flt", identity: "id", inquiries: "ship", inspector: "insp", leads: "ads", "production-leads": "ads", metrics: "dash", moves: "opsx",
-  ops: "opsx", "payment-link": "ship", pricing: "price", quotes: "ship", rules: "rules", tags: "lr", tracking: "live", trips: "lr",
+  agents: "part", airport: "apt", automation: "rules", "board-link": "dash", clients: "cli", crm: "crm", events: "wed", finance: "fin", payments: "fin",
+  flights: "flt", identity: "id", inquiries: "ship", inquiry: "ship", inspector: "insp", leads: "ads", "production-leads": "ads", metrics: "dash", moves: "opsx",
+  ops: "opsx", lifecycle: "ship", lr: "lr", "payment-link": "ship", pricing: "price", quotes: "ship", rules: "rules", tags: "lr", tracking: "live", trips: "lr",
   "wedding-ops": "wed", "wedding-tags": "wed", audit: "sec",
 };
 

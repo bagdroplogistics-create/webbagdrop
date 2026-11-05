@@ -29,9 +29,9 @@ export default function ShareBar({ view, m }: { view: ViewKey; m: Metrics }) {
       <Button size="sm" variant="outline" onClick={() => share("wa")}>Share on WhatsApp</Button>
       <Button size="sm" variant="outline" onClick={() => share("mail")}>Email digest</Button>
       <Button size="sm" variant="outline" disabled={snap === "busy"} onClick={doSnap}>
-        {snap === "busy" ? "Rendering…" : snap === "shared" ? "Shared ✓" : snap === "downloaded" ? "Saved ✓" : "Snapshot PNG"}
+        {snap === "busy" ? "Rendering…" : snap === "shared" ? "Shared" : snap === "downloaded" ? "Saved" : "Snapshot PNG"}
       </Button>
-      <Button size="sm" variant="ghost" onClick={() => share("copy")}>{copied ? "Copied ✓" : "Copy text"}</Button>
+      <Button size="sm" variant="ghost" onClick={() => share("copy")}>{copied ? "Copied" : "Copy text"}</Button>
     </div>
   );
 }

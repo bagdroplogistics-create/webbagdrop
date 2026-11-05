@@ -28,7 +28,7 @@ npm run start      # local check on http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **yes** | Supabase publishable/anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | **yes** | Supabase secret/service key (server only) |
 | `ADMIN_SECRET_KEY` | **yes** | BAGDROP OS sign-in key; also signs admin sessions and OTPs |
-| `QUOTE_SIGNING_SECRET` | **yes** | Signs quotes so prices can't be edited in the browser |
+| `QUOTE_SIGNING_SECRET` | **yes** | Signs quotes so prices can't be edited in the browser. It also signs the customer tracking and driver links, so never change it after go-live. |
 | `CRON_SECRET` | **yes** | Lets the daily Vercel cron run `/api/worker` |
 | `SITE_URL` | **yes** | The address this app is served from, e.g. `https://webbagdrop.vercel.app`. All WhatsApp and email links use it. Change it when the domain moves. |
 | `META_WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` | **yes, before go-live** | WhatsApp Business sender (see 3) |
@@ -115,6 +115,66 @@ International guests (passport + visa + email code) work fully.
   - **Enter real per-route costs.** The defaults (₹400 + ₹1,200 + ₹400, plus ₹250 per extra bag, 55% target) are placeholders.
 - **Settings rows used:** `routes` (live + version), `routes_draft`, `pricing_log`, `pricing_benchmarks`, `costmodel`. No database migration is needed.
 
+## 3c · Moves calendar and live tracking
+
+- **Moves calendar** (BAGDROP OS → Operations → Moves calendar):
+  - Month, week and day views of every pickup, line-haul and delivery.
+  - Drag a pickup or delivery to another date to reschedule it. A reason is required, and the customer gets a WhatsApp and email.
+  - Clubbing suggestions, a "Club into trip" button (LR & trips) and run sheets.
+  - Vehicle capacities are set under ⚙ Fleet (settings row `fleet`).
+  - **Control tower** above and beside the calendar:
+    - KPI tiles: moves, pieces with XL, 30-day on-time %, at-risk, clubbing savings and peak city load.
+    - At-risk feed: no captain assigned, unconfirmed bookings about to pick up, overdue deliveries, moves past their ETA, and over-capacity cities.
+    - A city × day load heatmap and lane flow.
+  - Animations use the `motion` package (pinned at 13.5.1 in package.json; installed by `npm install`) and respect the device's reduce-motion setting.
+  - Pieces are counted at actuals; oversize items are flagged **XL**.
+- **Live tracking** (BAGDROP OS → Live tracking): an animated map of every confirmed move until delivery.
+  - Positions come from the milestones scanned in Operations, plus the ETA the team types for the next step.
+  - When a driver's phone is sharing, it shows live GPS instead.
+- **Links:** all are signed with `QUOTE_SIGNING_SECRET`, so that secret must be set and must never change after go-live, or every link already sent stops working.
+  - **Customer link `/t/…`:** no login needed, and it stops working at delivery. It is in the WhatsApp/email at pickup, departure, arrival, out-for-delivery and delivery, and behind the Track button in My bookings and on the partner desk.
+  - **Driver link `/d/…`:** sent automatically to whoever is assigned to a leg in Operations, if a mobile is on file. The driver taps Start trip, and the phone shares its location every 30 seconds until Done, or until the leg's milestone is scanned.
+  - **GPS storage:** fixes are kept in settings rows `gps:<booking>`, never on the booking itself.
+- **Requirements:** GPS needs the site on **https** (Vercel is). The map is drawn in-house, so no map service or API key is needed.
+
+## 3d · Move Pass, bag tags, seals and stickers (airline-grade)
+
+- **Tag number (licence plate):** `BD BDQ 004218 7`, made of:
+  - the Bagdrop code;
+  - the origin hub letters;
+  - a 6-digit serial, one series per hub;
+  - a check digit.
+
+  Code 128 encodes `BDBDQ0042187`. The route code `BD-BDQ-BOM-7F3K2-5-K` is still printed underneath and still scans. Serials come from the database counter `next_doc_no` (`TAG-<hub>`, `SEAL-<hub>`), so a number is never reused.
+- **Issuing and printing** (BAGDROP OS → Operations → a shipment → Bag tags & seals). Each booking gets a plate and a security seal per piece; re-issuing only fills pieces that have none.
+  - **Loop tags:** loop-tag stock (54 × 457 mm), or a 4×6 label folded through the handle.
+  - **Labels:** backup labels, stickers (XL, HEAVY, FRAGILE, PRIORITY, THIS WAY UP) and seals.
+  - **Media:** 4×6 thermal (100 × 150 mm), A4 8-up sheets (99.1 × 67.7 mm), or Zebra ZPL (203 dpi).
+  - **Brother QL-800:**
+    - **DK-11202 die-cut 62 × 100 mm:** a loop tag prints as two labels, the tag face and the claim stub.
+    - **DK-22205 continuous 62 mm:** a loop tag prints as one 62 × 210 mm strip.
+    - Print from the browser with paper 62 mm, margins None and scale 100%. The QL-800 doesn't take ZPL.
+    - Sticker pictograms are pure black (no emoji), so they print cleanly on thermal printers.
+  - **Print at 100% scale.** Seals must go on **VOID tamper-evident label stock**.
+  - Captains can print the same labels from their driver link on a portable printer.
+- **Pickup check-in** (captain's driver link):
+  - for each bag: scan the tag, scan its own seal, enter the weight (over 32 kg needs confirming, and a HEAVY sticker prints) and take a photo;
+  - then the customer signs.
+  - That completes "Picked up & sealed". It is still blocked until Aadhaar is verified and the LR is issued.
+  - Photos and signatures go to the private storage bucket `bag-photos`, which is created automatically.
+- **Delivery claim check** (captain's driver link):
+  - scan the customer's Move Pass;
+  - scan every tag;
+  - the customer reads out a 6-digit OTP (only a hash is stored; it expires in 30 minutes, and 5 wrong tries lock it).
+  - POD is recorded only when all three match.
+- **Move Pass** `/p/…` (signed link):
+  - a boarding-pass style pass with the passenger, route, pickup slot, pieces with XL, every tag, addresses, captains, a QR code, a PDF417 code and a claim stub;
+  - **Download PDF** prints it on A4;
+  - it is sent on confirmation and again at pickup with every tag number, and it is in My bookings and on the partner desk.
+- **Found-bag page** `/b/<plate>`: the QR on every tag opens it. It confirms the tag is genuine and offers WhatsApp or a call to Bagdrop. No customer data is shown.
+- **Apple / Google Wallet:** add the keys listed in `.env.example` (`APPLE_*` and `GOOGLE_WALLET_*`) and redeploy. The "Add to Wallet" buttons appear by themselves.
+- **Scanners:** phone cameras (Chrome on Android reads barcodes; on iPhone, type or use a scanner gun) or USB/Bluetooth scanner guns, which type into the focused field.
+
 ## 4 · Deploy, then lock the database (order matters)
 
 1. Deploy this code to Vercel. `vercel.json` adds a daily cron at 03:00 UTC; actions in
@@ -127,6 +187,12 @@ International guests (passport + visa + email code) work fully.
    - Its last query must show `false` in every row.
    - It removes old public database functions that the previous site version used.
      Running it before the new code is live would break bookings on the old site.
+4. Then run `supabase/migration_004_private_events.sql` in the same SQL editor.
+   - It stops the public key from reading event records (host mobile, team, rates) or
+     writing inquiries directly. The wedding pages read events through `/api/event` instead.
+5. Create your own BAGDROP OS login: sign in once with the owner key (the "Owner key"
+   link on `/admin/login`), then Security & audit → Users → New user, department
+   Management. After that use your own login; the owner key is for emergencies.
 
 Already in place in the Supabase project (no action):
 

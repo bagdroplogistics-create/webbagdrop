@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { SOLUTIONS } from "./data";
-import { Icon } from "./Icon";
 import { Reveal } from "./motion";
 import { GRID, GRID_CARD, Section, SectionHeading } from "./SectionHeading";
 
@@ -19,13 +18,9 @@ export default function Solutions() {
                     {s.tag.toUpperCase()}
                   </span>
                 )}
-                <span className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/90 text-navy shadow-card backdrop-blur">
-                  <Icon name={s.icon} size={18} />
-                </span>
               </div>
               <span className="flex items-center justify-between gap-2 p-4 font-display text-[19px] font-bold leading-tight text-ink">
                 {s.title}
-                <Icon name="arrow" size={15} className="shrink-0 text-faint transition-colors group-hover:text-brand" />
               </span>
             </a>
           </Reveal>

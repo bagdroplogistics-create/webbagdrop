@@ -7,6 +7,10 @@ import { loadMasters } from "@/lib/pricingSettings";
 import { quote, routeFor } from "@/lib/pricing";
 import { notify, kickSweep } from "@/lib/automation";
 import type { Booking, CrmActivity, Inquiry, Mode, UseCase } from "@/lib/types";
+import { isTrackable } from "@/lib/tracking";
+import { passPath, trackPath } from "@/lib/trackLinks";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { failures, recordFailure } from "@/lib/throttle";
 
 /** The B2B partner portal API — login, retail-rate booking (agent collects
  *  from the client, remits net of commission to Bagdrop), the live ledger
@@ -35,9 +39,13 @@ export async function POST(req: Request) {
 
   /* ---------- login (no session needed) ---------- */
   if (b.action === "login") {
+    /* 5 wrong keys for one partner code locks it for 15 minutes; keys are compared in constant time */
+    const code = (b.code ?? "").trim().toUpperCase().slice(0, 40);
+    if (code && (await failures(`partner:${code}`, 15 * 60_000)) >= 5) return NextResponse.json({ error: "LOCKED", detail: "Too many wrong tries — wait 15 minutes or ask Bagdrop to send a new key." }, { status: 423 });
     const agents = await loadAgents();
-    const a = agents.find((x) => x.code.toUpperCase() === (b.code ?? "").trim().toUpperCase() && x.key === (b.key ?? "").trim());
-    if (!a) return NextResponse.json({ error: "WRONG_CREDENTIALS" }, { status: 401 });
+    const digest = (v: string) => createHash("sha256").update(v).digest();
+    const a = agents.find((x) => x.code.toUpperCase() === code && timingSafeEqual(digest(x.key), digest((b.key ?? "").trim())));
+    if (!a) { if (code) await recordFailure(`partner:${code}`, 15 * 60_000); return NextResponse.json({ error: "WRONG_CREDENTIALS" }, { status: 401 }); }
     const res = NextResponse.json({ ok: true, agent: { id: a.id, name: a.name, company: a.company, type: a.type, commission: a.commission } });
     res.cookies.set("bagdrop_partner", makePartnerToken(a.id), { httpOnly: true, sameSite: "lax", secure: true, maxAge: 7 * 24 * 3600, path: "/" });
     return res;
@@ -74,7 +82,7 @@ export async function POST(req: Request) {
       /* per-booking tracking detail for this agent's bookings */
       tracking: ledger.rows.map((row) => {
         const full = bookings.find((x) => x.id === row.id)!;
-        return { id: row.id, status: full.status, events: full.events.slice(-4), slot: full.slot, date: full.date, verified: !!full.identity?.ok };
+        return { id: row.id, status: full.status, events: full.events.slice(-4), slot: full.slot, date: full.date, verified: !!full.identity?.ok, trackUrl: isTrackable(full) && full.status !== "delivered" ? trackPath(full.id) : null, passUrl: isTrackable(full) ? passPath(full.id) : null };
       }),
     });
   }
@@ -145,7 +153,7 @@ export async function POST(req: Request) {
       if (inst?.result.ok) {
         paid.status = "accepted";
         paid.admin = { ...paid.admin, decision: { state: "approved", at: now, by: "instant", note: "Instant booking — partner prepaid" }, instant: { at: now, holdUntil: null } };
-        paid.events = [...paid.events, { at: now, by: "admin", text: "⚡ INSTANT booking — auto-confirmed (instant route, partner prepaid)" }];
+        paid.events = [...paid.events, { at: now, by: "admin", text: "INSTANT booking — auto-confirmed (instant route, partner prepaid)" }];
       } else if (inst && !inst.result.ok) {
         paid.admin = { ...paid.admin, instantMiss: { code: inst.result.code, reason: inst.result.reason } };
       }

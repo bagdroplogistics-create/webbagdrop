@@ -309,8 +309,8 @@ function Pipeline({ leads, inquiries, onMove, onOutreach, onLose, onPullInquiry,
                       <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted">{l.mobile ?? l.contact ?? "—"}{l.owner ? ` · ${l.owner}` : ""}{l.source ? ` · ${l.source}` : ""} <ClientChip mobile={l.mobile ?? l.contact} /></p>
                       <p className="mt-1 text-xs font-semibold tabular-nums">{inr(l.value ?? 0)} <span className="font-normal text-faint">· {Math.floor((Date.now() - new Date(l.created).getTime()) / 86400000)}d old</span></p>
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {s.key !== "new" && s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="ghost" onClick={() => void onMove(l, -1)}>‹</Button>}
-                        {s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="outline" onClick={() => void onMove(l, 1)}>Advance ›</Button>}
+                        {s.key !== "new" && s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="ghost" onClick={() => void onMove(l, -1)}>Back</Button>}
+                        {s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="outline" onClick={() => void onMove(l, 1)}>Advance</Button>}
                         {s.key !== "won" && s.key !== "lost" && <Button size="sm" variant="ghost" onClick={() => void onLose(l)}>Lost</Button>}
                         <Button size="sm" variant="ghost" onClick={() => void onOutreach(name, l.mobile, l.email, s.key === "quoted" ? "payment" : "follow", "wa", l.id)}>WhatsApp</Button>
                         {l.email && <Button size="sm" variant="ghost" onClick={() => void onOutreach(name, l.mobile, l.email, "follow", "mail", l.id)}>Email</Button>}
@@ -381,7 +381,7 @@ function Customers360({ customers, prodCustomers, activity, onOutreach, onNote }
               <Badge tone={sel.tier === "gold" ? "warn" : sel.tier === "silver" ? "info" : "muted"}>{sel.tier}</Badge>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {TEMPLATES.map((t) => <Button key={t.key} size="sm" variant="outline" onClick={() => void onOutreach(sel.name, sel.mobile, sel.last.traveller.email, t.key, "wa")}>{t.name} →</Button>)}
+              {TEMPLATES.map((t) => <Button key={t.key} size="sm" variant="outline" onClick={() => void onOutreach(sel.name, sel.mobile, sel.last.traveller.email, t.key, "wa")}>{t.name}</Button>)}
             </div>
             <h4 className="mt-4 mb-1.5 font-display text-[13px] font-bold">Bookings</h4>
             <div className="max-h-44 overflow-auto">
@@ -432,7 +432,7 @@ function Tasks({ tasks, onAdd, onDone }: { tasks: CrmActivity[]; onAdd: (text: s
           <Button size="sm" disabled={!f.text || !f.due} onClick={() => void onAdd(f.text, new Date(f.due).toISOString(), f.owner).then(() => setF({ text: "", due: "", owner: "" }))}>Add</Button>
         </div>
         <ul className="space-y-2">
-          {open.length === 0 && <li className="text-sm text-muted">Nothing open. 🎉</li>}
+          {open.length === 0 && <li className="text-sm text-muted">Nothing open.</li>}
           {open.map((t) => {
             const late = t.dueAt && new Date(t.dueAt).getTime() < now;
             return (

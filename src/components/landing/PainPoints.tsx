@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { PAINS } from "./data";
-import { Icon } from "./Icon";
 import { Reveal } from "./motion";
 import { GRID, GRID_CARD, Section, SectionHeading } from "./SectionHeading";
 
@@ -18,7 +17,7 @@ export default function PainPoints() {
               <span className="font-display text-4xl font-extrabold tracking-tight text-ink">{p.big}</span>
               <span className="text-[15px] leading-snug text-graphite">{p.pain}</span>
               <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[15px] font-semibold text-ink">
-                <Icon name="check" size={15} className="shrink-0 text-brand" /> {p.fix}
+                {p.fix}
               </span>
             </div>
           </Reveal>

@@ -3,7 +3,7 @@
  *  modules a user can't view, and anything can ask `useMe()` before showing
  *  an Edit or Approve button. The server checks every request anyway
  *  (proxy.ts) — this only keeps people from seeing buttons that would fail. */
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLoad } from "@/lib/useLoad";
 import { can, type Actor, type Perm } from "@/lib/access";
@@ -27,6 +27,23 @@ export function MeProvider({ children }: { children: (me: Me, reload: () => Prom
     if (r.ok) setMe(await r.json());
   }, [router]);
   useLoad(load);
+  /* A session lasts 12 hours. When it ends while a tab is still open, every
+   * module would just show "UNAUTHORIZED" — so the first 401 from any
+   * /api/admin call, and a re-check whenever the tab is focused again,
+   * send the person to the sign-in page instead. */
+  useEffect(() => {
+    const orig = window.fetch;
+    const gone = () => { setGone(true); router.replace("/admin/login"); };
+    window.fetch = async (input, init) => {
+      const r = await orig(input, init);
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (r.status === 401 && /^(?:https?:\/\/[^/]+)?\/api\/admin\//.test(url) && !url.includes("/api/admin/login")) gone();
+      return r;
+    };
+    const onFocus = () => { orig("/api/admin/me", { cache: "no-store" }).then((r) => { if (r.status === 401) gone(); }).catch(() => undefined); };
+    window.addEventListener("focus", onFocus);
+    return () => { window.fetch = orig; window.removeEventListener("focus", onFocus); };
+  }, [router]);
   if (!me) return <div className="flex min-h-screen items-center justify-center text-sm text-muted">{gone ? "Signing you in again…" : "Loading BAGDROP OS…"}</div>;
   if (me.mustChange) return <SetOwnPassword me={me} onDone={load} />;
   return <MeCtx.Provider value={me}>{children(me, load)}</MeCtx.Provider>;

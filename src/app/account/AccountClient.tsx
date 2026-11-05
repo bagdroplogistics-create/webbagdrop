@@ -5,12 +5,13 @@
  *  /api/create-order → checkout modal → /api/verify-payment), and bag/date
  *  changes within the rules the server enforces (/api/account). Sign-in is
  *  by OTP only. */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import Link from "next/link";
 import { inr } from "@/lib/pricing";
 import { Badge, Button, Card, Field, Input, Tile } from "@/components/ui";
 import UpiPay, { type PayTo } from "@/components/UpiPay";
+import { pcsLabel } from "@/lib/opsModel";
 import OnlinePay from "@/components/OnlinePay";
 
 interface View {
@@ -22,6 +23,8 @@ interface View {
   pay: null | { status: string; amount: number; utr?: string; rejectedNote?: string; hasProof: boolean; topup: null | { amount: number; status: string; rejectedNote?: string; hasProof: boolean } };
   paid: boolean; balanceDue: number; identityOk: boolean; indemnitySigned: boolean;
   canEdit: boolean; canPay: boolean; locked: boolean;
+  trackUrl?: string | null;
+  passUrl?: string | null;
 }
 
 const WA = "https://wa.me/916357115711?text=";
@@ -66,7 +69,7 @@ export default function AccountClient() {
             </div>
             <p className="mb-5 text-sm text-muted">Every booking made with {who}. Payment opens once our team approves a booking.</p>
             <PayReturnBanner />
-            {list.length === 0 && <Card><p className="py-6 text-center text-sm text-muted">No bookings yet. <Link className="font-semibold text-brand underline" href="/#book">Book a pickup →</Link></p></Card>}
+            {list.length === 0 && <Card><p className="py-6 text-center text-sm text-muted">No bookings yet. <Link className="font-semibold text-brand underline" href="/#book">Book a pickup</Link></p></Card>}
             <div className="grid gap-4">{list.map((b) => <BookingCard key={b.id} b={b} payTo={payTo} gateway={gateway} onChanged={load} />)}</div>
           </>
         )}
@@ -91,12 +94,15 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
   const [otp, setOtp] = useState<{ sent: boolean; exp: number; token: string; sentTo?: string; demo?: string; code: string }>({ sent: false, exp: 0, token: "", code: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /* WhatsApp codes unavailable right now → open on email and say why */
+  const [waDown, setWaDown] = useState(false);
+  useEffect(() => { void fetch("/api/otp", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.mobile === false && j.email) { setWaDown(true); setChannel("email"); } }).catch(() => {}); }, []);
   async function send() {
     setBusy(true); setErr(null);
     try {
       const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", channel, to }) });
       const j = await r.json();
-      if (j.error) setErr(j.detail ?? (channel === "email" ? "That email doesn't look right." : "That mobile number doesn't look right."));
+      if (j.error) { setErr(j.detail ?? (channel === "email" ? "That email doesn't look right." : "That mobile number doesn't look right.")); if (j.canEmail) setWaDown(true); }
       else setOtp({ sent: true, exp: j.exp, token: j.token, sentTo: j.to, demo: j.demo, code: "" });
     } finally { setBusy(false); }
   }
@@ -117,6 +123,8 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
         <Tile selected={channel === "mobile"} onClick={() => { setChannel("mobile"); setOtp({ sent: false, exp: 0, token: "", code: "" }); }} title="Mobile" sub="WhatsApp / SMS" />
         <Tile selected={channel === "email"} onClick={() => { setChannel("email"); setOtp({ sent: false, exp: 0, token: "", code: "" }); }} title="Email" sub="code by email" />
       </div>
+      {waDown && channel === "mobile" && <p className="mb-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">WhatsApp codes aren&apos;t reaching phones right now. <button type="button" className="cursor-pointer font-semibold underline" onClick={() => { setChannel("email"); setErr(null); setOtp({ sent: false, exp: 0, token: "", code: "" }); }}>Use my email instead</button></p>}
+      {waDown && channel === "email" && <p className="mb-3 text-xs text-muted">WhatsApp codes are unavailable right now, so we&apos;ll email your code. Use the email you booked with.</p>}
       <Field label={channel === "mobile" ? "Mobile number" : "Email address"}>
         <Input value={to} onChange={(e) => setTo(e.target.value)} inputMode={channel === "mobile" ? "tel" : "email"} placeholder={channel === "mobile" ? "+91 98XXX XXXXX" : "you@example.com"} />
       </Field>
@@ -147,17 +155,17 @@ const DECISION: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "i
 function BookingCard({ b, payTo, gateway, onChanged }: { b: View; payTo: PayTo; gateway: boolean; onChanged: () => Promise<void> }) {
   const [edit, setEdit] = useState(false);
   const dec = DECISION[b.decision.state] ?? DECISION.pending;
-  const stage = b.paid ? (b.identityOk ? "Verified · ready for pickup" : "Payment verified") : b.pay?.status === "submitted" ? "Payment under verification" : dec.label;
+  const stage = b.status === "cancelled" ? "Cancelled" : b.status === "delivered" ? "Delivered" : b.paid ? (b.identityOk ? "Confirmed · ready for pickup" : "Payment verified") : b.pay?.status === "submitted" ? "Payment under verification" : dec.label;
   return (
     <Card className="anim-in">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-mono text-xs text-muted">{b.id}</p>
           <b className="font-display text-[15px]">{b.from} → {b.to}</b>
-          <p className="text-xs text-muted">{b.service} · pickup {b.date}{b.slot ? ` · ${b.slot}` : ""} · {b.bags} bag(s){b.oversize ? ` + ${b.oversize} oversize` : ""}</p>
+          <p className="text-xs text-muted">{b.service} · pickup {b.date}{b.slot ? ` · ${b.slot}` : ""} · {pcsLabel(b.bags, b.oversize, "bags")}</p>
         </div>
         <div className="text-right">
-          <Badge tone={b.paid ? "ok" : dec.tone}>{stage}</Badge>
+          <Badge tone={b.status === "cancelled" ? "bad" : b.paid ? "ok" : dec.tone}>{stage}</Badge>
           <p className="mt-1 font-display text-lg font-extrabold">{b.priced ? inr(b.total) : "Rate on request"}</p>
         </div>
       </div>
@@ -179,11 +187,13 @@ function BookingCard({ b, payTo, gateway, onChanged }: { b: View; payTo: PayTo; 
       {b.paid && (
         <p className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-900">
           <b>Payment of {inr(b.pay!.amount)} verified.</b>{" "}
-          {b.identityOk ? "Bond signed and identity verified — you're all set for pickup." : <>Next, before pickup: sign the baggage declaration &amp; indemnity bond — <a className="font-semibold underline" href={`/verify/${b.id}`}>sign now →</a></>}
+          {b.identityOk ? "Payment verified — you're all set for pickup. We'll message you when the captain is assigned." : <>Next, before pickup: sign the baggage declaration &amp; indemnity bond — <a className="font-semibold underline" href={`/verify/${b.id}`}>sign now</a></>}
         </p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
+        {b.passUrl && <a href={b.passUrl}><Button size="sm">Move Pass</Button></a>}
+        {b.trackUrl && <a href={b.trackUrl}><Button size="sm" variant="outline">Track live</Button></a>}
         {b.canEdit && <Button size="sm" variant="outline" onClick={() => setEdit((v) => !v)}>{edit ? "Close" : b.locked ? "Add bags" : "Change bags or date"}</Button>}
         <a href={`${WA}${encodeURIComponent(`Hi Bagdrop, about booking ${b.id}: `)}`} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost">Contact the Bagdrop team</Button></a>
       </div>
@@ -276,7 +286,7 @@ function EditBox({ b, onDone }: { b: View; onDone: () => Promise<void> }) {
     <div className="mt-3 grid gap-2 rounded-xl bg-paper p-3">
       {b.locked && <p className="text-xs text-muted">After payment you can only <b>add</b> bags — the extra amount is shown for payment. To reduce bags or change the date, contact the Bagdrop team.</p>}
       {counter("Bags", bags, setBags, b.locked ? b.bags : 0)}
-      {counter("Oversize", oversize, setOversize, b.locked ? b.oversize : 0)}
+      {counter("Oversize (XL)", oversize, setOversize, b.locked ? b.oversize : 0)}
       {!b.locked && <Field label="Pickup date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>}
       <Button size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save change"}</Button>
       {msg && <p className="text-xs text-muted">{msg}</p>}

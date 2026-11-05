@@ -9,6 +9,7 @@
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { serviceClient } from "./supabaseAdmin";
 import type { Booking } from "./types";
+import { requiredSecret } from "./secrets";
 
 export interface WalletTxn {
   at: string;
@@ -78,7 +79,7 @@ export async function saveAgents(agents: Agent[]): Promise<void> {
 export const newAgentKey = () => randomBytes(9).toString("base64url");
 
 /* ---------- partner session cookie (separate from the admin cookie) ---------- */
-const SECRET = () => process.env.ADMIN_SECRET_KEY ?? "dev-admin-key-change-me";
+const SECRET = () => requiredSecret("ADMIN_SECRET_KEY", "dev-admin-key-change-me");
 const sig = (p: string) => createHmac("sha256", "partner:" + SECRET()).update(p).digest("hex");
 
 export function makePartnerToken(agentId: string, hours = 24 * 7): string {

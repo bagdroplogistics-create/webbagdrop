@@ -5,8 +5,10 @@
  *  the team's review, then sign with an OTP to their booking contact. All
  *  checks happen on the server (/api/kyc) — this page only collects input. */
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { useLoad } from "@/lib/useLoad";
 import { DECLARATIONS, INDEMNITY_VERSION, PROHIBITED, REQUIRED_IDS, UNDERTAKINGS } from "@/lib/indemnity";
+import { pcsLabel } from "@/lib/opsModel";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
 
 interface V {
@@ -113,7 +115,7 @@ export default function VerifyClient({ id }: { id: string }) {
         <div className="grid gap-2.5">
           {PROHIBITED.map((g) => (
             <div key={g.id} className={g.highlight ? "rounded-xl border-2 border-red-600 bg-red-50 p-3" : "rounded-xl border border-line bg-white p-3"}>
-              {g.highlight && <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-red-700">⚠ Liquor policy — zero tolerance</p>}
+              {g.highlight && <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-red-700">Liquor policy — zero tolerance</p>}
               <label className="flex cursor-pointer items-start gap-2.5">
                 <input type="checkbox" className="mt-1 size-4 shrink-0 accent-[#EA580C]" checked={!!ticks[g.id]} onChange={() => tick(g.id)} />
                 <span>
@@ -146,7 +148,7 @@ export default function VerifyClient({ id }: { id: string }) {
     <main className="mx-auto min-h-[70vh] max-w-2xl px-4 py-12">
       <p className="mb-1 text-xs font-semibold uppercase tracking-[.14em] text-brand">Before pickup</p>
       <h1 className="font-display text-3xl font-extrabold tracking-tight">Baggage declaration &amp; indemnity bond</h1>
-      <p className="mt-2 mb-6 text-sm text-muted">Required once, before your bags move — under BCAS, DGCA, CISF, RPF, Railways Act and road-transport rules. Takes about two minutes. Bagdrop keeps only the last four characters of your ID.</p>
+      <p className="mt-2 mb-6 text-sm text-muted">Required once, before your bags move — under BCAS, DGCA, CISF, RPF, Railways Act and road-transport rules. Takes about two minutes. Bagdrop keeps only the last four characters of your ID. Read our <Link href="/terms" target="_blank" className="underline underline-offset-2">Terms of Carriage</Link>.</p>
 
       {loadErr && !b && <Card><p className="text-sm text-red-700">{loadErr}</p></Card>}
       {!b && !loadErr && <Card><p className="text-sm text-muted">Loading your booking…</p></Card>}
@@ -156,7 +158,7 @@ export default function VerifyClient({ id }: { id: string }) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <b className="font-mono text-sm">{b.id}</b>
-              <p className="text-sm">{b.from} → {b.to} · {b.bags + b.oversize} piece{b.bags + b.oversize === 1 ? "" : "s"}</p>
+              <p className="text-sm">{b.from} → {b.to} · {pcsLabel(b.bags, b.oversize, b.bags + b.oversize === 1 ? "piece" : "pieces")}</p>
               <p className="text-xs text-muted">{b.name} · {b.mobile} · pickup {b.slot || "TBC"} on {b.date}</p>
             </div>
             <Badge tone={b.verified ? "ok" : b.locked ? "bad" : b.settled ? "warn" : "info"}>{b.verified ? "Signed & verified" : b.locked ? "Locked" : b.settled ? "Sign now" : "Payment pending"}</Badge>

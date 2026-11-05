@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { kickSweep } from "@/lib/automation";
-import { isAdminRequest } from "@/lib/adminAuth";
+import { actorName, isAdminRequest } from "@/lib/adminAuth";
 import { serviceClient } from "@/lib/supabaseAdmin";
-import { opsOf } from "@/lib/opsModel";
+import { MILESTONES, checkStepWrite, opsOf } from "@/lib/opsModel";
 import { isPaid } from "@/lib/payState";
-import { saveBooking } from "@/lib/bookingStore";
+import { revOf, saveBooking } from "@/lib/bookingStore";
+import { custodyFromMilestones, custodyIntact, withCustody } from "@/lib/custody";
 import type { Booking } from "@/lib/types";
+import { AADHAAR_REQUIRED } from "@/lib/phase";
+import { cancelStamp } from "@/lib/lifecycle";
+import { cancelInfo } from "@/lib/journey";
 
 /** True once the shipment has physically moved — the point of no return the
  *  identity gate protects. */
@@ -56,7 +60,7 @@ export async function POST(req: Request) {
   /* THE PICKUP GATE — a booking may not cross into picked_up (status or ops
    * milestone) until the client's Aadhaar UIDAI verification is done. An
    * explicit admin override is possible but is stamped on the record. */
-  if (!body.doc.identity?.ok && crossedPickup(body.doc)) {
+  if (AADHAAR_REQUIRED && !body.doc.identity?.ok && crossedPickup(body.doc)) {
     const prev = await sb.from("bookings").select("doc").eq("id", body.doc.id).maybeSingle();
     const was = prev.data?.doc as Booking | undefined;
     if (!was || !crossedPickup(was)) {
@@ -69,8 +73,54 @@ export async function POST(req: Request) {
       }
       body.doc = {
         ...body.doc,
-        events: [...body.doc.events, { at: new Date().toISOString(), by: "admin", text: "⚠ Identity gate OVERRIDDEN by admin — picked up without Aadhaar verification" }],
+        events: [...body.doc.events, { at: new Date().toISOString(), by: "admin", text: "Identity gate OVERRIDDEN by admin — picked up without Aadhaar verification" }],
       };
+    }
+  }
+
+  /* THE CUSTODY LEDGER is append-only: a screen may add entries but never
+   * change or drop one. Milestones completed in this save get their entries
+   * here, so Operations can't move a bag without the ledger recording it. */
+  {
+    const prev = (await sb.from("bookings").select("doc").eq("id", body.doc.id).maybeSingle()).data?.doc as Booking | undefined;
+    /* a stale screen is caught by the compare-and-swap below (STALE) */
+    if (prev && revOf(prev) === revOf(body.doc) && !custodyIntact(opsOf(prev).custody, opsOf(body.doc).custody)) {
+      return NextResponse.json({ error: "CUSTODY_LEDGER_LOCKED", detail: `The custody record of ${body.doc.id} can only be added to — refresh and redo the action.` }, { status: 409 });
+    }
+    body.doc = withCustody(body.doc, custodyFromMilestones(prev ?? null, body.doc, await actorName()));
+  }
+
+  /* EVERY CANCEL IS RESTORABLE — a screen that writes status "cancelled"
+   * directly gets the same stamp (stage it was at, who, why) as Shipments'
+   * Cancel button, so Restore can always put the booking back. */
+  if (body.doc.status === "cancelled" && !cancelInfo(body.doc)) {
+    const prev = (await sb.from("bookings").select("doc").eq("id", body.doc.id).maybeSingle()).data?.doc as Booking | undefined;
+    if (prev && prev.status !== "cancelled") {
+      const last = body.doc.events[body.doc.events.length - 1];
+      const reason = last && last.at !== prev.events[prev.events.length - 1]?.at ? last.text : "cancelled from the admin";
+      body.doc = { ...body.doc, admin: { ...body.doc.admin, cancel: cancelStamp(prev, await actorName(), reason) } };
+    }
+  }
+
+  /* THE JOURNEY RULES — a step saved from the desk moves one at a time and
+   * carries its details; pickup and delivery need their proof; a step taken
+   * back needs a written reason (src/lib/opsModel.ts). */
+  {
+    const prev = (await sb.from("bookings").select("doc").eq("id", body.doc.id).maybeSingle()).data?.doc as Booking | undefined;
+    /* a screen holding an older revision isn't undoing anything: let the
+     * compare-and-swap below answer STALE, which every screen knows to retry */
+    if (prev && revOf(prev) === revOf(body.doc)) {
+      const po = opsOf(prev), no = opsOf(body.doc);
+      const bad = checkStepWrite(po, no);
+      if (bad) return NextResponse.json(bad, { status: 409 });
+      const dropped = MILESTONES.filter((m) => po.milestones?.[m.key] && !no.milestones?.[m.key]);
+      if (dropped.length > 1) return NextResponse.json({ error: "UNDO_ONE_STEP", detail: "Only the latest step can be undone, one at a time." }, { status: 409 });
+      if (dropped.length === 1) {
+        const last = [...MILESTONES].reverse().find((m) => po.milestones?.[m.key]);
+        const why = no.undone?.[no.undone.length - 1];
+        if (last?.key !== dropped[0].key) return NextResponse.json({ error: "UNDO_ONE_STEP", detail: "Only the latest step can be undone." }, { status: 409 });
+        if (!why || why.key !== dropped[0].key || why.reason.trim().length < 5) return NextResponse.json({ error: "UNDO_REASON", detail: "Write why the step is being undone (at least a few words)." }, { status: 409 });
+      }
     }
   }
 

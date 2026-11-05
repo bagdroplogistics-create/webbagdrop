@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking } from "@/lib/types";
+import { pcsLabel } from "@/lib/opsModel";
 import { Badge, Card } from "@/components/ui";
 
 export const CAPTAINS = [
@@ -73,7 +74,7 @@ export default function Drivers() {
           <div className="rounded-xl bg-ink p-4 text-sm text-white">
             <p className="font-semibold">New pickup assigned</p>
             <p className="mt-1 text-white/80">
-              {latestAssigned.traveller.name} · {latestAssigned.pickAddr || latestAssigned.from} · {latestAssigned.bags + latestAssigned.oversize} piece(s) · {latestAssigned.ucName}
+              {latestAssigned.traveller.name} · {latestAssigned.pickAddr || latestAssigned.from} · {pcsLabel(latestAssigned.bags, latestAssigned.oversize)} · {latestAssigned.ucName}
             </p>
             <p className="mt-1 text-xs text-white/50">
               Identity: {latestAssigned.identity?.ok ? `verified (${latestAssigned.identity.score.toFixed(2)})` : "not verified"} · {latestAssigned.date} {latestAssigned.ref ? `· ${latestAssigned.ref}` : ""}

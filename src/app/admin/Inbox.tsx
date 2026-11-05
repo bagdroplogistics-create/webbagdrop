@@ -14,24 +14,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { useOnChange } from "@/lib/stateSync";
-import { CITIES, inr } from "@/lib/pricing";
+import { inr } from "@/lib/pricing";
 import { adminApplyPatch, refreshBookings, watchAdminBookings } from "@/lib/adminApi";
-import { isPaid } from "@/lib/payState";
-import { deskLock } from "@/lib/deskRules";
-import type { InquiryChanges } from "@/lib/inquiryEdit";
-import { SERVICES as ALL_SERVICES } from "@/lib/services";
+import { isHostBilled, isPaid } from "@/lib/payState";
 import type { Booking, BookingStatus } from "@/lib/types";
+import JourneyPanel from "./JourneyPanel";
+import { AADHAAR_REQUIRED } from "@/lib/phase";
 import type { ProductionLead } from "../api/admin/production-leads/route";
-import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
-
-/** Legacy-lead fields this screen lets staff correct — the same subset the
- *  read-only detail panel already shows, mapped server-side onto
- *  bagdrop-web's own `leads` columns (see production-leads/[id]/route.ts). */
-interface LeadChanges {
-  name?: string; phone?: string; email?: string; fromCity?: string; toCity?: string;
-  serviceInterest?: string; travelDate?: string; pickupDate?: string; deliveryDate?: string;
-  bagsCount?: number; flightNumber?: string; notes?: string; assignedTo?: string;
-}
+import { pcsLabel } from "@/lib/opsModel";
+import { Badge, Button, Card, Drawer, Field, Input, TableFrame } from "@/components/ui";
 
 const TONE: Record<BookingStatus, "ok" | "warn" | "bad" | "info" | "muted"> = {
   quoted: "info", identified: "info", submitted: "warn", revised: "warn",
@@ -48,10 +39,10 @@ const DECISION_LABEL: Record<string, string> = { approved: "approved", rejected:
 const canDecide = (b: Booking) => !isPaid(b) && !b.payer && b.pay?.status !== "submitted" && ["submitted", "revised", "accepted"].includes(b.status);
 /** Money is settled: verified payment, a partner's wallet/credit capture, or a host-billed event. */
 const opsReady = (b: Booking) => isPaid(b) || !!b.payer;
-const FILTERS = ["all", "submitted", "revised", "accepted", "rejected", "quoted"] as const;
+const FILTERS = ["all", "submitted", "revised", "accepted", "rejected", "quoted", "cancelled"] as const;
 const FILTER_LABEL: Record<(typeof FILTERS)[number], string> = {
   all: "All", submitted: "Needs decision", revised: "Revised",
-  accepted: "Accepted", rejected: "Rejected", quoted: "Quoted, unpaid",
+  accepted: "Accepted", rejected: "Rejected", quoted: "Quoted, unpaid", cancelled: "Cancelled",
 };
 
 /** Production's two status vocabularies, mapped to this app's Badge tones —
@@ -66,20 +57,6 @@ const PROD_BOOKING_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"
   confirmed: "ok", pickup_scheduled: "ok", picked_up: "ok", in_transit: "ok",
   out_for_delivery: "ok", delivered: "ok", completed: "ok", rejected: "bad", cancelled: "bad",
 };
-/** Statuses (of the lead's linked production booking) still early enough
- *  that staff decide/progress it from here — shared by the decision
- *  buttons below and the details-edit lock. */
-const EARLY_BOOKING = ["inquiry", "document_collection", "pending", "review", "accepted", "quote_created", "quote_sent", "payment_pending", "payment_approved", "confirmed", "pickup_scheduled"];
-/** Why a legacy bagdrop.co lead's details can't be edited from here, or
- *  null if they can — same spirit as deskRules.ts's deskLock() for native
- *  bookings: locked once it's lost, or once its linked booking has moved
- *  past the early, still-deciding stages. */
-function legacyLeadLock(l: ProductionLead): string | null {
-  if (l.status === "lost") return "This lead was marked lost — it can no longer be changed here.";
-  const bStatus = l.booking?.status;
-  if (bStatus && !EARLY_BOOKING.includes(bStatus)) return `Its booking is ${bStatus.replace(/_/g, " ")} — it can no longer be changed here.`;
-  return null;
-}
 
 interface Row {
   key: string; source: "new" | "production";
@@ -93,9 +70,9 @@ function bookingRow(b: Booking): Row {
     key: `new:${b.id}`, source: "new",
     ref: b.id, name: b.traveller.name || "—", mobile: b.traveller.mobile,
     route: `${b.from} → ${b.to}`, sub: `${b.ucName} · ${b.date}`,
-    pcs: `${b.bags}${b.oversize ? `+${b.oversize}` : ""}`,
-    total: b.quote.breakdown.ror ? "ROR" : inr(b.quote.total),
-    statusLabel: (b.admin as { instant?: { expired?: boolean } }).instant && !(b.admin as { instant?: { expired?: boolean } }).instant!.expired ? `⚡ ${LABEL[b.status]}` : LABEL[b.status],
+    pcs: pcsLabel(b.bags, b.oversize),
+    total: b.quote.breakdown.ror ? "ROR" : isHostBilled(b) && !b.quote.total ? "Hosts" : inr(b.quote.total),
+    statusLabel: (b.admin as { instant?: { expired?: boolean } }).instant && !(b.admin as { instant?: { expired?: boolean } }).instant!.expired ? `Instant lapsed · ${LABEL[b.status]}` : LABEL[b.status],
     statusTone: TONE[b.status], sortAt: b.created,
   };
 }
@@ -147,33 +124,22 @@ function PayLinkButtons({ booking }: { booking: Booking }) {
   }
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => void whatsapp()}>WhatsApp payment link →</Button>
+      <Button size="sm" variant="ghost" onClick={() => void whatsapp()}>WhatsApp payment link</Button>
       <Button size="sm" variant="ghost" onClick={() => void copy()}>Copy pay link</Button>
       {msg && <span className="w-full text-xs text-muted">{msg}</span>}
     </>
   );
 }
 
-export default function Inbox({ search = "" }: { search?: string }) {
+export default function Inbox({ search = "", openId, onOpenQuote, onOpenOps }: { search?: string; openId?: string; onOpenQuote?: (id: string) => void; onOpenOps?: () => void }) {
   const [all, setAll] = useState<Booking[]>([]);
   const [leads, setLeads] = useState<ProductionLead[]>([]);
   const [leadsErr, setLeadsErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
-  const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(null);
-  const [form, setForm] = useState<{ kind: "approve" | "revise" | "hold" | "info" | "reject" | "captain" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
-  const [editing, setEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState<InquiryChanges | null>(null);
-  const [editBusy, setEditBusy] = useState(false);
-  const [editErr, setEditErr] = useState<string | null>(null);
-  const [editPriceWarn, setEditPriceWarn] = useState<string | null>(null);
-
-  const [leadEditing, setLeadEditing] = useState(false);
-  const [leadDraft, setLeadDraft] = useState<LeadChanges | null>(null);
-  const [leadEditBusy, setLeadEditBusy] = useState(false);
-  const [leadEditErr, setLeadEditErr] = useState<string | null>(null);
-  const [leadPriceWarn, setLeadPriceWarn] = useState<string | null>(null);
+  const [sel, setSel] = useState<{ source: "new" | "production"; id: string } | null>(openId ? { source: "new", id: openId } : null);
+  const [form, setForm] = useState<{ kind: "revise" | "captain" | null; captain: string; amount: string; reason: string }>({ kind: null, captain: "", amount: "", reason: "" });
 
   const [prodBusy, setProdBusy] = useState(false);
   const [prodErr, setProdErr] = useState<string | null>(null);
@@ -211,11 +177,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
     setProdBusy(false);
   }
 
-  useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => {
-    setForm({ kind: null, captain: "", amount: "", reason: "" });
-    setEditing(false); setEditDraft(null); setEditErr(null); setEditPriceWarn(null);
-    setLeadEditing(false); setLeadDraft(null); setLeadEditErr(null); setLeadPriceWarn(null);
-  });
+  useOnChange(sel ? `${sel.source}:${sel.id}` : "", () => setForm({ kind: null, captain: "", amount: "", reason: "" }));
 
   const q = search.trim().toLowerCase();
   const newBookings = useMemo(() => all.filter((b) => filter === "all" || b.status === filter), [all, filter]);
@@ -237,22 +199,8 @@ export default function Inbox({ search = "" }: { search?: string }) {
   const lead = sel?.source === "production" ? leads.find((l) => l.id === sel.id) ?? null : null;
 
   const [busy, setBusy] = useState(false);
-  /** Approve / revise / hold / needs-info / reject go through the server, which
-   *  signs the price, stamps the decision history and notifies the client. */
-  async function decide(b: Booking, decision: "approve" | "revise" | "hold" | "info" | "reject", note: string, total?: number) {
-    setBusy(true); setErr(null);
-    try {
-      const r = await fetch("/api/admin/decision", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: b.id, decision, note: note.trim(), total }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.detail ?? j?.error ?? `HTTP_${r.status}`);
-      setForm({ kind: null, captain: "", amount: "", reason: "" });
-      refreshBookings();
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    setBusy(false);
-  }
+  /* Accept / revise / ask / hold / reject live in ONE place — the quote desk
+   * (Quotes & payments), where the details can be corrected first. */
   async function unlockAadhaar(b: Booking) {
     setBusy(true); setErr(null);
     try {
@@ -262,70 +210,6 @@ export default function Inbox({ search = "" }: { search?: string }) {
       refreshBookings();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     setBusy(false);
-  }
-
-  /** Quote-desk "save changes only" — corrects details without re-pricing or
-   *  messaging the customer. If the edit would move the price, the server
-   *  refuses with PRICE_WOULD_CHANGE; staff use Approve/Revise price instead,
-   *  which carries the same changes to the customer. */
-  function startEdit(b: Booking) {
-    setEditing(true); setEditErr(null); setEditPriceWarn(null);
-    setEditDraft({
-      title: b.traveller.title ?? "", name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email ?? "", res: b.traveller.res,
-      uc: b.uc || undefined, from: b.from, to: b.to, pickAddr: b.pickAddr, dropAddr: b.dropAddr,
-      date: b.date, pickupDate: b.pickupDate ?? b.date, deliveryDate: b.deliveryDate ?? "", flightTime: b.flightTime ?? "", ref: b.ref, slot: b.slot,
-      bags: b.bags, oversize: b.oversize, note: b.note,
-    });
-  }
-  async function saveEdit(b: Booking) {
-    if (!editDraft) return;
-    setEditBusy(true); setEditErr(null); setEditPriceWarn(null);
-    try {
-      const r = await fetch("/api/admin/inquiry", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: b.id, changes: editDraft, rev: b.rev ?? 0 }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        if (j.error === "PRICE_WOULD_CHANGE") { setEditPriceWarn(j.detail as string); return; }
-        throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
-      }
-      setEditing(false); setEditDraft(null);
-      refreshBookings();
-    } catch (e) { setEditErr(e instanceof Error ? e.message : String(e)); }
-    setEditBusy(false);
-  }
-
-  /** Same "correct it without re-pricing or messaging" pattern, for a lead
-   *  synced in from bagdrop.co's own database — PATCHes the real row there
-   *  via /api/admin/production-leads/[id] (src/app/api/admin/production-leads/
-   *  [id]/route.ts), which refuses a route/bag-count change that would move
-   *  an already-quoted price (PRICE_WOULD_CHANGE), same as the native edit. */
-  function startLeadEdit(l: ProductionLead) {
-    setLeadEditing(true); setLeadEditErr(null); setLeadPriceWarn(null);
-    setLeadDraft({
-      name: l.name, phone: l.phone, email: l.email ?? "", fromCity: l.fromCity ?? "", toCity: l.toCity ?? "",
-      serviceInterest: l.serviceInterest ?? "", travelDate: l.travelDate ?? "", pickupDate: l.pickupDate ?? "",
-      deliveryDate: l.deliveryDate ?? "", bagsCount: l.bagsCount ?? 0, flightNumber: l.flightNumber ?? "",
-      notes: l.notes ?? "", assignedTo: l.assignedTo ?? "",
-    });
-  }
-  async function saveLeadEdit(l: ProductionLead) {
-    if (!leadDraft) return;
-    setLeadEditBusy(true); setLeadEditErr(null); setLeadPriceWarn(null);
-    try {
-      const r = await fetch(`/api/admin/production-leads/${l.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: "lead", fields: leadDraft }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        if (j.error === "PRICE_WOULD_CHANGE") { setLeadPriceWarn(j.detail as string); return; }
-        throw new Error(j.detail ?? j.error ?? `HTTP_${r.status}`);
-      }
-      setLeadEditing(false); setLeadDraft(null);
-      await refetchLeads();
-    } catch (e) { setLeadEditErr(e instanceof Error ? e.message : String(e)); }
-    setLeadEditBusy(false);
   }
 
   async function act(b: Booking, patch: Partial<Booking>, event: string) {
@@ -339,7 +223,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       {err && (
         <p className="lg:col-span-2 rounded-xl bg-red-50 p-3 text-sm text-red-900">
           <b>Couldn&apos;t load bookings:</b> {err}
@@ -355,7 +239,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
           <h2 className="font-display text-sm font-bold">Bookings inbox</h2>
           <Badge tone="ok">live</Badge>
           <span className="text-xs text-faint">+ {leads.length} from bagdrop.co</span>
-          <span className="ml-auto flex gap-1.5">
+          <span className="ml-auto flex flex-wrap gap-1.5">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`rounded-lg border px-3 py-1.5 text-[12.5px] font-bold transition-colors cursor-pointer ${filter === f ? "border-brand bg-brand text-white" : "border-line bg-white text-ink hover:border-stone-300"}`}>
@@ -364,10 +248,10 @@ export default function Inbox({ search = "" }: { search?: string }) {
             ))}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <TableFrame maxHeight="calc(100vh - 290px)">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
+              <tr className="text-left">
                 <th className="py-2 pr-2">Ref</th><th className="pr-2">Traveller</th><th className="pr-2">Route · date</th><th className="pr-2 text-right">Pcs</th><th className="pr-2 text-right">Total</th><th>Status</th>
               </tr>
             </thead>
@@ -395,7 +279,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
               })}
             </tbody>
           </table>
-        </div>
+        </TableFrame>
         <div className="mt-3 flex items-center justify-between text-xs text-muted">
           <span>{rows.length} total · page {page} of {pageCount}</span>
           <div className="flex gap-1.5">
@@ -411,49 +295,38 @@ export default function Inbox({ search = "" }: { search?: string }) {
         </div>
       </Card>
 
-      <Card className="lg:sticky lg:top-20 self-start">
+      <Drawer open={!!(lead || booking)} onClose={() => setSel(null)} title={lead ? `Lead ${lead.leadNumber ?? lead.id.slice(0, 8)}` : booking ? `Booking ${booking.id}` : ""}>
         {lead ? (
           <>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-base font-extrabold">{lead.leadNumber ?? lead.id.slice(0, 8)}</h3>
-              <span className="flex items-center gap-2">
-                <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
-                {!leadEditing && !legacyLeadLock(lead) && <Button size="sm" variant="ghost" onClick={() => startLeadEdit(lead)}>Edit</Button>}
-              </span>
+              <Badge tone={(lead.booking ? PROD_BOOKING_TONE[lead.booking.status ?? ""] : PROD_LEAD_TONE[lead.status]) ?? "muted"}>{lead.booking?.status ?? lead.status}</Badge>
             </div>
             <p className="mb-3 rounded-lg px-2.5 py-2 text-xs" style={{ background: "var(--a-info-bg, #e4eefa)", color: "var(--a-info, #1f5fa8)" }}>
               From bagdrop.co/admin&apos;s own database — actions below write back there for real (customer emails, invoicing included).
             </p>
             {prodErr && <p className="mb-3 rounded-lg bg-red-50 px-2.5 py-2 text-xs text-red-900">{prodErr}</p>}
-            {leadEditing && leadDraft ? (
-              <EditLeadForm draft={leadDraft} setDraft={setLeadDraft} busy={leadEditBusy} err={leadEditErr} priceWarn={leadPriceWarn}
-                onCancel={() => { setLeadEditing(false); setLeadDraft(null); setLeadEditErr(null); setLeadPriceWarn(null); }}
-                onSave={() => void saveLeadEdit(lead)} />
-            ) : (
-              <>
-                {([
-                  ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
-                  ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
-                  ["Service", lead.serviceInterest ?? "—"],
-                  ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
-                  ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
-                  ["Quote", lead.booking?.totalAmount ? inr(lead.booking.totalAmount) : "—"],
-                  ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
-                  ["Source", lead.source ?? "—"],
-                  ["Assigned to", lead.assignedTo ?? "unassigned"],
-                ] as const).map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
-                    <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
-                  </div>
-                ))}
-                {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
-              </>
-            )}
+            {([
+              ["Contact", `${lead.name} · ${lead.phone}${lead.email ? ` · ${lead.email}` : ""}`],
+              ["Route", `${lead.fromCity ?? "—"} → ${lead.toCity ?? "—"}`],
+              ["Service", lead.serviceInterest ?? "—"],
+              ["Dates", `pickup ${lead.pickupDate ?? "—"}${lead.deliveryDate ? ` · delivery ${lead.deliveryDate}` : ""}${lead.travelDate ? ` · travel ${lead.travelDate}` : ""}`],
+              ["Bags", lead.bagsCount != null ? String(lead.bagsCount) : "—"],
+              ["Quote", lead.booking?.totalAmount ? inr(lead.booking.totalAmount) : "—"],
+              ["Linked booking", lead.booking ? `${lead.booking.trackingId ?? "—"} · ${lead.booking.status ?? "—"}` : "none"],
+              ["Source", lead.source ?? "—"],
+              ["Assigned to", lead.assignedTo ?? "unassigned"],
+            ] as const).map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+                <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
+              </div>
+            ))}
+            {lead.notes && <p className="mt-3 text-xs text-muted">{lead.notes}</p>}
 
-            {!leadEditing && (
             <div className="mt-4 flex flex-wrap gap-2">
               {(() => {
                 const PRE_CONVERT = ["new", "contacted", "qualified"];
+                const EARLY_BOOKING = ["inquiry", "document_collection", "pending", "review", "accepted", "quote_created", "quote_sent", "payment_pending", "payment_approved", "confirmed", "pickup_scheduled"];
                 const bStatus = lead.booking?.status ?? null;
                 if (PRE_CONVERT.includes(lead.status) && (!bStatus || EARLY_BOOKING.includes(bStatus))) {
                   return (
@@ -468,24 +341,13 @@ export default function Inbox({ search = "" }: { search?: string }) {
                 }
                 if (!lead.booking) return null;
                 const bId = lead.booking.id;
-                if (bStatus && EARLY_BOOKING.includes(bStatus)) {
+                if (bStatus && (EARLY_BOOKING.includes(bStatus) || ["picked_up", "in_transit"].includes(bStatus))) {
                   return (
                     <>
-                      <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "picked_up")}>Mark picked up</Button>
-                      <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "cancelled")}>Cancel</Button>
+                      <span className="self-center text-xs text-muted">Moves are recorded in Operations with their proof, not marked from here.</span>
+                      {EARLY_BOOKING.includes(bStatus) && <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "cancelled")}>Cancel</Button>}
                     </>
                   );
-                }
-                if (bStatus === "picked_up") {
-                  return (
-                    <>
-                      <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "in_transit")}>Mark in transit</Button>
-                      <Button size="sm" variant="outline" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "cancelled")}>Cancel</Button>
-                    </>
-                  );
-                }
-                if (bStatus === "in_transit") {
-                  return <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "delivered")}>Mark delivered</Button>;
                 }
                 if (bStatus === "delivered") {
                   return <Button size="sm" disabled={prodBusy} onClick={() => void prodAct("booking", bId, "completed")}>Mark completed</Button>;
@@ -493,9 +355,8 @@ export default function Inbox({ search = "" }: { search?: string }) {
                 return null;
               })()}
             </div>
-            )}
 
-            {!leadEditing && form.kind === "revise" && lead.booking && (
+            {form.kind === "revise" && lead.booking && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label="Revised total (₹)"><Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
                 <Button size="sm" disabled={prodBusy || !form.amount}
@@ -511,33 +372,22 @@ export default function Inbox({ search = "" }: { search?: string }) {
           <>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-base font-extrabold">{booking.id}</h3>
-              <span className="flex items-center gap-2">
-                <Badge tone={TONE[booking.status]}>{LABEL[booking.status]}</Badge>
-                {!editing && !deskLock(booking) && <Button size="sm" variant="ghost" onClick={() => startEdit(booking)}>Edit</Button>}
-              </span>
+              <Badge tone={TONE[booking.status]}>{LABEL[booking.status]}</Badge>
             </div>
-            {editing && deskLock(booking) && <p className="mb-3 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">{deskLock(booking)}</p>}
-            {editing && editDraft && !deskLock(booking) ? (
-              <EditInquiryForm draft={editDraft} setDraft={setEditDraft} busy={editBusy} err={editErr} priceWarn={editPriceWarn}
-                onCancel={() => { setEditing(false); setEditDraft(null); setEditErr(null); setEditPriceWarn(null); }}
-                onSave={() => void saveEdit(booking)} />
-            ) : (
-              <>
-                {([
-                  ["Traveller", `${booking.traveller.name} · ${booking.traveller.mobile}`],
-                  ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
-                  ["Pieces", `${booking.bags} bags${booking.oversize ? ` + ${booking.oversize} oversize` : ""}`],
-                  ["Quote", booking.quote.breakdown.ror ? "Rate on request" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
-                  ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "✓ verified" : booking.pay.status === "submitted" ? "⏳ proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
-                  ["Identity", booking.identity?.ok ? `✓ verified · ${booking.identity.method}` : "⚠ Aadhaar pending — pickup locked"],
-                ] as const).map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
-                    <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
-                  </div>
-                ))}
-              </>
-            )}
-            {!booking.identity?.ok && (
+            <div className="mb-3"><JourneyPanel b={booking} onOpenOps={onOpenOps} /></div>
+            {([
+              ["Traveller", `${booking.traveller.name} · ${booking.traveller.mobile}`],
+              ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
+              ["Pieces", pcsLabel(booking.bags, booking.oversize)],
+              ["Quote", booking.quote.breakdown.ror ? "Rate on request" : isHostBilled(booking) && !booking.quote.total ? "Billed to the hosts · nothing to pay" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
+              ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "verified" : booking.pay.status === "submitted" ? "proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
+              ["Identity", booking.identity?.ok ? `verified · ${booking.identity.method}` : AADHAAR_REQUIRED ? "Aadhaar pending — pickup locked" : "not required in phase 1"],
+            ] as const).map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
+                <span className="shrink-0 text-muted">{k}</span><span className="text-right">{v}</span>
+              </div>
+            ))}
+            {AADHAAR_REQUIRED && !booking.identity?.ok && (
               <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900">
                 Client verifies at <button className="font-mono font-semibold underline" onClick={() => void navigator.clipboard?.writeText(`${location.origin}/verify/${booking.id}`)}>/verify/{booking.id}</button> (click to copy) — the link also went out on WhatsApp + email automatically.
               </p>
@@ -558,59 +408,28 @@ export default function Inbox({ search = "" }: { search?: string }) {
               </div>
             )}
 
-            {!editing && (
             <div className="mt-4 flex flex-wrap gap-2">
-              {canDecide(booking) && (
-                <>
-                  <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "approve", amount: booking.quote.breakdown.ror ? "" : String(booking.quote.total), reason: "" }))}>Approve</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "revise", amount: booking.quote.breakdown.ror ? "" : String(booking.quote.total), reason: "" }))}>Revise price</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "hold", reason: "" }))}>On hold</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "info", reason: "" }))}>Needs info</Button>
-                  <Button size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, kind: "reject", reason: "" }))}>Reject</Button>
-                </>
+              {isPaid(booking) && ["accepted", "assigned"].includes(booking.status) && onOpenQuote && (
+                <Button size="sm" variant="outline" onClick={() => onOpenQuote(booking.id)}>Change after payment (quote desk)</Button>
+              )}
+              {canDecide(booking) && onOpenQuote && (
+                <Button size="sm" onClick={() => onOpenQuote(booking.id)}>{booking.status === "accepted" ? "Revise in quote desk" : "Open in quote desk"}</Button>
               )}
               {["submitted", "revised"].includes(booking.status) && opsReady(booking) && <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "captain" }))}>Confirm booking</Button>}
               {booking.status === "accepted" && opsReady(booking) && <Button size="sm" onClick={() => setForm((f) => ({ ...f, kind: "captain" }))}>Assign captain</Button>}
               {booking.status === "accepted" && !opsReady(booking) && <span className="self-center text-xs text-muted">Approved · waiting for the client&apos;s payment to be verified in Finance before a captain is assigned.</span>}
               {booking.status === "accepted" && !opsReady(booking) && booking.pay?.status !== "submitted" && booking.quote.total > 0 && <PayLinkButtons booking={booking} />}
-              {booking.status === "assigned" && <Button size="sm" onClick={() => void act(booking, { status: "picked_up" }, "Picked up · sealed and photographed")}>Mark picked up</Button>}
-              {booking.status === "picked_up" && <Button size="sm" onClick={() => void act(booking, { status: "in_transit" }, `On the line haul to ${booking.to}`)}>Mark in transit</Button>}
-              {booking.status === "in_transit" && <Button size="sm" onClick={() => void act(booking, { status: "delivered" }, "Delivered against OTP · invoice sent")}>Mark delivered</Button>}
+              {["assigned", "picked_up", "in_transit"].includes(booking.status) && (
+                <span className="self-center text-xs text-muted">Pickup, middle mile and delivery are recorded in Operations, each with its proof.{onOpenOps && <> <button className="cursor-pointer font-semibold text-brand hover:underline" onClick={onOpenOps}>Open in Operations</button></>}</span>
+              )}
             </div>
-            )}
 
-            {!editing && form.kind === "captain" && (
+            {form.kind === "captain" && (
               <div className="mt-3 rounded-xl bg-paper p-3">
                 <Field label={booking.status === "accepted" ? "Captain" : "Captain (optional)"}><Input value={form.captain} onChange={(e) => setForm((f) => ({ ...f, captain: e.target.value }))} placeholder="Ravi K" /></Field>
                 <Button size="sm" disabled={booking.status === "accepted" && !form.captain.trim()} onClick={() => void act(booking,
                   { status: form.captain.trim() ? "assigned" : "accepted", admin: { ...booking.admin, captain: form.captain.trim() || booking.admin.captain } },
                   form.captain.trim() ? `Confirmed by ops · captain ${form.captain.trim()} assigned` : "Confirmed by ops")}>{booking.status === "accepted" ? "Assign" : "Confirm"}</Button>
-              </div>
-            )}
-            {!editing && (form.kind === "approve" || form.kind === "revise") && (
-              <div className="mt-3 rounded-xl bg-paper p-3">
-                <Field label={form.kind === "approve"
-                  ? (booking.quote.breakdown.ror ? "Amount to approve at (₹, incl. 5% GST) — required for a new sector" : "Amount (₹, incl. 5% GST) — change only to override the chart price")
-                  : "Revised total (₹, incl. 5% GST)"}>
-                  <Input inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value.replace(/[^\d]/g, "") }))} />
-                </Field>
-                <Field label="Note to the client (optional)"><Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder={form.kind === "approve" ? "Pickup window confirmed" : "Oversize re-rated after review"} /></Field>
-                <Button size="sm" disabled={busy || (form.kind === "revise" && !(+form.amount > 0)) || (form.kind === "approve" && !!booking.quote.breakdown.ror && !(+form.amount > 0))}
-                  onClick={() => void decide(booking, form.kind as "approve" | "revise",
-                    form.reason, form.kind === "approve" && +form.amount === booking.quote.total && !booking.quote.breakdown.ror ? undefined : +form.amount || undefined)}>
-                  {form.kind === "approve" ? "Approve and send payment details" : "Send revised price"}
-                </Button>
-              </div>
-            )}
-            {!editing && (form.kind === "hold" || form.kind === "info" || form.kind === "reject") && (
-              <div className="mt-3 rounded-xl bg-paper p-3">
-                <Field label={form.kind === "info" ? "Question for the client" : "Reason shown to the client"}>
-                  <Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-                    placeholder={form.kind === "hold" ? "Checking truck capacity for that date" : form.kind === "info" ? "Please share the exact flat number and lift access" : "No capacity on the chosen date"} />
-                </Field>
-                <Button size="sm" disabled={busy || !form.reason.trim()} onClick={() => void decide(booking, form.kind as "hold" | "info" | "reject", form.reason)}>
-                  {form.kind === "hold" ? "Put on hold" : form.kind === "info" ? "Ask the client" : "Reject booking"}
-                </Button>
               </div>
             )}
 
@@ -626,115 +445,7 @@ export default function Inbox({ search = "" }: { search?: string }) {
             </div>
           </>
         )}
-      </Card>
-    </div>
-  );
-}
-
-/* ================= quote-desk inquiry edit ================= */
-/** Correct an inquiry's details without re-pricing or messaging the customer
- *  (src/lib/inquiryEdit.ts, PATCH /api/admin/inquiry). A route or bag change
- *  that would move the price is refused by the server — staff use Approve /
- *  Revise price instead, which carries the same edit to the customer. */
-function EditInquiryForm({ draft, setDraft, busy, err, priceWarn, onCancel, onSave }: {
-  draft: InquiryChanges; setDraft: (d: InquiryChanges) => void;
-  busy: boolean; err: string | null; priceWarn: string | null;
-  onCancel: () => void; onSave: () => void;
-}) {
-  const set = <K extends keyof InquiryChanges>(k: K, v: InquiryChanges[K]) => setDraft({ ...draft, [k]: v });
-  return (
-    <div className="mb-3 rounded-xl bg-paper p-3">
-      <div className="grid gap-x-3 sm:grid-cols-2">
-        <Field label="Title"><Input value={draft.title ?? ""} onChange={(e) => set("title", e.target.value)} placeholder="Mr." /></Field>
-        <Field label="Name"><Input value={draft.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
-        <Field label="Mobile"><Input value={draft.mobile ?? ""} onChange={(e) => set("mobile", e.target.value)} /></Field>
-        <Field label="Email"><Input value={draft.email ?? ""} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
-        <Field label="Traveller is">
-          <Select value={draft.res ?? "in"} onChange={(e) => set("res", e.target.value as InquiryChanges["res"])}>
-            <option value="in">Indian resident</option>
-            <option value="intl">International</option>
-          </Select>
-        </Field>
-        <Field label="Service">
-          <Select value={draft.uc ?? ""} onChange={(e) => set("uc", e.target.value)}>
-            {ALL_SERVICES.map((s) => <option key={s.uc} value={s.uc}>{s.title}</option>)}
-          </Select>
-        </Field>
-        <Field label="Pickup city">
-          <Select value={draft.from ?? ""} onChange={(e) => set("from", e.target.value)}>
-            {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Delivery city">
-          <Select value={draft.to ?? ""} onChange={(e) => set("to", e.target.value)}>
-            {CITIES.map((c) => <option key={c.name}>{c.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Pickup address"><Input value={draft.pickAddr ?? ""} onChange={(e) => set("pickAddr", e.target.value)} /></Field>
-        <Field label="Delivery address"><Input value={draft.dropAddr ?? ""} onChange={(e) => set("dropAddr", e.target.value)} /></Field>
-        <Field label="Travel date"><Input type="date" value={draft.date ?? ""} onChange={(e) => set("date", e.target.value)} /></Field>
-        <Field label="Pickup date"><Input type="date" value={draft.pickupDate ?? ""} onChange={(e) => set("pickupDate", e.target.value)} /></Field>
-        <Field label="Delivery date"><Input type="date" value={draft.deliveryDate ?? ""} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
-        <Field label="Flight time"><Input type="time" value={draft.flightTime ?? ""} onChange={(e) => set("flightTime", e.target.value)} /></Field>
-        <Field label="Flight / reference"><Input value={draft.ref ?? ""} onChange={(e) => set("ref", e.target.value)} /></Field>
-        <Field label="Pickup time / slot"><Input value={draft.slot ?? ""} onChange={(e) => set("slot", e.target.value)} /></Field>
-        <Field label="Bags"><Input type="number" min={0} value={draft.bags ?? 0} onChange={(e) => set("bags", Number(e.target.value))} /></Field>
-        <Field label="Oversize"><Input type="number" min={0} value={draft.oversize ?? 0} onChange={(e) => set("oversize", Number(e.target.value))} /></Field>
-      </div>
-      <Field label="Customer note"><Input value={draft.note ?? ""} onChange={(e) => set("note", e.target.value)} /></Field>
-      {priceWarn && (
-        <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
-          {priceWarn}
-        </p>
-      )}
-      {err && <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" disabled={busy} onClick={onSave}>{busy ? "Saving…" : "Save changes"}</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>Cancel</Button>
-      </div>
-    </div>
-  );
-}
-
-/* ================= legacy bagdrop.co lead edit ================= */
-/** Same "correct it, don't silently re-price or message the customer"
- *  pattern as EditInquiryForm above, for a lead synced in from bagdrop.co's
- *  own database (PATCH /api/admin/production-leads/[id]). A route or
- *  bag-count change on an already-quoted lead is refused by the server —
- *  staff use "Revise price" instead, which does message the customer. */
-function EditLeadForm({ draft, setDraft, busy, err, priceWarn, onCancel, onSave }: {
-  draft: LeadChanges; setDraft: (d: LeadChanges) => void;
-  busy: boolean; err: string | null; priceWarn: string | null;
-  onCancel: () => void; onSave: () => void;
-}) {
-  const set = <K extends keyof LeadChanges>(k: K, v: LeadChanges[K]) => setDraft({ ...draft, [k]: v });
-  return (
-    <div className="mb-3 rounded-xl bg-paper p-3">
-      <div className="grid gap-x-3 sm:grid-cols-2">
-        <Field label="Name"><Input value={draft.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
-        <Field label="Phone"><Input value={draft.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></Field>
-        <Field label="Email"><Input value={draft.email ?? ""} onChange={(e) => set("email", e.target.value)} type="email" /></Field>
-        <Field label="Service"><Input value={draft.serviceInterest ?? ""} onChange={(e) => set("serviceInterest", e.target.value)} /></Field>
-        <Field label="From city"><Input value={draft.fromCity ?? ""} onChange={(e) => set("fromCity", e.target.value)} /></Field>
-        <Field label="To city"><Input value={draft.toCity ?? ""} onChange={(e) => set("toCity", e.target.value)} /></Field>
-        <Field label="Travel date"><Input type="date" value={draft.travelDate ?? ""} onChange={(e) => set("travelDate", e.target.value)} /></Field>
-        <Field label="Pickup date"><Input type="date" value={draft.pickupDate ?? ""} onChange={(e) => set("pickupDate", e.target.value)} /></Field>
-        <Field label="Delivery date"><Input type="date" value={draft.deliveryDate ?? ""} onChange={(e) => set("deliveryDate", e.target.value)} /></Field>
-        <Field label="Bags"><Input type="number" min={0} value={draft.bagsCount ?? 0} onChange={(e) => set("bagsCount", Number(e.target.value))} /></Field>
-        <Field label="Flight / reference"><Input value={draft.flightNumber ?? ""} onChange={(e) => set("flightNumber", e.target.value)} /></Field>
-        <Field label="Assigned to"><Input value={draft.assignedTo ?? ""} onChange={(e) => set("assignedTo", e.target.value)} /></Field>
-      </div>
-      <Field label="Notes"><Input value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} /></Field>
-      {priceWarn && (
-        <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
-          {priceWarn}
-        </p>
-      )}
-      {err && <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" disabled={busy} onClick={onSave}>{busy ? "Saving…" : "Save changes"}</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>Cancel</Button>
-      </div>
+      </Drawer>
     </div>
   );
 }

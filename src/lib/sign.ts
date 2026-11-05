@@ -2,8 +2,9 @@
  *  time and re-checked at payment time; if any figure changed in the browser,
  *  the signature no longer matches and the capture is refused. */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { requiredSecret } from "./secrets";
 
-const SECRET = process.env.QUOTE_SIGNING_SECRET ?? "dev-secret-change-me";
+const SECRET = requiredSecret("QUOTE_SIGNING_SECRET", "dev-secret-change-me");
 
 export function quotePayload(args: {
   qid: string; fromName: string; toName: string;

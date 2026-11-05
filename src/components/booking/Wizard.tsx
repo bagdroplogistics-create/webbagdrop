@@ -10,17 +10,19 @@
  *  4. The client pays, uploads proof and manages bags in their dashboard
  *     (/account). Nothing on this page writes to the database directly. */
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useNow } from "@/lib/useNow";
 import { withBase } from "@/lib/basePath";
 import { useOnChange, usePlanAutofill } from "@/lib/stateSync";
-import { CITIES, inr } from "@/lib/pricing";
-import { SERVICES } from "@/lib/services";
+import { AIRPORTS, CITIES, inr } from "@/lib/pricing";
 import { cityAirportCodes } from "@/lib/airports";
+import AirportPicker from "./AirportPicker";
+import { SERVICES } from "@/lib/services";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import type { InstantRule, UseCase } from "@/lib/types";
 import { DEFAULT_INSTANT, instantCheck } from "@/lib/instant";
 import OnlinePay from "@/components/OnlinePay";
-import AirportPicker from "@/components/booking/AirportPicker";
+import { pcsLabel } from "@/lib/opsModel";
 import { Button, Card, Field, Input, Select, Tile } from "@/components/ui";
 
 const STEPS = ["Service", "Route", "When", "Bags", "You", "Verify"];
@@ -30,20 +32,21 @@ interface Catalog {
   airports: Record<string, { name: string; terminals?: string[] }>;
   sectors: { from: string; to: string; both: boolean; instant?: InstantRule | null }[];
 }
-const FALLBACK: Catalog = { cities: CITIES.map((c) => ({ name: c.name, ap: c.ap ?? null, aps: c.aps ?? [] })), airports: {}, sectors: [] };
+const FALLBACK: Catalog = { cities: CITIES.map((c) => ({ name: c.name, ap: c.ap ?? null, aps: cityAirportCodes(c) })), airports: AIRPORTS, sectors: [] };
 
 interface Draft {
   uc: UseCase;
   from: string; to: string; fromOther: string; toOther: string;
-  pickAddr: string; dropAddr: string;
+  pickAddr: string; dropAddr: string; terminal: string;
   date: string; pickupDate: string; deliveryDate: string; slot: string; flight: string; flightTime: string;
+  pnr: string; surname: string;
   bags: number; oversize: number;
   name: string; mobile: string; email: string; note: string;
 }
 
 interface OtpState {
   channel: "mobile" | "email"; sent: boolean; exp: number; token: string; entered: string; sentTo?: string;
-  demo?: string; err: string | null; busy: boolean;
+  demo?: string; err: string | null; busy: boolean; note?: string;
 }
 const OTP0: OtpState = { channel: "mobile", sent: false, exp: 0, token: "", entered: "", err: null, busy: false };
 
@@ -62,8 +65,8 @@ export default function Wizard() {
   const [cat, setCat] = useState<Catalog>(FALLBACK);
   const [d, setD] = useState<Draft>({
     uc: "d2a", from: "Ahmedabad", to: "Mumbai", fromOther: "", toOther: "",
-    pickAddr: "", dropAddr: "",
-    date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "",
+    pickAddr: "", dropAddr: "", terminal: "",
+    date: "", pickupDate: "", deliveryDate: "", slot: "", flight: "", flightTime: "", pnr: "", surname: "",
     bags: 2, oversize: 0, name: "", mobile: "", email: "", note: "",
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
@@ -92,11 +95,10 @@ export default function Wizard() {
   const fromName = d.from === "other" ? d.fromOther.trim() : d.from;
   const toName = d.to === "other" ? d.toOther.trim() : d.to;
 
-  /* the airport end of an air service: pick the airport (+ terminal) — a
-   * city with more than one (cat.cities[].aps) gets a choice */
-  const airportCityName = svc.airportEnd === "from" ? d.from : svc.airportEnd === "to" ? d.to : null;
-  const airportCityRow = airportCityName && airportCityName !== "other" ? cat.cities.find((c) => c.name === airportCityName) : undefined;
-  const airportCodes = airportCityRow ? cityAirportCodes(airportCityRow) : [];
+  /* the airport end of an air service: the airport(s) serving that city (+ terminal) */
+  const airportCity = svc.airportEnd === "from" ? d.from : svc.airportEnd === "to" ? d.to : null;
+  const apCodes = airportCity && airportCity !== "other" ? cityAirportCodes(cat.cities.find((c) => c.name === airportCity)).filter((c) => cat.airports[c]) : [];
+  const airport = apCodes.length > 0;
 
   /* is this sector on the rate chart? (informational — the server decides) */
   const onChart = useMemo(() => {
@@ -125,14 +127,19 @@ export default function Wizard() {
   const [result, setResult] = useState<Result | null>(null);
   useOnChange(`${d.mobile}|${d.email}`, () => setOtp(OTP0));
 
+  /* which channels can deliver a code right now (WhatsApp may be unavailable) */
+  const [channels, setChannels] = useState<{ mobile: boolean; email: boolean }>({ mobile: true, email: true });
+  useEffect(() => { void fetch("/api/otp", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (typeof j.mobile === "boolean") setChannels(j); }).catch(() => {}); }, []);
+
   async function sendOtp(channel: "mobile" | "email") {
     const to = channel === "email" ? d.email.trim() : d.mobile.trim();
     setOtp({ ...OTP0, channel, busy: true });
     try {
-      const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", channel, to }) });
+      /* a WhatsApp code that can't be sent goes to the email instead, when there is one */
+      const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", channel, to, ...(channel === "mobile" && emailOk ? { fallbackEmail: d.email.trim() } : {}) }) });
       const j = await r.json();
       if (j.error) setOtp((p) => ({ ...p, busy: false, err: j.detail ?? (j.error === "BAD_MOBILE" ? "That mobile number doesn't look right — go back and fix it." : j.error === "BAD_EMAIL" ? "That email doesn't look right — go back and fix it." : "Could not send the code — try again.") }));
-      else setOtp((p) => ({ ...p, busy: false, sent: true, exp: j.exp, token: j.token, demo: j.demo, sentTo: j.to }));
+      else setOtp((p) => ({ ...p, busy: false, sent: true, channel: j.channel ?? channel, exp: j.exp, token: j.token, demo: j.demo, sentTo: j.to, note: j.fellBack ? "WhatsApp isn't reachable right now, so we sent the code to your email." : undefined }));
     } catch { setOtp((p) => ({ ...p, busy: false, err: "Could not reach the server — try again." })); }
   }
 
@@ -147,7 +154,7 @@ export default function Wizard() {
             uc: d.uc, name: d.name, mobile: d.mobile, email: d.email,
             fromName, toName, pickAddr: d.pickAddr, dropAddr: d.dropAddr,
             date: d.date, pickupDate: d.pickupDate, deliveryDate: d.deliveryDate, slot: d.slot,
-            flight: d.flight, flightTime: d.flightTime, bags: d.bags, oversize: d.oversize, note: d.note,
+            flight: d.flight, flightTime: d.flightTime, pnr: d.pnr, surname: d.surname, bags: d.bags, oversize: d.oversize, note: d.note,
           },
         }),
       });
@@ -174,7 +181,7 @@ export default function Wizard() {
       <Card className="mx-auto max-w-2xl anim-in">
         <div className="text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">Reference {result.id}</p>
-          <h2 className="mt-1 font-display text-2xl font-extrabold">{result.paid ? "Booking confirmed ✓" : result.instant ? "⚡ Pay now to confirm instantly" : result.priced ? "Your price" : "Request received"}</h2>
+          <h2 className="mt-1 font-display text-2xl font-extrabold">{result.paid ? "Booking confirmed" : result.instant ? "Pay now to confirm instantly" : result.priced ? "Your price" : "Request received"}</h2>
         </div>
         {result.priced && result.price ? (
           <div className="mt-4 rounded-2xl bg-ink p-5 text-center text-cream">
@@ -210,7 +217,7 @@ export default function Wizard() {
             </div>
           ))}
         </div>
-        <a href={withBase("/account")} className="mt-4 block"><Button size="lg" className="w-full">Open my dashboard →</Button></a>
+        <a href={withBase("/account")} className="mt-4 block"><Button size="lg" className="w-full">Open my dashboard</Button></a>
         {!result.instant && <p className="mt-2 text-center text-xs text-muted">No payment is taken until the team approves your booking.</p>}
       </Card>
     );
@@ -232,7 +239,7 @@ export default function Wizard() {
             <>
               <H>Choose your service</H>
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                {SERVICES.map((s) => <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => setD((p) => ({ ...p, uc: s.uc, pickAddr: "", dropAddr: "" }))} title={s.title} sub={s.sub} />)}
+                {SERVICES.map((s) => <Tile key={s.uc} selected={d.uc === s.uc} onClick={() => setD((p) => ({ ...p, uc: s.uc, pickAddr: "", dropAddr: "", terminal: "" }))} title={s.title} sub={s.sub} />)}
               </div>
             </>
           )}
@@ -256,13 +263,13 @@ export default function Wizard() {
                 {d.from === "other" && <Field label="Your pickup city"><Input value={d.fromOther} onChange={(e) => set("fromOther", e.target.value)} placeholder="Type the city" /></Field>}
                 {d.to === "other" && <Field label="Your delivery city"><Input value={d.toOther} onChange={(e) => set("toOther", e.target.value)} placeholder="Type the city" /></Field>}
 
-                {svc.airportEnd === "from" && airportCityName && airportCodes.length > 0 ? (
-                  <AirportPicker label="Pickup airport" city={airportCityName} codes={airportCodes} airports={cat.airports} onAddress={(a) => set("pickAddr", a)} />
+                {svc.airportEnd === "from" && airport ? (
+                  <AirportPicker key={`${d.uc}|${d.from}`} label="Pickup airport" city={d.from} codes={apCodes} airports={cat.airports} onAddress={(a) => set("pickAddr", a)} />
                 ) : (
                   <Field label="Pickup address"><Input value={d.pickAddr} onChange={(e) => set("pickAddr", e.target.value)} placeholder={svc.airportEnd === "from" ? "Airport and terminal" : "Flat, building, area or pincode"} /></Field>
                 )}
-                {svc.airportEnd === "to" && airportCityName && airportCodes.length > 0 ? (
-                  <AirportPicker label="Delivery airport" city={airportCityName} codes={airportCodes} airports={cat.airports} onAddress={(a) => set("dropAddr", a)} />
+                {svc.airportEnd === "to" && airport ? (
+                  <AirportPicker key={`${d.uc}|${d.to}`} label="Delivery airport" city={d.to} codes={apCodes} airports={cat.airports} onAddress={(a) => set("dropAddr", a)} />
                 ) : (
                   <Field label="Delivery address"><Input value={d.dropAddr} onChange={(e) => set("dropAddr", e.target.value)} placeholder={svc.airportEnd === "to" ? "Airport and terminal" : "Hotel, home, terminal"} /></Field>
                 )}
@@ -295,6 +302,16 @@ export default function Wizard() {
                   <p className="mt-1.5 text-xs text-muted">{plan.cutoffNote}</p>
                 </div>
               )}
+              {svc.mode === "air" && d.uc !== "a2d" && (
+                <div className="grid gap-x-4 sm:grid-cols-2">
+                  <Field label="Airline PNR (optional)" hint="Speeds up the airline bag-tag check at the airport.">
+                    <Input value={d.pnr} maxLength={6} onChange={(e) => set("pnr", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="ABC123" />
+                  </Field>
+                  <Field label="Surname as on the ticket (optional)">
+                    <Input value={d.surname} onChange={(e) => set("surname", e.target.value.toUpperCase())} placeholder="SHAH" />
+                  </Field>
+                </div>
+              )}
               <Field label={`Preferred pickup time${plan.usesFlightTime && d.uc !== "a2d" && d.pickupDate && d.pickupDate !== d.date ? ` · on ${d.pickupDate} (evening before)` : ""}`}>
                 <Select value={d.slot} onChange={(e) => set("slot", e.target.value)}>
                   <option value="">— Select time —</option>
@@ -310,7 +327,7 @@ export default function Wizard() {
               {(["bags", "oversize"] as const).map((k) => (
                 <div key={k} className="mb-3 flex items-center justify-between rounded-xl border border-line p-3.5">
                   <div>
-                    <b className="font-display">{k === "bags" ? "Bags" : "Oversize"}</b>
+                    <b className="font-display">{k === "bags" ? "Bags" : "Oversize (XL)"}</b>
                     <p className="text-xs text-muted">{k === "bags" ? "Suitcase, duffel, backpack · up to 32 kg each" : "Golf, surfboard, cycle, anything over 32 kg"}</p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -343,7 +360,7 @@ export default function Wizard() {
               <H>Verify to see your price</H>
               <p className="mb-4 text-sm text-muted">A one-time code confirms your contact. Once verified, your booking goes to our team and {onChart ? "your price appears on screen" : "your inquiry is logged"}. The code is valid for 10 minutes.</p>
               <div className="mb-3 grid grid-cols-2 gap-2">
-                <Tile selected={otp.channel === "mobile" && otp.sent} onClick={() => !otp.busy && void sendOtp("mobile")} title="WhatsApp / SMS" sub={d.mobile.trim() || "your mobile"} />
+                <Tile selected={otp.channel === "mobile" && otp.sent} onClick={() => !otp.busy && void sendOtp("mobile")} title="WhatsApp / SMS" sub={channels.mobile ? d.mobile.trim() || "your mobile" : "unavailable right now — use email"} />
                 <Tile selected={otp.channel === "email" && otp.sent} onClick={() => !otp.busy && (emailOk ? void sendOtp("email") : setOtp((p) => ({ ...p, err: "Add a valid email on the previous step to use email OTP." })))} title="Email" sub={d.email.trim() || "add email on previous step"} />
               </div>
               {otp.sent && (
@@ -354,9 +371,12 @@ export default function Wizard() {
                     <Button variant="ghost" size="sm" disabled={otp.busy} onClick={() => void sendOtp(otp.channel)}>Resend</Button>
                   </div>
                   <p className="mt-2 text-xs text-muted">Code sent to {otp.channel === "email" ? d.email.trim() : d.mobile.trim()}.{otp.demo ? <span className="font-mono"> (demo: {otp.demo})</span> : null}</p>
+                  {otp.note && <p className="mt-1 text-xs text-amber-800">{otp.note}</p>}
+                  {otp.channel === "mobile" && emailOk && <button type="button" className="mt-1 cursor-pointer text-xs font-semibold text-ink underline underline-offset-2" disabled={otp.busy} onClick={() => void sendOtp("email")}>Didn&apos;t get it? Send the code to {d.email.trim()} instead</button>}
                 </>
               )}
               {otp.err && <p className="mt-2 text-sm text-red-700">{otp.err}</p>}
+              <p className="mt-4 text-xs text-muted">By verifying, you agree to our <Link href="/terms" target="_blank" className="underline underline-offset-2 hover:text-ink">Terms of Carriage</Link>, <Link href="/refund" target="_blank" className="underline underline-offset-2 hover:text-ink">Refund Policy</Link> and <Link href="/privacy" target="_blank" className="underline underline-offset-2 hover:text-ink">Privacy Policy</Link>.</p>
             </>
           )}
         </div>
@@ -374,7 +394,7 @@ export default function Wizard() {
             ["Service", svc.title],
             ["Route", `${fromName || "—"} → ${toName || "—"}`],
             ["Pickup", `${d.date || "—"}${d.slot ? ` · ${d.slot}` : ""}`],
-            ["Pieces", `${d.bags} bags${d.oversize ? ` + ${d.oversize} oversize` : ""}`],
+            ["Pieces", pcsLabel(d.bags, d.oversize, "bags")],
             ["Traveller", d.name || "—"],
           ] as const).map(([k, v]) => (
             <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">
@@ -388,7 +408,7 @@ export default function Wizard() {
           {instantHint && (
             <div className={`mt-2 rounded-xl p-3 text-[13px] ${instantHint.ok ? "bg-green-50 text-green-900" : "bg-paper text-muted"}`}>
               {instantHint.ok
-                ? <><b>⚡ Instant confirmation</b> — this date confirms the moment you pay, right after you verify. No waiting for approval.</>
+                ? <><b>Instant confirmation</b> — this date confirms the moment you pay, right after you verify. No waiting for approval.</>
                 : <><b>Team confirmation</b> — {instantHint.reason}</>}
             </div>
           )}

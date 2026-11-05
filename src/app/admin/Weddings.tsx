@@ -5,36 +5,19 @@
  *  build's Y2K ops desk (?ops=1) + the events seed in y2k.html; follows the
  *  LRAndTrips module pattern and the cookie-gated /api/admin/* routes. */
 import { useEffect, useMemo, useState } from "react";
-import { adminSaveBooking, refreshBookings, watchAdminBookings, SaveRefused } from "@/lib/adminApi";
+import { adminListBookings, adminSaveBooking, watchAdminBookings, SaveRefused } from "@/lib/adminApi";
 import { nowIso } from "@/lib/db";
-import { adminSaveEvent, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
+import { adminSaveEvent, generateHostInvoice, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
 import { WEDDING_STAGES } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import { withBase } from "@/lib/basePath";
-import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
+import { approvalCounts, bookingOpen, closesText, statusForStage, weddingStatus } from "@/lib/weddingStatus";
 import { teamView } from "@/lib/weddingTeamView";
-
-/** Same guest-messages/rooms/returns/tags desk the event company portal
- *  (/event) uses, for Bagdrop staff — on any event, any family. */
-const weddingOpsApi: TeamApi = async (body) => {
-  const r = await fetch("/api/admin/wedding-ops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return { ok: r.ok, j: await r.json().catch(() => ({})) };
-};
-
-const STATUS_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"> = {
-  submitted: "info", accepted: "info", assigned: "warn", picked_up: "warn",
-  in_transit: "warn", delivered: "ok", rejected: "bad", cancelled: "bad", revised: "muted",
-};
-
-/** The Y2K desk's stage -> booking-status machine, verbatim. */
-function statusForStage(stageIndex: number, current: BookingStatus): BookingStatus {
-  let s = current;
-  if (stageIndex >= 1 && stageIndex <= 2 && ["submitted", "accepted", "assigned"].includes(s)) s = "picked_up";
-  if (stageIndex === 3 || stageIndex === 4 || stageIndex === 6) s = "in_transit";
-  if (stageIndex === 5 || stageIndex === 7) s = "delivered";
-  return s;
-}
+import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
+import { inr } from "@/lib/pricing";
+import JourneyPanel from "./JourneyPanel";
+import { HostInvoiceDoc } from "./DocumentView";
 
 type WeddingState = {
   members?: { id: string; name?: string; room?: string }[];
@@ -64,171 +47,6 @@ function deskCounts(list: Booking[]) {
   return { guests, bagsOut, bagsBack, noRoom };
 }
 
-/* ================= RETURN BAGS DESK =================
- * Accepting a client's return bags in seconds — search by the guest/family
- * NAME, the BOOKING reference, or the BAG TAG given at booking. Typing an
- * exact tag and hitting Enter accepts that bag instantly (scan-gun style).
- * Accepting = stage "Return pickup" on the bag; the whole family's returns
- * accept in one tap. Landing-page bookings without per-bag tags accept as
- * one unit. Big touch targets — works the same on the phone. */
-const RETURN_DONE = ["Return pickup", "Delivered home"];
-
-function ReturnDesk({ bookings, onChanged }: { bookings: Booking[]; onChanged: (b: Booking) => void }) {
-  const [q, setQ] = useState("");
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
-  const [err, setErr] = useState("");
-
-  /* every return-flagged bag across the wedding bookings, searchable */
-  const rows = useMemo(() => {
-    const out: { b: Booking; tagId: string; bagLabel: string; owner: string; room: string; family: string; accepted: boolean }[] = [];
-    for (const b of bookings) {
-      const st = deskState(b);
-      if (!st?.bags?.length) continue;
-      for (const bag of st.bags) {
-        if (!bag.ret) continue;
-        const tagId = `${b.wedding!.bookingId}-${bag.owner}-${bag.id}`;
-        const m = st.members?.find((x) => x.id === bag.owner);
-        out.push({
-          b, tagId,
-          bagLabel: [bag.colour, bag.type, bag.hang ? "· hang" : ""].filter(Boolean).join(" "),
-          owner: m?.name ?? "—", room: m?.room ?? "",
-          family: b.family?.name ?? b.traveller.name,
-          accepted: RETURN_DONE.includes(b.wedding!.bagStatus?.[tagId] ?? ""),
-        });
-      }
-    }
-    return out;
-  }, [bookings]);
-
-  /* landing-page bookings (no per-bag tags) accept as one unit */
-  const simple = useMemo(() => bookings.filter((b) => !deskState(b)?.bags?.length), [bookings]);
-
-  const needle = q.trim().toLowerCase();
-  const hitRows = needle
-    ? rows.filter((r) => [r.family, r.owner, r.b.id, r.tagId, r.b.traveller.name, r.b.traveller.mobile].some((s) => s?.toLowerCase().includes(needle)))
-    : [];
-  const hitSimple = needle
-    ? simple.filter((b) => [b.family?.name, b.traveller.name, b.id, b.traveller.mobile].some((s) => s?.toLowerCase().includes(needle)))
-    : [];
-  const expected = rows.length, acceptedN = rows.filter((r) => r.accepted).length;
-
-  async function acceptTag(b: Booking, tagId: string) {
-    setBusyKey(tagId); setErr("");
-    const at = nowIso();
-    const next: Booking = {
-      ...b,
-      status: statusForStage(6, b.status),
-      wedding: { ...b.wedding!, bagStatus: { ...b.wedding!.bagStatus, [tagId]: "Return pickup" }, updatedAt: at },
-      events: [...b.events, { at, by: "admin", text: `Return bag ACCEPTED · tag ${tagId} (Return bags desk)` }],
-    };
-    try { await adminSaveBooking(next); onChanged(next); setFlash(tagId); setTimeout(() => setFlash(null), 1600); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    finally { setBusyKey(null); }
-  }
-  async function acceptFamily(b: Booking) {
-    setBusyKey(b.id); setErr("");
-    const st = deskState(b);
-    const at = nowIso();
-    const bagStatus = { ...b.wedding!.bagStatus };
-    let n = 0;
-    for (const bag of st?.bags ?? []) {
-      if (!bag.ret) continue;
-      const tagId = `${b.wedding!.bookingId}-${bag.owner}-${bag.id}`;
-      if (!RETURN_DONE.includes(bagStatus[tagId] ?? "")) { bagStatus[tagId] = "Return pickup"; n++; }
-    }
-    const next: Booking = {
-      ...b, status: statusForStage(6, b.status),
-      wedding: { ...b.wedding!, bagStatus, updatedAt: at },
-      events: [...b.events, { at, by: "admin", text: `Return bags ACCEPTED · ${n} bag(s) for ${b.family?.name ?? b.traveller.name} (Return bags desk)` }],
-    };
-    try { await adminSaveBooking(next); onChanged(next); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    finally { setBusyKey(null); }
-  }
-  async function acceptSimple(b: Booking) {
-    setBusyKey(b.id); setErr("");
-    const at = nowIso();
-    const next: Booking = {
-      ...b, status: statusForStage(6, b.status),
-      admin: { ...b.admin, returnAccepted: { at, bags: b.bags } },
-      events: [...b.events, { at, by: "admin", text: `Return bags ACCEPTED · ${b.bags} bag(s) · ${b.family?.name ?? b.traveller.name} (Return bags desk)` }],
-    };
-    try { await adminSaveBooking(next); onChanged(next); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    finally { setBusyKey(null); }
-  }
-  /* scan-gun / exact-tag fast path: Enter on an exact tag accepts at once */
-  function onEnter() {
-    const exact = rows.find((r) => r.tagId.toLowerCase() === needle && !r.accepted);
-    if (exact) { void acceptTag(exact.b, exact.tagId); setQ(""); }
-  }
-
-  return (
-    <Card className="border-l-4 border-l-[#EA580C]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-sm font-bold">Return bags desk <span className="font-normal text-faint">accept by name · booking ref · bag tag — Enter on an exact tag accepts instantly</span></h3>
-        <span className="rounded-full bg-paper px-3 py-1 text-xs font-semibold tabular-nums">{acceptedN} / {expected} returns accepted</span>
-      </div>
-      <Input
-        autoFocus className="mt-2 py-3 text-base" value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") onEnter(); }}
-        placeholder="Guest name · family · booking ref · bag tag…"
-      />
-      {err && <p className="mt-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-900">{err}</p>}
-
-      {needle && hitRows.length === 0 && hitSimple.length === 0 && (
-        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">No match for “{q}” — check the spelling, or try the booking reference on the tag.</p>
-      )}
-
-      {/* grouped by family for one-tap accept-all */}
-      {needle && [...new Set(hitRows.map((r) => r.b.id))].map((bid) => {
-        const fam = hitRows.filter((r) => r.b.id === bid);
-        const b = fam[0].b;
-        const open = fam.filter((r) => !r.accepted).length;
-        return (
-          <div key={bid} className="anim-in mt-3 rounded-xl border border-line bg-paper/40 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[13px]"><b>{fam[0].family}</b> <span className="font-mono text-xs text-muted">{b.id}</span> · {b.traveller.mobile}</span>
-              {open > 0 && <Button size="sm" disabled={busyKey === b.id} onClick={() => void acceptFamily(b)}>{busyKey === b.id ? "Accepting…" : `Accept all ${open} returns`}</Button>}
-            </div>
-            <div className="mt-2 grid gap-1.5">
-              {fam.map((r) => (
-                <div key={r.tagId}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5 transition-colors ${r.accepted ? "border-green-200 bg-green-50" : "border-line bg-white"} ${flash === r.tagId ? "ring-2 ring-green-400" : ""}`}>
-                  <span className="min-w-0 text-xs">
-                    <b className="font-mono text-[11.5px]">{r.tagId}</b>
-                    <span className="block text-muted">{r.bagLabel || "bag"} · {r.owner}{r.room ? ` · room ${r.room}` : ""}</span>
-                  </span>
-                  {r.accepted
-                    ? <Badge tone="ok">✓ accepted</Badge>
-                    : <Button size="sm" variant="outline" disabled={busyKey === r.tagId} onClick={() => void acceptTag(r.b, r.tagId)}>{busyKey === r.tagId ? "…" : "Accept"}</Button>}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {needle && hitSimple.map((b) => {
-        const done = !!(b.admin as { returnAccepted?: { at: string } }).returnAccepted;
-        return (
-          <div key={b.id} className="anim-in mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-paper/40 p-3">
-            <span className="text-[13px]"><b>{b.family?.name ?? b.traveller.name}</b> <span className="font-mono text-xs text-muted">{b.id}</span> · {b.bags} bag(s) · {b.traveller.mobile}</span>
-            {done ? <Badge tone="ok">✓ accepted</Badge>
-              : <Button size="sm" disabled={busyKey === b.id} onClick={() => void acceptSimple(b)}>{busyKey === b.id ? "Accepting…" : `Accept ${b.bags} return bag(s)`}</Button>}
-          </div>
-        );
-      })}
-
-      {!needle && (
-        <p className="mt-2 text-[11px] text-faint">Start typing — results appear as you type. The counter above tracks every return-flagged bag across this view&apos;s wedding bookings.</p>
-      )}
-    </Card>
-  );
-}
-
 export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: string) => void }) {
   const [events, setEvents] = useState<BagdropEvent[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -247,7 +65,7 @@ export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: strin
   const kpis = useMemo(() => {
     const open = events.filter((e) => e.status === "open").length;
     const c = deskCounts(weddingBookings);
-    return { open, families: weddingBookings.length, ...c };
+    return { open, families: weddingBookings.length, ...c, ...approvalCounts(weddingBookings) };
   }, [events, weddingBookings]);
 
   const [busy, setBusy] = useState(false);
@@ -270,16 +88,11 @@ export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: strin
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Kpi label="Open events" value={String(kpis.open)} />
-        <Kpi label="Family bookings" value={String(kpis.families)} />
+        <Kpi label="Family bookings" value={String(kpis.families)} hint={`${kpis.waiting} awaiting approval · ${kpis.confirmed} confirmed`} />
         <Kpi label="Guests" value={String(kpis.guests)} />
         <Kpi label="Bags out" value={String(kpis.bagsOut)} hint={`${kpis.bagsBack} coming back`} />
         <Kpi label="No room yet" value={String(kpis.noRoom)} />
       </div>
-
-      <ReturnDesk
-        bookings={sel ? eventBookings : weddingBookings}
-        onChanged={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))}
-      />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
         <div className="grid gap-5">
@@ -301,13 +114,14 @@ export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: strin
                 <tbody>
                   {events.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-muted">No events yet. Seed the Y2K wedding or create one below.</td></tr>}
                   {events.map((e) => {
-                    const fams = weddingBookings.filter((b) => b.eventCode === e.id).length;
+                    const evB = weddingBookings.filter((b) => b.eventCode === e.id);
+                    const fams = evB.length, waiting = approvalCounts(evB).waiting;
                     return (
                       <tr key={e.id} onClick={() => setSel(e.id)} className={`cursor-pointer border-b border-line last:border-0 ${sel === e.id ? "bg-paper" : ""}`}>
                         <td className="py-2 pr-2 font-mono text-xs">{e.id}</td>
                         <td className="pr-2 text-xs">{e.name}<br /><span className="text-faint">{e.venue || e.venueCity}</span></td>
                         <td className="pr-2 text-xs">{e.dates?.in} → {e.dates?.out}</td>
-                        <td className="pr-2 text-right">{fams}</td>
+                        <td className="pr-2 text-right">{fams}{waiting > 0 && <span className="block text-[10px] font-semibold text-amber-700">{waiting} waiting</span>}</td>
                         <td><Badge tone={e.status === "open" ? "ok" : "muted"}>{e.status}</Badge></td>
                       </tr>
                     );
@@ -327,6 +141,7 @@ export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: strin
             onToggleOpen={() => void toggleOpen(event)}
             onBookingChanged={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))}
             onOpenBooking={onOpenBooking}
+            onReload={() => void adminListBookings().then(setBookings).catch(() => undefined)}
           />
         ) : (
           <Card><p className="py-10 text-center text-sm text-muted">Select an event to see its guest bag bookings.</p></Card>
@@ -337,14 +152,14 @@ export default function Weddings({ onOpenBooking }: { onOpenBooking?: (id: strin
 }
 
 function EventDetail({
-  event, bookings, onToggleOpen, onBookingChanged, onOpenBooking,
+  event, bookings, onToggleOpen, onBookingChanged, onOpenBooking, onReload,
 }: {
   event: BagdropEvent; bookings: Booking[]; onToggleOpen: () => void; onBookingChanged: (b: Booking) => void;
-  onOpenBooking?: (id: string) => void;
+  onOpenBooking?: (id: string) => void; onReload: () => void;
 }) {
   const [err, setErr] = useState("");
-  const [teamDesk, setTeamDesk] = useState(false);
   const c = deskCounts(bookings);
+  const ap = approvalCounts(bookings);
   const landingUrl = withBase(`/weddings?code=${encodeURIComponent(event.id)}`);
   const deskUrl = event.id === "Y2K-WED" ? withBase("/e/y2k") : null;
   const families = useMemo(() => bookings.map(teamView), [bookings]);
@@ -359,18 +174,23 @@ function EventDetail({
     const next: Booking = {
       ...b,
       status: statusForStage(k, b.status),
-      wedding: { ...b.wedding, bagStatus: { ...b.wedding.bagStatus, [tagId]: stage }, updatedAt: at },
-      events: [...b.events, { at, by: "admin", text: `Bag ${tagId.split("-").slice(-1)[0]} → ${stage} (Weddings module)` }],
+      wedding: { ...b.wedding, bagStatus: { ...(b.wedding.bagStatus ?? {}), [tagId]: stage }, updatedAt: at },
+      events: [...(b.events ?? []), { at, by: "admin", text: `Bag ${tagId.split("-").slice(-1)[0]} → ${stage} (Weddings module)` }],
     };
     try { onBookingChanged(await adminSaveBooking(next, { overrideIdentityGate: override })); }
     catch (e) {
       if (e instanceof SaveRefused && e.code === "IDENTITY_NOT_VERIFIED") setGate({ b, tagId, stage, msg: e.message });
-      else setErr(e instanceof Error ? e.message : String(e));
+      else { setErr(e instanceof Error ? e.message : String(e)); if (e instanceof SaveRefused && e.code === "STALE") onReload(); }
     }
   }
 
+  async function saveCloses(day: string) {
+    try { await adminSaveEvent({ ...event, bookingCloses: day || undefined }); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  }
+
   async function setStatus(b: Booking, status: BookingStatus) {
-    const next: Booking = { ...b, status, events: [...b.events, { at: nowIso(), by: "admin", text: `Status → ${status} (Weddings module)` }] };
+    const next: Booking = { ...b, status, events: [...(b.events ?? []), { at: nowIso(), by: "admin", text: `Status → ${status} (Weddings module)` }] };
     setErr("");
     try { onBookingChanged(await adminSaveBooking(next)); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -381,10 +201,10 @@ function EventDetail({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-display text-sm font-bold">{event.name} <span className="font-normal text-faint">{event.id}</span></h3>
         <div className="flex flex-wrap items-center gap-2">
-          <a className="text-xs font-semibold text-brand hover:underline" href={landingUrl} target="_blank" rel="noreferrer">Landing page ↗</a>
-          {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={deskUrl} target="_blank" rel="noreferrer">Wedding desk ↗</a>}
-          {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={`${deskUrl}?ops=1`} target="_blank" rel="noreferrer">Ops desk ↗</a>}
-          <Button size="sm" variant="outline" onClick={() => setTeamDesk((v) => !v)}>{teamDesk ? "Hide team desk" : "Team desk"}</Button>
+          <a className="text-xs font-semibold text-brand hover:underline" href={`/admin/manifest?event=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Manifest · plan pickups, deliveries, returns</a>
+          <a className="text-xs font-semibold text-brand hover:underline" href={landingUrl} target="_blank" rel="noreferrer">Landing page</a>
+          {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={deskUrl} target="_blank" rel="noreferrer">Wedding desk</a>}
+          {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={`${deskUrl}?ops=1`} target="_blank" rel="noreferrer">Ops desk</a>}
           <Button size="sm" variant="outline" onClick={onToggleOpen}>{event.status === "open" ? "Close event" : "Reopen event"}</Button>
         </div>
       </div>
@@ -399,20 +219,30 @@ function EventDetail({
         </div>
       )}
 
+      <div className="mb-4 grid gap-2 rounded-xl bg-paper p-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">Guest bookings close</span>
+          <Input type="date" className="w-auto !py-1 !text-xs" value={event.bookingCloses ?? ""} onChange={(e) => void saveCloses(e.target.value)} />
+          <span className="text-muted">end of day IST · after it guests cannot book, add bags or add a return trip; the team still edits here and in Shipments</span>
+          <Badge tone={bookingOpen(event) ? "ok" : "bad"}>{bookingOpen(event) ? (event.bookingCloses ? `open until ${closesText(event)}` : "open") : "closed"}</Badge>
+        </div>
+        <TeamSetting event={event} onError={setErr} />
+      </div>
+
+      <Commercials event={event} onError={setErr} />
+
+      {event.billing === "host" && <HostInvoicePanel event={event} onChanged={onReload} />}
+
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi label="Families" value={String(bookings.length)} />
+        <Kpi label="Families" value={String(bookings.length)} hint={`${ap.waiting} awaiting approval · ${ap.confirmed} confirmed`} />
         <Kpi label="Guests" value={String(c.guests)} />
         <Kpi label="Bags out" value={String(c.bagsOut)} hint={`${c.bagsBack} coming back`} />
         <Kpi label="No room yet" value={String(c.noRoom)} />
       </div>
 
-      {teamDesk && (
-        <div className="mb-4">
-          <TeamDesk families={families} eventId={event.id} api={weddingOpsApi} tagsBase="/api/admin/wedding-tags" onChanged={refreshBookings} />
-        </div>
-      )}
-
-      <Commercials event={event} onError={setErr} />
+      <div className="mb-5">
+        <TeamDesk families={bookings.filter((b) => b.wedding?.state).map(teamView)} eventId={event.id} api={opsApi} tagsBase="/api/admin/wedding-tags" onChanged={onReload} />
+      </div>
 
       {bookings.length === 0 && <p className="py-6 text-center text-sm text-muted">No guest bookings yet. They appear here as families book on the landing page or the wedding desk.</p>}
 
@@ -426,9 +256,10 @@ function EventDetail({
                 <b>{b.family?.name ?? b.traveller.name}</b>
                 {b.family?.side && <Badge tone={b.family.side === "groom" ? "warn" : "info"}>{b.family.side === "groom" ? "Groom's side" : "Bride's side"}</Badge>}
                 <span className="text-muted">{st ? `${st.members?.length ?? 0} guests` : `${b.family?.guests ?? 1} guests`} · {st ? `${st.bags?.length ?? 0} bags` : `${b.bags} bags`}</span>
-                <span className="ml-auto"><Badge tone={STATUS_TONE[b.status] ?? "muted"}>{b.status}</Badge></span>
+                <span className="ml-auto"><Badge tone={weddingStatus(b).tone}>{weddingStatus(b).label}</Badge></span>
               </summary>
               <div className="mt-3 grid gap-2">
+                <JourneyPanel b={b} compact onChanged={onBookingChanged} />
                 <p className="text-xs text-muted">
                   {b.traveller.name} · {b.traveller.mobile} · {b.from} → {b.to} · pickup {b.date}
                   {b.source ? <> · <span className="text-faint">{b.source}</span></> : null}
@@ -436,10 +267,12 @@ function EventDetail({
                     <>
                       {" · "}
                       <button type="button" className="cursor-pointer font-semibold text-brand hover:underline" onClick={() => onOpenBooking(b.id)}>
-                        Open in Shipments →
+                        Open in Shipments
                       </button>
                     </>
                   )}
+                  {" · "}
+                  <a className="font-semibold text-brand hover:underline" href={`/api/admin/wedding-tags?event=${encodeURIComponent(event.id)}&id=${encodeURIComponent(b.id)}&media=4x6&mark=1`} target="_blank" rel="noreferrer">Print this family&apos;s tags</a>
                 </p>
                 {st?.bags?.length ? (
                   <div className="overflow-x-auto">
@@ -474,7 +307,7 @@ function EventDetail({
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-muted">Landing-page booking ({b.bags} bags) · status</span>
                     <Select className="w-auto !py-1 !text-xs" value={b.status} onChange={(e) => void setStatus(b, e.target.value as BookingStatus)}>
-                      {(["submitted", "accepted", "assigned", "picked_up", "in_transit", "delivered", "cancelled"] as BookingStatus[]).map((s) => <option key={s}>{s}</option>)}
+                      {(["submitted", "accepted", "assigned", "picked_up", "in_transit", "delivered"] as BookingStatus[]).map((s) => <option key={s}>{s}</option>)}
                     </Select>
                   </div>
                 )}
@@ -487,6 +320,13 @@ function EventDetail({
   );
 }
 
+const opsApi: TeamApi = async (body) => {
+  const r = await fetch("/api/admin/wedding-ops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { ok: r.ok, j: await r.json().catch(() => ({})) };
+};
+
+/** The event company: its name and its people (name + mobile) who can sign in at /event. */
+type Person = { name: string; mobile: string };
 /** The event's commercials, open to add or edit at any time: who pays, the
  *  per-bag rate (before GST) for every pickup city, add-ons and billing
  *  terms, and the expected volume for the estimate. Saved on the event
@@ -574,6 +414,87 @@ function Commercials({ event, onError }: { event: BagdropEvent; onError: (e: str
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TeamSetting({ event, onError }: { event: BagdropEvent; onError: (e: string) => void }) {
+  const [company, setCompany] = useState(event.team?.company ?? "");
+  // older events listed bare mobiles; show them as people without a name yet
+  const [people, setPeople] = useState<Person[]>(event.team?.people?.length ? event.team.people : (event.team?.mobiles ?? []).map((mobile) => ({ name: "", mobile })));
+  const [saved, setSaved] = useState("");
+  const edit = (i: number, patch: Partial<Person>) => setPeople((list) => list.map((p, k) => (k === i ? { ...p, ...patch } : p)));
+  async function save() {
+    const list = people.map((p) => ({ name: p.name.trim().slice(0, 60), mobile: p.mobile.replace(/\D/g, "").slice(-10) })).filter((p) => p.name || p.mobile);
+    if (list.some((p) => !p.name)) { onError("Give every person a name."); return; }
+    if (list.some((p) => p.mobile.length !== 10)) { onError("Each mobile needs 10 digits."); return; }
+    if (new Set(list.map((p) => p.mobile)).size !== list.length) { onError("The same mobile is listed twice."); return; }
+    if (list.length && !company.trim()) { onError("Add the company name."); return; }
+    try {
+      await adminSaveEvent({ ...event, team: list.length || company.trim() ? { company: company.trim(), people: list, mobiles: list.map((p) => p.mobile) } : undefined });
+      setPeople(list); onError(""); setSaved("Saved"); setTimeout(() => setSaved(""), 1500);
+    } catch (e) { onError(e instanceof Error ? e.message : String(e)); }
+  }
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">Event company</span>
+        <Input className="!w-56 !py-1 !text-xs" placeholder="Company name" value={company} onChange={(e) => setCompany(e.target.value)} />
+        <a className="font-semibold text-brand hover:underline" href="/event" target="_blank" rel="noreferrer">Event desk login</a>
+      </div>
+      <p className="text-muted">People who can sign in at /event with a WhatsApp code to their mobile. Their name shows on every reply and action.</p>
+      {people.map((p, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-2">
+          <Input className="!w-48 !py-1 !text-xs" placeholder="Name" value={p.name} maxLength={60} onChange={(e) => edit(i, { name: e.target.value })} />
+          <Input className="!w-40 !py-1 !text-xs" inputMode="numeric" placeholder="10-digit mobile" value={p.mobile} onChange={(e) => edit(i, { mobile: e.target.value.replace(/[^\d+ ]/g, "") })} />
+          <Button size="sm" variant="ghost" onClick={() => setPeople((list) => list.filter((_, k) => k !== i))}>Remove</Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setPeople((list) => [...list, { name: "", mobile: "" }])}>Add person</Button>
+        <Button size="sm" onClick={() => void save()}>Save event company</Button>
+        {saved && <span className="text-green-700">{saved}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** The final host bill — a deliberate one-time action, not the live
+ *  estimate shown in Commercials. Only shown for billing: "host" events.
+ *  Once issued, the amount is fixed (ALREADY_INVOICED on a second try);
+ *  re-issuing after a correction isn't supported here — that's a Finance
+ *  credit-note situation, same as any other booking's invoice. */
+function HostInvoicePanel({ event, onChanged }: { event: BagdropEvent; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [showDoc, setShowDoc] = useState(false);
+
+  async function generate() {
+    if (!window.confirm(`Generate the final host invoice for ${event.name}?\n\nThis bills every confirmed family under this event at the event's Commercials rates, right now — do this once, after the event, when every family's bag count is final.`)) return;
+    setBusy(true); setErr("");
+    try { await generateHostInvoice(event.id); onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-line bg-paper/40 p-3 text-sm">
+      {err && <p className="mb-2 text-xs text-red-700">{err}</p>}
+      {event.hostInvoice ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="font-semibold">Host invoice {event.hostInvoice.no}</p>
+            <p className="text-xs text-muted">{inr(event.hostInvoice.total)} · {event.hostInvoice.lines.length} families · issued {new Date(event.hostInvoice.at).toLocaleDateString("en-IN")} by {event.hostInvoice.by}</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setShowDoc(true)}>View / print</Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted">No final host invoice yet — the Commercials line above is only a live estimate. Generate it once, after the event, from every family's actual final bag count.</p>
+          <Button size="sm" disabled={busy} onClick={() => void generate()}>{busy ? "Generating…" : "Generate final host invoice"}</Button>
+        </div>
+      )}
+      {showDoc && event.hostInvoice && <HostInvoiceDoc event={event} inv={event.hostInvoice} onClose={() => setShowDoc(false)} />}
     </div>
   );
 }

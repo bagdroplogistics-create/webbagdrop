@@ -22,7 +22,7 @@ interface MoveExtras {
 }
 type Group = "all" | "pickup" | "linehaul" | "lastmile" | "late";
 const STAGE_LABEL: Record<TrackLeg, string> = { pickup: "At pickup", linehaul: "Line-haul", lastmile: "Last mile" };
-const MODE_ICON = { road: "🚚", air: "✈️", rail: "🚆", sea: "⛴" } as const;
+const MODE_NAME = { road: "Road", air: "Air", rail: "Rail", sea: "Sea" } as const;
 const fmt = (iso: string | null) => iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 const ago = (iso: string, now: number) => { const m = Math.round((now - Date.parse(iso)) / 60_000); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 const wa = (m: string | undefined, t: string) => `https://wa.me/${(m ?? "").replace(/\D/g, "").replace(/^(?!91)/, "91")}?text=${encodeURIComponent(t)}`;
@@ -107,7 +107,7 @@ export default function LiveTracking() {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Input className="w-56! py-1.5! text-xs!" placeholder="Search booking, name, city" value={q} onChange={(e) => setQ(e.target.value)} />
             <Select className="w-32! py-1.5! text-xs!" value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Mode">
-              <option value="">All modes</option><option value="road">🚚 Road</option><option value="air">✈️ Air</option><option value="rail">🚆 Rail</option>
+              <option value="">All modes</option><option value="road">Road</option><option value="air">Air</option><option value="rail">Rail</option>
             </Select>
             <span className="text-muted">{gpsLive} on live GPS · map refreshes every 15 s</span>
           </div>
@@ -123,7 +123,7 @@ export default function LiveTracking() {
               <button key={b.id} onClick={() => setSel(b.id === sel ? null : b.id)}
                 className={`w-full cursor-pointer rounded-lg border p-2 text-left text-xs transition-colors hover:bg-paper ${sel === b.id ? "border-ink bg-paper" : s.late ? "border-red-300" : "border-line"}`}>
                 <span className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] font-semibold">{MODE_ICON[s.mode]} {b.id}</span>
+                  <span className="font-mono text-[11px] font-semibold">{b.id} · {MODE_NAME[s.mode]}</span>
                   <span className="flex gap-1">
                     {s.position.source === "gps" && <Badge tone="ok">live GPS</Badge>}
                     {s.late ? <Badge tone="bad">late {s.lateByMin >= 60 ? `${Math.round(s.lateByMin / 60)} h` : `${s.lateByMin} min`}</Badge> : s.leg && <Badge tone="info">{STAGE_LABEL[s.leg]}</Badge>}
@@ -169,12 +169,12 @@ function MovePanel({ b, s, x, now, onSaved }: { b: Booking; s: TrackState; x?: M
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-display text-base font-bold">{MODE_ICON[s.mode]} {b.id} · {b.traveller.name}</h3>
+          <h3 className="font-display text-base font-bold">{b.id} · {b.traveller.name} · {MODE_NAME[s.mode]}</h3>
           <p className="text-xs text-muted">{b.from} → {b.to} · {pcsLabel(b.bags, b.oversize)} · pickup {(b.pickupDate || b.date).slice(0, 10)} {b.slot}{b.deliveryDate ? ` · deliver by ${b.deliveryDate}` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {x?.trackUrl && <Button size="sm" variant="outline" onClick={() => copy(origin + x.trackUrl, "Customer tracking link")}>Copy tracking link</Button>}
-          {x?.trackUrl && <a href={x.trackUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost">Open ↗</Button></a>}
+          {x?.trackUrl && <a href={x.trackUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost">Open</Button></a>}
         </div>
       </div>
 
@@ -185,7 +185,7 @@ function MovePanel({ b, s, x, now, onSaved }: { b: Booking; s: TrackState; x?: M
           const isNext = s.next?.key === m.key;
           return (
             <li key={m.key} className="relative pr-2 text-[11px]">
-              <span className={`mb-1 grid size-6 place-items-center rounded-full text-[10px] font-bold ${d ? "bg-brand text-white" : isNext ? (s.late ? "animate-pulse bg-red-500 text-white" : "animate-pulse bg-amber-400 text-ink") : "bg-paper text-muted"}`}>{d ? "✓" : i + 1}</span>
+              <span className={`mb-1 grid size-6 place-items-center rounded-full text-[10px] font-bold ${d ? "bg-brand text-white" : isNext ? (s.late ? "animate-pulse bg-red-500 text-white" : "animate-pulse bg-amber-400 text-ink") : "bg-paper text-muted"}`}>{i + 1}</span>
               <span className={`block leading-tight ${d || isNext ? "font-semibold" : "text-muted"}`}>{m.name}</span>
               <span className="block text-faint">{d ? fmt(d.at) : isNext && s.eta ? `ETA ${fmt(s.eta)}` : ""}</span>
             </li>
@@ -217,7 +217,7 @@ function MovePanel({ b, s, x, now, onSaved }: { b: Booking; s: TrackState; x?: M
             const d = x?.driverLinks?.[leg];
             return (
               <div key={leg} className="mt-1 flex flex-wrap items-center justify-between gap-1.5">
-                <span>{LEG_NAME[leg]} · {d ? <b>{d.assignee}</b> : <span className="text-muted">not assigned</span>}{x?.gps?.sharing?.leg === leg && <span className="ml-1 text-green-700">● sharing</span>}</span>
+                <span>{LEG_NAME[leg]} · {d ? <b>{d.assignee}</b> : <span className="text-muted">not assigned</span>}{x?.gps?.sharing?.leg === leg && <span className="ml-1 text-green-700">sharing live</span>}</span>
                 {d && (
                   <span className="flex gap-1">
                     <Button size="sm" variant="outline" onClick={() => copy(origin + d.url, `${LEG_NAME[leg]} driver link`)}>Copy</Button>

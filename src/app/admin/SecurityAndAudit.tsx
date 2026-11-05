@@ -13,6 +13,7 @@ import { useLoad } from "@/lib/useLoad";
 import Users from "./Users";
 import { useCan } from "./session";
 
+
 interface AuditRow { at: string; text: string; by?: string }
 
 export default function SecurityAndAudit() {
@@ -34,7 +35,7 @@ export default function SecurityAndAudit() {
   }, [bookings, activity, trail]);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       {err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Couldn&apos;t load:</b> {err}</p>}
 
       {manage && <Users />}

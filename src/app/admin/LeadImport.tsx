@@ -248,14 +248,14 @@ function PendingRates({ leads }: { leads: CrmActivity[] }) {
     <Card>
       <h3 className="mb-1 font-display text-sm font-bold">Pending rates <span className="font-normal text-faint">routes the chart doesn&apos;t price yet — feed the lane, the queue quotes itself</span></h3>
       {form.msg && <p className="mb-2 rounded-xl bg-green-50 p-2.5 text-xs text-green-900">{form.msg}</p>}
-      {lanes.length === 0 && <p className="py-4 text-sm text-muted">Nothing pending. Every imported lead is on a priced route. ✅</p>}
+      {lanes.length === 0 && <p className="py-4 text-sm text-muted">Nothing pending. Every imported lead is on a priced route.</p>}
       <div className="grid gap-2">
         {lanes.map(([lane, ls]) => (
           <div key={lane} className="rounded-xl border border-line p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm"><b className="font-display">{lane}</b> <Badge tone="warn">{ls.length} lead{ls.length === 1 ? "" : "s"} waiting</Badge></span>
               <Button size="sm" variant="outline" onClick={() => setForm({ lane: form.lane === lane ? null : lane, r1: "", r2: "", addl: "", busy: false, msg: null })}>
-                {form.lane === lane ? "Close" : "Feed rate →"}
+                {form.lane === lane ? "Close" : "Feed rate"}
               </Button>
             </div>
             <p className="mt-1 text-xs text-muted">{ls.slice(0, 4).map((l) => l.text.replace(/^Lead · /, "")).join(" · ")}{ls.length > 4 ? ` · +${ls.length - 4} more` : ""}</p>

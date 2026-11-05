@@ -125,7 +125,7 @@ export default function Inspector() {
       {showDepts && <Departments depts={d.departments} onSaved={load} />}
 
       {d.flags.length === 0 && (
-        <Card><p className="py-6 text-center text-sm text-muted">✅ Everything under watch is moving to plan — no SOP is breached right now.</p></Card>
+        <Card><p className="py-6 text-center text-sm text-muted">Everything under watch is moving to plan — no SOP is breached right now.</p></Card>
       )}
       <div className="grid gap-2.5">
         {d.flags.map((f, i) => (
@@ -193,7 +193,7 @@ function FlagCard({ f, depts, onDone, delay }: { f: FlagRow; depts: Dept[]; onDo
               </datalist>
             </Field>
             <Field label="Note"><Input className="w-48 py-2 text-xs" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="what you need done" /></Field>
-            <Button size="sm" disabled={busy} onClick={() => void dispatch()}>{busy ? "Sending…" : "Send flag →"}</Button>
+            <Button size="sm" disabled={busy} onClick={() => void dispatch()}>{busy ? "Sending…" : "Send flag"}</Button>
           </div>
         )}
         {msg && <p className="mt-2 rounded-xl bg-paper p-2.5 text-xs text-muted">{msg}</p>}

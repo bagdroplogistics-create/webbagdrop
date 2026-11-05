@@ -68,7 +68,7 @@ function HBar({ label, value, max, text, tone }: { label: string; value: number;
     <div className="mb-2">
       <div className="flex justify-between text-xs"><span className="text-muted">{label}</span><span className="font-semibold tabular-nums">{text}</span></div>
       <div className="mt-1 h-4 rounded-md bg-paper">
-        <div className={`h-4 rounded-md transition-[width] duration-700 ${tone ?? "bg-brand/70"}`} style={{ width: `${Math.max(2, (value / Math.max(1, max)) * 100)}%` }} />
+        <div className={`h-4 rounded-md transition-[width] duration-700 ${tone ?? "bg-brand/70"}`} style={{ width: `${Math.min(100, Math.max(2, (value / Math.max(1, max)) * 100))}%` }} />
       </div>
     </div>
   );
@@ -153,7 +153,7 @@ function Ads({ activity, bookings, digest }: { activity: CrmActivity[]; bookings
       <h3 className="mb-3 font-display text-sm font-bold">Ads ROI <span className="font-normal text-faint">by source · campaign — revenue traced lead-to-rupee</span></h3>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-xs">
-          <thead><tr className="text-left text-[10px] uppercase tracking-wide text-muted"><th className="py-1.5">Source · campaign</th><th className="text-right">Leads</th><th className="text-right">Quoted</th><th className="text-right">Paid</th><th className="text-right">Revenue</th><th className="text-right">Lead→paid</th></tr></thead>
+          <thead><tr className="text-left text-[10px] uppercase tracking-wide text-muted"><th className="py-1.5">Source · campaign</th><th className="text-right">Leads</th><th className="text-right">Quoted</th><th className="text-right">Paid</th><th className="text-right">Revenue</th><th className="text-right">Lead to paid</th></tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={6} className="py-3 text-muted">No sourced leads yet — import an ads CSV in Lead import.</td></tr>}
             {rows.map(([k, r]) => (

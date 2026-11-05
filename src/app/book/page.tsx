@@ -73,9 +73,8 @@ export default function Home() {
       <a
         href="https://wa.me/916357115711?text=Hi%20Bagdrop%2C%20I%20have%20a%20question%20about%20booking%20a%20pickup."
         target="_blank" rel="noreferrer" aria-label="WhatsApp Bagdrop support"
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#25D366] py-2.5 pl-3 pr-4 font-display text-[13px] font-bold text-white shadow-card-lg transition-transform hover:scale-105"
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2.5 font-display text-[13px] font-bold text-white shadow-card-lg transition-transform hover:scale-105"
       >
-        <svg viewBox="0 0 32 32" className="size-5 fill-white" aria-hidden><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.6.8 5 2.3 7L4.2 28l6.3-2c2 1.1 4.2 1.6 6.5 1.6 6.6 0 12-5.3 12-11.9S22.6 3 16 3zm6 16.5c-.3.8-1.6 1.5-2.2 1.6-.6.1-1.3.2-3.7-.8-3.1-1.3-5.1-4.4-5.3-4.6-.2-.2-1.3-1.7-1.3-3.2s.8-2.3 1.1-2.6c.3-.3.6-.4.8-.4h.6c.2 0 .5-.1.7.5l1 2.5c.1.2.1.4 0 .6l-.4.7-.6.6c-.2.2-.4.4-.2.8.2.3 1 1.6 2.1 2.6 1.5 1.3 2.7 1.7 3 1.9.4.2.6.2.8-.1l1.2-1.4c.3-.3.5-.3.8-.2l2.6 1.2c.4.2.6.3.7.4.1.3.1 1-.2 1.9z"/></svg>
         WhatsApp us
       </a>
     </main>
