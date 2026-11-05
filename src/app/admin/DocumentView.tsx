@@ -198,7 +198,7 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
             </div>
             <div className={`${cell} border-l-0 border-t-0 flex flex-col items-center justify-end text-center`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/signature-stamp.png" alt="" className="mb-1 h-10 w-10 object-contain" />
+              <img src={withBase("/images/signature-stamp.png")} alt="" className="mb-1 h-10 w-10 object-contain" />
               <b className="border-t border-stone-400 pt-0.5 text-[10px]">Authorised Signatory</b>
               <p className="text-[9px] text-stone-500">For Bagdrop</p>
             </div>
