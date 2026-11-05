@@ -30,7 +30,7 @@ import type { Booking } from "@/lib/types";
  *  land apart. Changes need Edit on Shipments; hold / ask / reject may not
  *  move the price, because those messages don't tell the customer one. */
 
-type Body = { id?: string; decision?: "approve" | "revise" | "hold" | "info" | "reject"; note?: string; total?: number; changes?: InquiryChanges; rev?: number };
+type Body = { id?: string; decision?: "approve" | "revise" | "hold" | "info" | "reject" | "unapprove"; note?: string; total?: number; changes?: InquiryChanges; rev?: number };
 
 async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -123,6 +123,19 @@ async function handlePOST(req: Request) {
       if (!note) return NextResponse.json({ error: "NEEDS_NOTE", detail: "Give the client the reason." }, { status: 400 });
       next.status = "rejected"; state = "rejected"; template = "booking_rejected";
       text = `Booking REJECTED by the team · ${note}`;
+      break;
+    }
+    case "unapprove": {
+      /* Undo an approval made by mistake — only while it's still safe: no
+       * money captured and no LR/invoice issued yet. Once any of those are
+       * real, going "back" would mean voiding a document or a payment, not
+       * just flipping a status — that's Cancel booking (preserves the LR/
+       * captain/steps for Restore) or a manual correction, never this. */
+      if (doc.status !== "accepted") return NextResponse.json({ error: "NOT_APPROVED", detail: "This booking isn't in the approved/awaiting-payment stage." }, { status: 409 });
+      if (isPaid(doc) || doc.pay) return NextResponse.json({ error: "ALREADY_PAID", detail: "Payment is already on record — use Cancel booking instead, not un-approve." }, { status: 409 });
+      if ((doc.docs ?? []).some((d) => d.type === "LR" || d.type === "INV" || d.type === "PI")) return NextResponse.json({ error: "DOCS_ISSUED", detail: "A document (Estimate/LR/invoice) is already issued against this booking — use Cancel booking instead, not un-approve." }, { status: 409 });
+      next.status = "submitted"; state = "pending"; template = "";
+      text = `Approval reversed by the team — back to needs decision${note ? ` · ${note}` : ""}`;
       break;
     }
     default:
