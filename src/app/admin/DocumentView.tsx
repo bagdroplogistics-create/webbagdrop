@@ -699,7 +699,7 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
             </div>
             <div className="text-right">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/signature-stamp.png" alt="" className="ml-auto mb-1 h-16 w-16 object-contain" />
+              <img src={withBase("/images/signature-stamp.png")} alt="" className="ml-auto mb-1 h-16 w-16 object-contain" />
               <p className="border-t border-stone-400 pt-1 font-semibold text-ink">Authorized Signatory</p>
               <p>For {COMPANY.name}</p>
             </div>
