@@ -112,6 +112,12 @@ export const TEMPLATES: Record<string, T> = {
     subject: (d) => `Payment received · ${d.ref}`,
   },
   ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}, coming on ${d.date}, window ${d.slot}. Please keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
+  /* to the CAPTAIN themselves, not the customer — everything needed on
+   * site, the moment they're assigned to a pickup. */
+  captain_pickup_brief: {
+    wa: (d) => `BAGDROP PICKUP BRIEF\nLR/Ref: ${d.lr}\nLane: ${d.lane}\nPieces: ${d.pieces}\nDate: ${d.date} · window ${d.slot}\nPickup: ${d.pickAddr}\nDeliver: ${d.dropAddr}\nContact: ${d.custName} ${d.custMobile}\nAt pickup: tag and seal every bag, weigh it, photograph it, get the customer's signature — then go to the desk; the desk records the pickup.`,
+    subject: (d) => `New pickup assigned to you · ${d.lr}`,
+  },
   ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}. Your delivery captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}. They hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
   ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags. ${d.kind}: ${d.note}${d.eta ? `\nNew expected time: ${d.eta}` : ""}\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
   ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
@@ -563,6 +569,17 @@ async function eventPass(stats: SweepStats) {
     /* the delivery captain, once assigned (a new captain = a new message) */
     if (legs.lastmile?.assignee && sincePhase1(legs.lastmile.at) && !ms.pod && isTrackable(b)) {
       stats.milestoneQueued += await notify("ms_dcaptain", to, { ...d, track, captain: legs.lastmile.assignee, captainPhone: phone(legs.lastmile.mobile) }, `dcap:${b.id}:${legs.lastmile.assignee}:${legs.lastmile.mobile ?? ""}`);
+    }
+    /* the PICKUP CAPTAIN gets their own brief, with the address and the
+     * customer's contact — separate from the customer's "a captain is
+     * coming" message above (ms_assign), which never carries that detail.
+     * A new captain (reassigned) gets a fresh brief; the same one doesn't
+     * get messaged twice for the same assignment. */
+    if (legs.pickup?.mobile && ms.assign && sincePhase1(ms.assign.at)) {
+      stats.milestoneQueued += await notify("captain_pickup_brief",
+        { name: legs.pickup.assignee || "Captain", mobile: legs.pickup.mobile },
+        { lr: b.lr?.no ?? b.id, lane: d.lane, pieces: d.pieces, date: d.date, slot: d.slot, pickAddr: b.pickAddr, dropAddr: b.dropAddr, custName: b.traveller.name, custMobile: b.traveller.mobile },
+        `capbrief:${b.id}:${legs.pickup.mobile}`);
     }
     /* problems raised by ops: one message each, while the move is open */
     if (isTrackable(b)) for (const e of opsOf(b).exceptions ?? []) {
