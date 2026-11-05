@@ -589,7 +589,8 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
           <div className="text-right">
             <div className="text-[11px] font-semibold tracking-[0.25em] opacity-90">ESTIMATE</div>
             <div className="font-display text-lg font-extrabold">{estimateDisplayNo(doc.no)}</div>
-            <div className="text-[11px] opacity-90">{dateStr(doc.at)}</div>
+            <div className="mt-0.5 text-[11px] font-semibold tracking-[0.2em] opacity-90">PICKUP</div>
+            <div className="font-display text-lg font-extrabold">{dateStr(pickupDate)}</div>
           </div>
         </div>
 
