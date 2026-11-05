@@ -55,6 +55,20 @@ export async function adminSaveEvent(doc: BagdropEvent): Promise<void> {
   if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP_${r.status}`);
 }
 
+/** Generates the final, real host invoice for a host-billed event (see
+ *  /api/admin/events/host-invoice/route.ts) — a deliberate admin action,
+ *  not available in local-demo mode (same as Finance's own document
+ *  issuance, which always calls the server too). Throws ALREADY_INVOICED
+ *  if one was already generated for this event. */
+export async function generateHostInvoice(eventId: string): Promise<{ event: BagdropEvent; hostInvoice: NonNullable<BagdropEvent["hostInvoice"]> }> {
+  const r = await fetch("/api/admin/events/host-invoice", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error ?? `HTTP_${r.status}`);
+  return { event: j.event as BagdropEvent, hostInvoice: j.hostInvoice };
+}
+
 export function watchAdminEvents(cb: (list: BagdropEvent[]) => void, onError?: (e: unknown) => void): () => void {
   if (backend === "local") {
     cb(lsList());

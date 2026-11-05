@@ -7,14 +7,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { adminListBookings, adminSaveBooking, watchAdminBookings, SaveRefused } from "@/lib/adminApi";
 import { nowIso } from "@/lib/db";
-import { adminSaveEvent, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
+import { adminSaveEvent, generateHostInvoice, newEventCode, watchAdminEvents, y2kSeedEvent } from "@/lib/eventsApi";
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
 import { WEDDING_STAGES } from "@/lib/types";
 import { approvalCounts, bookingOpen, closesText, statusForStage, weddingStatus } from "@/lib/weddingStatus";
 import { teamView } from "@/lib/weddingTeamView";
 import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { inr } from "@/lib/pricing";
 import JourneyPanel from "./JourneyPanel";
+import { HostInvoiceDoc } from "./DocumentView";
 
 type WeddingState = {
   members?: { id: string; name?: string; room?: string }[];
@@ -226,6 +228,8 @@ function EventDetail({
       </div>
 
       <Commercials event={event} onError={setErr} />
+
+      {event.billing === "host" && <HostInvoicePanel event={event} onChanged={onReload} />}
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi label="Families" value={String(bookings.length)} hint={`${ap.waiting} awaiting approval · ${ap.confirmed} confirmed`} />
@@ -449,6 +453,46 @@ function TeamSetting({ event, onError }: { event: BagdropEvent; onError: (e: str
         <Button size="sm" onClick={() => void save()}>Save event company</Button>
         {saved && <span className="text-green-700">{saved}</span>}
       </div>
+    </div>
+  );
+}
+
+/** The final host bill — a deliberate one-time action, not the live
+ *  estimate shown in Commercials. Only shown for billing: "host" events.
+ *  Once issued, the amount is fixed (ALREADY_INVOICED on a second try);
+ *  re-issuing after a correction isn't supported here — that's a Finance
+ *  credit-note situation, same as any other booking's invoice. */
+function HostInvoicePanel({ event, onChanged }: { event: BagdropEvent; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [showDoc, setShowDoc] = useState(false);
+
+  async function generate() {
+    if (!window.confirm(`Generate the final host invoice for ${event.name}?\n\nThis bills every confirmed family under this event at the event's Commercials rates, right now — do this once, after the event, when every family's bag count is final.`)) return;
+    setBusy(true); setErr("");
+    try { await generateHostInvoice(event.id); onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-line bg-paper/40 p-3 text-sm">
+      {err && <p className="mb-2 text-xs text-red-700">{err}</p>}
+      {event.hostInvoice ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="font-semibold">Host invoice {event.hostInvoice.no}</p>
+            <p className="text-xs text-muted">{inr(event.hostInvoice.total)} · {event.hostInvoice.lines.length} families · issued {new Date(event.hostInvoice.at).toLocaleDateString("en-IN")} by {event.hostInvoice.by}</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setShowDoc(true)}>View / print</Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted">No final host invoice yet — the Commercials line above is only a live estimate. Generate it once, after the event, from every family's actual final bag count.</p>
+          <Button size="sm" disabled={busy} onClick={() => void generate()}>{busy ? "Generating…" : "Generate final host invoice"}</Button>
+        </div>
+      )}
+      {showDoc && event.hostInvoice && <HostInvoiceDoc event={event} inv={event.hostInvoice} onClose={() => setShowDoc(false)} />}
     </div>
   );
 }

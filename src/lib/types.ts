@@ -234,6 +234,8 @@ export interface WeddingEvent {
   sectors: EventSector[];
   contacts: { host: string; hostMobile: string; planner?: string; onsite?: string };
   landing: { names?: string; hashtag?: string; datesText?: string; sides?: string; celebration?: string; destination?: string };
+  docs?: DocRecord[];
+  hostInvoice?: HostInvoiceRecord;
 }
 
 /** A wedding/event record read by the PUBLIC guest pages (/weddings,
@@ -317,6 +319,32 @@ export interface BagdropEvent {
     celebration?: string; destination?: string;
   };
   page?: string;
+  /** Finance documents issued against this event directly (e.g. the final
+   *  host invoice — see HostInvoiceRecord below). Separate from any
+   *  individual family booking's own .docs. */
+  docs?: DocRecord[];
+  /** The final, post-event bill to the host — generated once, deliberately,
+   *  from the event's real Commercials + every family's actual bag count
+   *  (not the live estimate shown while the event is still open). See
+   *  POST /api/admin/events/host-invoice. */
+  hostInvoice?: HostInvoiceRecord;
+}
+
+/** One line of the final host invoice — one family's billed amount. */
+export interface HostInvoiceLine {
+  bookingId: string; family: string; bags: number; billedBags: number; oversize: number; rate: number; amount: number;
+}
+
+/** The final host invoice for a host-billed event (WeddingEvent.billing ===
+ *  "host"): families × billed bags (floored at the event's minBags) × the
+ *  matching sector rate, + oversize add-ons, − the volume-slab discount,
+ *  then GST on top same as every other Finance document. Uses the same
+ *  race-safe next_doc_no("INV", fy) numbering as a booking's own invoices —
+ *  see /api/admin/events/host-invoice/route.ts. */
+export interface HostInvoiceRecord {
+  no: string; at: string; by: string;
+  lines: HostInvoiceLine[];
+  subtotal: number; discountPct: number; discount: number; total: number;
 }
 
 /** Document types that go through the same race-safe numbering as LR
