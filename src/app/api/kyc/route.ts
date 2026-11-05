@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import { isPaid } from "@/lib/payState";
-import { checkOtp, cleanEmail, cleanMobile, issueOtp } from "@/lib/otp";
-import { kickSweep, notify, opsNotify, sendEmail, sendWhatsAppOtp } from "@/lib/automation";
+import { checkOtpLimited, cleanEmail, cleanMobile, issueOtp } from "@/lib/otp";
+import { kickSweep, notify, opsNotify, sendEmail, sendWhatsApp } from "@/lib/automation";
 import { INDEMNITY_VERSION, REQUIRED_IDS, bondText, validAadhaar } from "@/lib/indemnity";
 import type { Booking } from "@/lib/types";
 import { DEMO_ALLOWED } from "@/lib/demoMode";
@@ -74,7 +74,7 @@ const ev = (text: string, by: "customer" | "admin" = "customer") => ({ at: new D
 async function issue(b: Booking, clientText: string, opsText: string, key: string) {
   await notify("kyc_issue", { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email },
     { ref: b.id, note: clientText, link: `/verify/${b.id}` }, `kycissue:${b.id}:${key}`);
-  await opsNotify(`🛂 COMPLIANCE ISSUE · ${b.id} · ${b.traveller.name} · ${opsText} — open BAGDROP OS → Identity & compliance.`, `Compliance issue · ${b.id}`, `ops:kycissue:${b.id}:${key}`);
+  await opsNotify(`COMPLIANCE ISSUE · ${b.id} · ${b.traveller.name} · ${opsText} — open BAGDROP OS → Identity & compliance.`, `Compliance issue · ${b.id}`, `ops:kycissue:${b.id}:${key}`);
 }
 
 function checkBoxes(accepted: unknown): string[] | null {
@@ -94,11 +94,11 @@ async function sign(b: Booking, o: { accepted: string[]; fragile: string; signat
     identity: { ok: true, at: now, method: o.identityMethod, score: 0.97 },
     kyc: { ...(b.kyc ?? { kind: o.idType === "aadhaar" ? "domestic" : "international" }), status: "signed" },
     admin: { ...b.admin, aadhaarAttempts: undefined, aadhaarLocked: undefined },
-    events: [...b.events, ev(`🛂 Indemnity bond v${INDEMNITY_VERSION} SIGNED by "${o.signature}" · ${o.idType} XXXX-${o.idTail.slice(-4).toUpperCase()} · ${o.identityMethod}${o.fragile ? ` · declared: ${o.fragile}` : ""} — identity verified, pickup released`)],
+    events: [...b.events, ev(`Indemnity bond v${INDEMNITY_VERSION} SIGNED by "${o.signature}" · ${o.idType} XXXX-${o.idTail.slice(-4).toUpperCase()} · ${o.identityMethod}${o.fragile ? ` · declared: ${o.fragile}` : ""} — identity verified, pickup released`)],
   };
   const up = await save(next);
   if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
-  await opsNotify(`✅ Verified & ready for pickup · ${b.id} · ${b.traveller.name} · bond signed (${o.method === "aadhaar_otp" ? "Aadhaar OTP" : "documents + OTP"}) · ${b.from} → ${b.to} on ${b.date} — assign a captain.`,
+  await opsNotify(`Verified & ready for pickup · ${b.id} · ${b.traveller.name} · bond signed (${o.method === "aadhaar_otp" ? "Aadhaar OTP" : "documents + OTP"}) · ${b.from} → ${b.to} on ${b.date} — assign a captain.`,
     `Ready for pickup · ${b.id}`, `ops:signed:${b.id}`);
   kickSweep(); // sends identity_done to the client
   return NextResponse.json({ ok: true, booking: view(next) });
@@ -153,11 +153,11 @@ async function handlePOST(req: Request) {
     const next: Booking = {
       ...b,
       kyc: { kind: "international", status: "docs_submitted", nationality, passportNo: `XXXX-${passportNo.slice(-4).toUpperCase()}`, indiaAddress, docs: [...(b.kyc?.docs ?? []), ...docs], submissions: (b.kyc?.submissions ?? 0) + 1 },
-      events: [...b.events, ev(`🛂 International guest documents submitted (${nationality}, passport XXXX-${passportNo.slice(-4).toUpperCase()}) — awaiting team review`)],
+      events: [...b.events, ev(`International guest documents submitted (${nationality}, passport XXXX-${passportNo.slice(-4).toUpperCase()}) — awaiting team review`)],
     };
     const up = await save(next);
     if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
-    await opsNotify(`🛂 Documents to review · ${b.id} · ${b.traveller.name} · ${nationality} passport + visa uploaded — verify in BAGDROP OS → Identity & compliance before pickup on ${b.date}.`,
+    await opsNotify(`Documents to review · ${b.id} · ${b.traveller.name} · ${nationality} passport + visa uploaded — verify in BAGDROP OS → Identity & compliance before pickup on ${b.date}.`,
       `Documents to review · ${b.id}`, `ops:kycdocs:${b.id}:${next.kyc!.submissions}`);
     return NextResponse.json({ ok: true, booking: view(next) });
   }
@@ -195,7 +195,7 @@ async function handlePOST(req: Request) {
       const locked = attempts >= MAX_ATTEMPTS;
       const next: Booking = {
         ...b, admin: { ...b.admin, aadhaarAttempts: attempts, ...(locked ? { aadhaarLocked: true } : {}) },
-        events: locked ? [...b.events, ev(`⚠ Aadhaar OTP signing LOCKED after ${MAX_ATTEMPTS} wrong codes — needs staff review`)] : b.events,
+        events: locked ? [...b.events, ev(`Aadhaar OTP signing LOCKED after ${MAX_ATTEMPTS} wrong codes — needs staff review`)] : b.events,
       };
       await save(next);
       if (locked) await issue(b, "Your Aadhaar verification was locked after 3 wrong codes. Our team will call you to help finish it before pickup.", `Aadhaar OTP locked after ${MAX_ATTEMPTS} wrong codes (pickup ${b.date})`, "locked");
@@ -215,7 +215,7 @@ async function handlePOST(req: Request) {
     if (!c.to) return NextResponse.json({ error: "NO_CONTACT" }, { status: 409 });
     const { code, exp, token } = issueOtp(c.to);
     const text = `${code} is your Bagdrop signing code for ${b.id}. Valid 10 minutes — never share it.`;
-    const res = c.channel === "email" ? await sendEmail(c.to, `${code} is your Bagdrop signing code`, text) : await sendWhatsAppOtp(c.to, code, text);
+    const res = c.channel === "email" ? await sendEmail(c.to, `${code} is your Bagdrop signing code`, text) : await sendWhatsApp(c.to, text);
     if (res.stub && !DEMO_ALLOWED) return OTP_OFF();
     return NextResponse.json({ ok: true, channel: c.channel, exp, token, ...(res.stub ? { demo: code } : {}) });
   }
@@ -227,7 +227,7 @@ async function handlePOST(req: Request) {
     if (signature.length < 3) return NextResponse.json({ error: "NEED_SIGNATURE", detail: "Type your full name as your signature." }, { status: 400 });
     const o = (body.otp ?? {}) as { code?: string; exp?: number; token?: string };
     const c = contact();
-    if (!c.to || !o.code || !o.exp || !o.token || !checkOtp(c.to, String(o.code), Number(o.exp), String(o.token))) {
+    if (!c.to || !o.code || !o.exp || !o.token || !(await checkOtpLimited(c.to, String(o.code), Number(o.exp), String(o.token)))) {
       return NextResponse.json({ error: "WRONG_OTP", detail: "That code didn't match or has expired — request a new one." }, { status: 401 });
     }
     return sign(b, { accepted, fragile, signature, place, idType: "passport", idTail: b.kyc.passportNo ?? "0000", method: c.channel === "email" ? "email_otp" : "mobile_otp", identityMethod: `Passport + visa verified by team · signed by ${c.channel} OTP` });

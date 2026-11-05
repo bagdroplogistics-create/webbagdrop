@@ -24,7 +24,7 @@ function headline(t: PublicTrack): { title: string; sub: string } {
   if (!at("depart")) return { title: `At our ${t.from} hub`, sub: `Every bag scanned in — departing for ${t.to} soon` };
   if (!at("arrive")) return { title: `On the way to ${t.to}`, sub: `Travelling ${MODE[t.mode]} from ${t.from}` };
   if (!at("ofd")) return { title: `Arrived in ${t.to}`, sub: "All bags scanned in — delivery is next" };
-  return { title: "Out for delivery", sub: "Bags are released only against your verified identity" };
+  return { title: "Out for delivery", sub: "Bags are handed over against your delivery OTP" };
 }
 
 export default function TrackClient({ token }: { token: string }) {
@@ -58,10 +58,9 @@ export default function TrackClient({ token }: { token: string }) {
         )}
         {st.kind === "ended" && (
           <div className="rounded-2xl border border-line bg-white p-6">
-            <p className="text-3xl">✅</p>
-            <h1 className="mt-2 font-display text-xl font-bold">Delivered{st.deliveredAt ? ` · ${fmt(st.deliveredAt)}` : ""}</h1>
+            <h1 className="font-display text-xl font-bold">Delivered{st.deliveredAt ? ` · ${fmt(st.deliveredAt)}` : ""}</h1>
             <p className="mt-2 text-sm text-muted">Booking {st.ref} is complete, so this tracking link has ended. Thank you for travelling light with Bagdrop.</p>
-            <Link href="/account" className="mt-4 inline-block text-sm font-semibold text-brand">My bookings →</Link>
+            <Link href="/account" className="mt-4 inline-block text-sm font-semibold text-brand">My bookings</Link>
           </div>
         )}
         {st.kind === "live" && <Live t={st.t} />}
@@ -80,9 +79,17 @@ function Live({ t }: { t: PublicTrack }) {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t.ref} · {t.from} → {t.to}</p>
         <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight">{t.name ? `${t.name}, ` : ""}{h.title.charAt(0).toLowerCase() + h.title.slice(1)}</h1>
         <p className="mt-1 text-sm text-muted">{h.sub}</p>
+        {t.problem && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Update · {t.problem.kind}</p>
+            <p>{t.problem.note}</p>
+            {t.problem.eta && <p className="mt-1">New expected time: <b>{fmt(t.problem.eta)}</b></p>}
+            <p className="mt-1 text-xs">Our team is on it. <a className="font-semibold underline" href={WA}>WhatsApp us</a> with any question.</p>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           {t.eta && <span className={`rounded-full px-3 py-1 font-semibold ${t.late ? "bg-amber-100 text-amber-900" : "bg-brand-soft text-brand-dark"}`}>{t.late ? "Running a little late — " : ""}Next: {t.next} · expected {fmt(t.eta)}</span>}
-          {t.position.source === "gps" && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">● Live location</span>}
+          {t.position.source === "gps" && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">Live location</span>}
           {t.deliveryDate && <span className="rounded-full bg-paper px-3 py-1">Delivery by {day(t.deliveryDate)}</span>}
         </div>
       </section>
@@ -99,7 +106,7 @@ function Live({ t }: { t: PublicTrack }) {
         <ol className="relative ml-3 border-l-2 border-line">
           {t.stages.map((s, i) => (
             <li key={s.key} className="relative pb-4 pl-5 last:pb-0">
-              <span className={`absolute -left-[9px] top-0.5 grid size-4 place-items-center rounded-full text-[9px] font-bold ${s.at ? "bg-brand text-white" : i === nextIdx ? "animate-pulse bg-amber-400" : "bg-line"}`}>{s.at ? "✓" : ""}</span>
+              <span className={`absolute -left-[9px] top-0.5 grid size-4 place-items-center rounded-full text-[9px] font-bold ${s.at ? "bg-brand text-white" : i === nextIdx ? "animate-pulse bg-amber-400" : "bg-line"}`} />
               <p className={`text-sm ${s.at || i === nextIdx ? "font-semibold" : "text-muted"}`}>{s.name}</p>
               <p className="text-xs text-muted">{s.at ? fmt(s.at) : i === nextIdx && t.eta ? `Expected ${fmt(t.eta)}` : ""}</p>
             </li>

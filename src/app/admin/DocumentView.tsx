@@ -11,7 +11,7 @@ import { gstSplit, SAC } from "@/lib/docs";
 import { COMPANY, inrWords } from "@/lib/company";
 import { inr } from "@/lib/pricing";
 import { Button } from "@/components/ui";
-import type { Booking, DocRecord, DocType } from "@/lib/types";
+import type { BagdropEvent, Booking, DocRecord, DocType, HostInvoiceRecord } from "@/lib/types";
 
 const TITLES: Record<DocType, string> = {
   PI: "Proforma Invoice", INV: "Tax Invoice", RCT: "Payment Receipt", CSH: "Cash Receipt",
@@ -32,6 +32,7 @@ const TERMS: Partial<Record<DocType, string[]>> = {
 };
 
 import { buildOpsNote, CHARGE_HEADS, lrTotals, type LrDetails as LrD } from "@/lib/lrModel";
+import { pcsLabel } from "@/lib/opsModel";
 
 /** The official Bagdrop LR / Consignment Note — pixel layout pulled from the
  *  company's issued format (BDLR series PDF): orange masthead, GC block,
@@ -49,9 +50,9 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
   const bar = "bg-[#0B1426] px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white";
 
   return (
-    <div className="print-landscape fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
-      <div className="w-full max-w-[1250px] bg-white shadow-2xl print:max-w-none print:shadow-none">
-        <div className="flex items-center justify-between p-3 print:hidden">
+    <div className="print-landscape fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-[rgba(10,22,40,0.6)] p-2 lg:p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-[1500px] bg-white shadow-2xl print:max-w-none print:shadow-none">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
         </div>
@@ -221,7 +222,7 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
       <div className="w-full max-w-xl bg-white shadow-2xl print:max-w-none print:shadow-none">
-        <div className="flex items-center justify-between p-3 print:hidden">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
         </div>
@@ -344,7 +345,7 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">From</span>
                 <span className="font-display text-3xl font-extrabold uppercase text-ink">{b.from}</span>
               </div>
-              <span className="font-display text-2xl text-brand">→</span>
+              <span className="font-display text-sm font-semibold uppercase tracking-wide text-faint">to</span>
               <div className="text-right">
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">To</span>
                 <span className="font-display text-3xl font-extrabold uppercase text-brand">{b.to}</span>
@@ -362,7 +363,7 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
             <div className="mx-6 mt-4 flex overflow-hidden rounded-xl border border-line">
               <div className="flex flex-col justify-center bg-brand px-4 py-3 text-white">
                 <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">Bag No.</span>
-                <span className="font-display text-4xl font-extrabold leading-none">{n}<span className="text-lg font-bold opacity-80">/{bagNumbers.length}</span></span>
+                <span className="font-display text-4xl font-extrabold leading-none">{n}<span className="text-lg font-bold opacity-80">/{bagNumbers.length}</span>{n > total - b.oversize && <span className="ml-1.5 align-middle text-lg font-extrabold">XL</span>}</span>
               </div>
               <div className="grid flex-1 grid-cols-2 divide-x divide-line">
                 <div className="px-3 py-2">
@@ -398,6 +399,93 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
             <div className="h-2" />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** The final host invoice for a host-billed wedding/event (see
+ *  /api/admin/events/host-invoice) — same letterhead/GST-split/terms
+ *  pattern as the generic invoice view above, but billed to the event's
+ *  host (not any one family's own booking), with one line per family. */
+export function HostInvoiceDoc({ event, inv, onClose }: { event: BagdropEvent; inv: HostInvoiceRecord; onClose: () => void }) {
+  const split = gstSplit(inv.total);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-2xl print:max-w-none print:rounded-none print:p-0 print:shadow-none">
+        <div className="mb-4 flex items-center justify-between print:hidden">
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={() => window.print()}>Print</Button>
+        </div>
+
+        <header className="mb-6 border-b-2 border-ink pb-4">
+          <h1 className="font-display text-xl font-extrabold">{COMPANY.name}</h1>
+          <p className="text-xs text-muted">{COMPANY.address}</p>
+          <p className="text-xs text-muted">{COMPANY.phone} · {COMPANY.email} · {COMPANY.web}</p>
+          <p className="text-xs text-muted">GSTIN {COMPANY.gstin} · PAN {COMPANY.pan} · SAC {SAC}</p>
+        </header>
+
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold">Tax Invoice — Event Host Bill</h2>
+            <p className="font-mono text-sm">{inv.no}</p>
+          </div>
+          <div className="text-right text-xs text-muted">
+            <p>Date: {new Date(inv.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+            <p>Event: {event.id}</p>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-xl bg-paper p-3 text-sm">
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase text-faint">Billed to</p>
+            <p className="font-medium">{event.contacts?.host || event.name}</p>
+            <p className="text-xs text-muted">{event.contacts?.hostMobile ?? ""}</p>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase text-faint">Event</p>
+            <p className="text-xs">{event.name} · {event.venue}, {event.venueCity}</p>
+            <p className="text-xs text-muted">{event.dates.in} → {event.dates.out} · {inv.lines.length} famil{inv.lines.length === 1 ? "y" : "ies"}</p>
+          </div>
+        </div>
+
+        <table className="mb-4 w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase text-faint">
+              <th className="py-1.5">Family</th><th className="py-1.5 text-right">Bags</th><th className="py-1.5 text-right">Rate</th><th className="py-1.5 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {inv.lines.map((l) => (
+              <tr key={l.bookingId} className="border-b border-dashed border-line">
+                <td className="py-1.5">{l.family}{l.oversize ? <span className="text-faint"> · {l.oversize} oversize</span> : null}</td>
+                <td className="py-1.5 text-right">{l.billedBags}{l.billedBags !== l.bags ? <span className="text-faint"> (min {l.billedBags})</span> : null}</td>
+                <td className="py-1.5 text-right">{inr(l.rate)}</td>
+                <td className="py-1.5 text-right">{inr(l.amount)}</td>
+              </tr>
+            ))}
+            <tr className="border-b border-dashed border-line"><td className="py-1.5" colSpan={3}>Subtotal</td><td className="py-1.5 text-right">{inr(inv.subtotal)}</td></tr>
+            {inv.discountPct > 0 && (
+              <tr className="border-b border-dashed border-line"><td className="py-1.5" colSpan={3}>Volume discount ({inv.discountPct}%)</td><td className="py-1.5 text-right">−{inr(inv.discount)}</td></tr>
+            )}
+            <tr className="border-b border-dashed border-line"><td className="py-1.5" colSpan={3}>Taxable value</td><td className="py-1.5 text-right">{inr(split.taxable)}</td></tr>
+            <tr className="border-b border-dashed border-line"><td className="py-1.5" colSpan={3}>GST 5% (SAC {SAC})</td><td className="py-1.5 text-right">{inr(split.gst)}</td></tr>
+            <tr className="font-semibold"><td className="py-1.5" colSpan={3}>Total</td><td className="py-1.5 text-right">{inr(inv.total)}</td></tr>
+          </tbody>
+        </table>
+
+        <p className="mb-4 text-xs italic text-muted">{inrWords(inv.total)}</p>
+
+        <div className="mb-4 rounded-xl bg-paper p-3 text-[11px] text-muted">
+          <p className="mb-1 font-semibold text-ink">Terms</p>
+          <ul className="list-inside list-disc space-y-0.5">
+            <li>GST charged under GTA (Goods Transport Agency), SAC {SAC}.</li>
+            <li>Computed from the event&apos;s Commercials and every family&apos;s final confirmed bag count at the time of issue.</li>
+            <li>Payment due on receipt unless otherwise agreed.</li>
+          </ul>
+        </div>
+
+        <p className="text-center text-[11px] text-faint">This is a system-generated document. Issued by {inv.by}.</p>
       </div>
     </div>
   );
@@ -444,7 +532,7 @@ export default function DocumentView({ booking, doc, onClose }: { booking: Booki
           <div>
             <p className="mb-1 text-[11px] font-semibold uppercase text-faint">Consignment</p>
             <p className="text-xs">{booking.from} → {booking.to}</p>
-            <p className="text-xs text-muted">{booking.bags} bag(s){booking.oversize ? ` + ${booking.oversize} oversize` : ""} · {booking.date}</p>
+            <p className="text-xs text-muted">{pcsLabel(booking.bags, booking.oversize)} · {booking.date}</p>
           </div>
         </div>
 

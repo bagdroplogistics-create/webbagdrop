@@ -9,7 +9,7 @@ import { CONTAINER } from "./SectionHeading";
  * doesn't line up cleanly with the surrounding text). */
 function FooterLogo() {
   return (
-    <a href="#top" className="flex items-center gap-3">
+    <Link href="/" className="flex items-center gap-3">
       <Image src="/images/logo-icon.png" alt="" width={31} height={40} className="h-10 w-auto" />
       <span className="flex flex-col leading-none">
         <span className="font-display text-xl font-extrabold tracking-tight text-white">
@@ -17,14 +17,14 @@ function FooterLogo() {
         </span>
         <span className="mt-1 font-mono text-[10px] tracking-[0.2em] text-white/40">BAG. BOX. DELIVERED.</span>
       </span>
-    </a>
+    </Link>
   );
 }
 
 const SOCIALS = [
-  { href: "https://www.instagram.com/bagdropofficial", label: "Instagram", path: "M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm10 2H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3zm-5 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM17.5 6.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" },
-  { href: "https://www.facebook.com/profile.php?id=61579334791456", label: "Facebook", path: "M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" },
-  { href: "https://www.linkedin.com/in/adizworld/", label: "LinkedIn", path: "M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" },
+  { href: "https://www.instagram.com/bagdropofficial", label: "Instagram" },
+  { href: "https://www.facebook.com/profile.php?id=61579334791456", label: "Facebook" },
+  { href: "https://www.linkedin.com/in/adizworld/", label: "LinkedIn" },
 ];
 
 export default function SiteFooter() {
@@ -37,16 +37,16 @@ export default function SiteFooter() {
             <p className="max-w-[260px] text-[15px] text-white/60">The baggage infrastructure layer for modern travel.</p>
             <p className="max-w-[280px] text-[14px] text-white/60">
               Already booked?{" "}
-              <Link href="/account" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">My bookings →</Link>
+              <Link href="/account" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">My bookings</Link>
             </p>
             <p className="max-w-[280px] text-[14px] text-white/60">
               Travel agent, hotel or event company?{" "}
-              <Link href="/partner" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">Partner login →</Link>
+              <Link href="/partner" className="font-semibold text-white underline decoration-brand underline-offset-4 hover:text-brand">Partner login</Link>
             </p>
             <div className="flex gap-2.5">
               {SOCIALS.map((s) => (
-                <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex size-9 items-center justify-center rounded-lg border border-white/15 text-white transition-colors hover:border-brand hover:bg-brand">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={s.path} /></svg>
+                <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex h-9 items-center justify-center rounded-lg border border-white/15 px-3 text-[13px] font-semibold text-white transition-colors hover:border-brand hover:bg-brand">
+                  {s.label}
                 </a>
               ))}
             </div>
@@ -55,13 +55,13 @@ export default function SiteFooter() {
             <div key={col.h} className="flex flex-col gap-2.5">
               <span className="font-mono text-[12px] font-semibold tracking-[0.16em] text-brand/80">{col.h.toUpperCase()}</span>
               {col.items.map((it) => (
-                <a key={it} href="#top" className="text-[15px] text-white/60 transition-colors hover:text-white">{it}</a>
+                <a key={it.label} href={it.href} {...(it.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})} className="text-[15px] text-white/60 transition-colors hover:text-white">{it.label}</a>
               ))}
             </div>
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-6 text-[13px] text-white/50">
-          <span>© 2026 Bagdrop Logistics Solutions Pvt. Ltd. All rights reserved.</span>
+          <span>© 2026 Bagdrop Logistics Solutions Pvt. Ltd. All rights reserved. · <a href="/terms" className="hover:text-white">Terms</a> · <a href="/privacy" className="hover:text-white">Privacy</a> · <a href="/refund" className="hover:text-white">Refunds</a></span>
           <span className="font-mono tracking-wide">Mumbai · Delhi · Goa · Gujarat · Rajasthan · Hyderabad · Bangalore</span>
         </div>
       </div>

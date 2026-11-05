@@ -48,13 +48,14 @@ export async function GET(req: Request) {
     const bk = data?.doc as Booking | undefined;
     if (!bk) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     const o = opsOf(bk);
-    const paths = [...(o.bags ?? []).map((x) => x.photo).filter(Boolean), o.checkin?.signature].filter(Boolean) as string[];
+    const paths = [...(o.bags ?? []).map((x) => x.photo).filter(Boolean), o.checkin?.signature, bk.pod?.photo, bk.pod?.signature].filter(Boolean) as string[];
     const signed = paths.length ? (await sb.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)).data ?? [] : [];
     const url = (p?: string) => (p ? signed.find((s) => s.path === p)?.signedUrl ?? null : null);
     return NextResponse.json({
       passUrl: isTrackable(bk) ? passPath(bk.id) : null,
       photos: Object.fromEntries((o.bags ?? []).map((x) => [x.n, url(x.photo)])),
       signature: url(o.checkin?.signature),
+      podPhoto: url(bk.pod?.photo), podSignature: url(bk.pod?.signature),
     }, { headers: { "Cache-Control": "no-store" } });
   }
   const kind = (u.searchParams.get("kind") ?? "all") as LabelKind;

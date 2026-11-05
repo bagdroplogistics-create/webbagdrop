@@ -55,7 +55,7 @@ export async function issueTags(sb: SupabaseClient, id: string, by: string): Pro
     const ops: OpsState = { ...o, bags, tags: codes, printedAt: o.printedAt ?? now };
     return {
       ...b, admin: { ...b.admin, ops },
-      events: added.length ? [...b.events, { at: now, by: "admin" as const, text: `🏷 ${added.length} bag tag(s) + seal(s) issued by ${by}: ${added.map((x) => `${x.plate}${x.xl ? " XL" : ""}`).join(", ")}` }] : b.events,
+      events: added.length ? [...b.events, { at: now, by: "admin" as const, text: `${added.length} bag tag(s) + seal(s) issued by ${by}: ${added.map((x) => `${x.plate}${x.xl ? " XL" : ""}`).join(", ")}` }] : b.events,
     };
   });
   if (!next) return { error: "NOT_SAVED", detail: "The booking changed while issuing — try again (no numbers were reused).", status: 409 };

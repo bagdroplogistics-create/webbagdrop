@@ -20,7 +20,97 @@ export const MILESTONES = [
 ] as const;
 export type MilestoneKey = (typeof MILESTONES)[number]["key"];
 
-export const EXCEPTION_KINDS = ["Held", "Short bag", "Damage", "RTO"] as const;
+export const EXCEPTION_KINDS = ["Delayed", "Held", "Short bag", "Damage", "Seal broken", "RTO"] as const;
+
+/* ================= the journey: what each step records ================= */
+/** Which stage of the journey a step belongs to (Operations groups by it). */
+export const STAGE_OF: Record<MilestoneKey, "Start" | "Pickup" | "Middle mile" | "Last mile"> = {
+  lr: "Start", assign: "Pickup", picked: "Pickup", inscan: "Middle mile", depart: "Middle mile", arrive: "Middle mile", ofd: "Last mile", pod: "Last mile",
+};
+export interface StepField { k: string; label: string; type: "text" | "tel" | "select" | "datetime" | "pick"; options?: string[]; hint?: string; /** master a "pick" field lists: hub, vehicle, vendor, captain */ pick?: "hub" | "vehicle" | "vendor" | "captain" }
+
+/* ================= in-house masters (settings docs, edited in Operations) ================= */
+export interface Hub { id: string; city: string; name: string; address?: string; contact?: string; phone?: string }
+export interface VehicleRec { id: string; number: string; type: string; owner?: string; driver?: string; driverPhone?: string; city?: string }
+export interface Captain { id: string; name: string; mobile: string; city?: string; role?: "pickup" | "delivery" | "both"; vehicleId?: string }
+export interface OpsMasters { hubs: Hub[]; vehicles: VehicleRec[]; captains: Captain[] }
+export const VEHICLE_KINDS = ["Tata Ace", "Bolero pickup", "Eicher 14ft", "Tempo traveller", "Car", "Bike", "Other"] as const;
+/** Who took the bags at delivery. */
+export const RECEIVER_RELATIONS = ["Self", "Family member", "Friend", "Colleague", "Hotel or building desk", "Other"] as const;
+export const LINEHAUL_MODES = ["Road", "Air", "Rail"] as const;
+export const SEAL_CHECK = ["All seals intact", "Seal broken"] as const;
+/** Details the desk fills to complete a step. Pickup (assign + picked) and
+ *  delivery (ofd + pod) are recorded through the captain assignment and the
+ *  same check-in / claim-check flows the driver app uses. */
+export const STEP_FIELDS: Partial<Record<MilestoneKey, StepField[]>> = {
+  inscan: [{ k: "hub", label: "Origin hub", type: "pick", pick: "hub", hint: "e.g. Mumbai · Andheri hub" }],
+  depart: [
+    { k: "mode", label: "Mode", type: "select", options: [...LINEHAUL_MODES] },
+    { k: "vendor", label: "Line-haul vendor", type: "pick", pick: "vendor" },
+    { k: "ref", label: "LR, trip or AWB number", type: "text" },
+    { k: "vehicle", label: "Vehicle, flight or train number", type: "pick", pick: "vehicle" },
+    { k: "driver", label: "Driver name", type: "text", hint: "Road only" },
+    { k: "driverPhone", label: "Driver phone", type: "tel", hint: "Road only" },
+    { k: "eta", label: "Expected arrival", type: "datetime" },
+  ],
+  arrive: [
+    { k: "hub", label: "Destination hub", type: "pick", pick: "hub" },
+    { k: "seals", label: "Seal check", type: "select", options: [...SEAL_CHECK] },
+    { k: "broken", label: "Broken seal numbers and what you saw", type: "text", hint: "Only if a seal is broken" },
+  ],
+  ofd: [{ k: "eta", label: "Expected delivery time", type: "datetime" }],
+};
+export type StepDetail = Record<string, string>;
+
+/** What is missing before a step can be saved (empty = good to go). */
+export function stepMissing(key: MilestoneKey, d: StepDetail, o: OpsState): string[] {
+  const has = (k: string) => !!(d[k] ?? "").trim();
+  const miss: string[] = [];
+  const need = (k: string, label: string) => { if (!has(k)) miss.push(label); };
+  switch (key) {
+    case "assign": if (!o.legs?.pickup?.assignee) miss.push("Pickup captain (assign one under Legs)"); break;
+    case "inscan": need("hub", "Origin hub"); break;
+    case "depart":
+      need("mode", "Mode"); need("vendor", "Line-haul vendor"); need("ref", "LR, trip or AWB number"); need("vehicle", "Vehicle, flight or train number"); need("eta", "Expected arrival");
+      if (d.mode === "Road") { need("driver", "Driver name"); need("driverPhone", "Driver phone"); if (has("driverPhone") && d.driverPhone.replace(/\D/g, "").length < 10) miss.push("Driver phone (10 digits)"); }
+      break;
+    case "arrive": need("hub", "Destination hub"); need("seals", "Seal check"); if (d.seals === "Seal broken") need("broken", "Broken seal numbers"); break;
+    case "ofd": if (!o.legs?.lastmile?.assignee) miss.push("Delivery captain (assign one under Legs)"); need("eta", "Expected delivery time"); break;
+  }
+  return miss;
+}
+
+/** Undo the latest completed step: returns the ops state without it and the
+ *  status the booking goes back to. */
+export function undoLast(o: OpsState): { ops: OpsState; key: MilestoneKey; status: string } | null {
+  const doneKeys = MILESTONES.filter((m) => o.milestones?.[m.key]).map((m) => m.key);
+  const key = doneKeys[doneKeys.length - 1];
+  if (!key) return null;
+  const milestones = { ...o.milestones }; delete milestones[key];
+  const scans = { ...o.scans }; delete scans[key];
+  const prev = [...MILESTONES].reverse().find((m) => milestones[m.key]);
+  let extra: Partial<OpsState> = {};
+  if (key === "picked") extra = { checkin: undefined };
+  if (key === "pod") extra = { claim: { ...o.claim, doneAt: undefined, otpHash: undefined, otpAt: undefined, tries: 0 } };
+  return { ops: { ...o, ...extra, milestones, scans }, key, status: prev ? prev.status : "accepted" };
+}
+
+/** Server rule for a save from the desk: steps only move one at a time,
+ *  pickup and delivery need their proof, every other step its details. */
+export function checkStepWrite(prev: OpsState, next: OpsState): { error: string; detail: string } | null {
+  for (const m of MILESTONES) {
+    const was = prev.milestones?.[m.key], now = next.milestones?.[m.key];
+    if (!now || was) continue;
+    const idx = MILESTONES.findIndex((x) => x.key === m.key);
+    const before = MILESTONES.slice(0, idx).find((x) => !next.milestones?.[x.key]);
+    if (before) return { error: "STEP_OUT_OF_ORDER", detail: `${before.name} must be completed before ${m.name}.` };
+    if (m.key === "picked" && !next.checkin?.signature) return { error: "PICKUP_PROOF_MISSING", detail: "Pickup is completed through the bag check-in (tag, seal, weight, photo per bag and the customer's signature)." };
+    if (m.key === "pod" && !next.claim?.doneAt) return { error: "POD_MISSING", detail: "Delivery is completed through the claim check (Move Pass, every tag, OTP, photo, receiver and signature)." };
+    const miss = stepMissing(m.key, now.detail ?? {}, next);
+    if (miss.length) return { error: "STEP_DETAILS_MISSING", detail: `${m.name}: fill in ${miss.join(", ")}.` };
+  }
+  return null;
+}
 
 /* ================= bag tags ================= */
 const TAG_CHARS = "0123456789ABCDEFGHIJKLMNPQRSTUVWXYZ"; // no O — looks like 0
@@ -49,11 +139,10 @@ export function portCode(city: string): string {
  *  pcsLabel(4, 1) → "5 pcs (1 XL)". */
 export const pcsLabel = (bags: number, oversize: number, unit = "pcs") =>
   `${bags + oversize} ${unit}${oversize ? ` (${oversize} XL)` : ""}`;
-
 /** Tags are numbered regular bags first, then the oversize items — so piece
- *  n is XL when n is past the regular bag count. Used by the bag-tag/seal
- *  identity system (src/lib/bagTags.ts). */
+ *  n is XL when n is past the regular bag count. */
 export const isXlPiece = (b: { bags: number }, n: number) => n > b.bags;
+export const isXlTag = (b: { bags: number }, tag: string) => isXlPiece(b, Number(tag.split("-")[4]));
 
 /** Generate the shipment's tags ONCE, at print time. BD-AMD-BOM-7F3K2-1-C */
 export function generateTags(b: Booking, count: number): string[] {
@@ -121,14 +210,19 @@ export interface OpsState {
   /** pickup check-in by the captain: signature + when */
   checkin?: { at: string; by: string; signature?: string; bags: number };
   /** delivery claim check: pass scanned, every tag scanned, OTP verified */
-  claim?: { otpHash?: string; otpAt?: string; tries?: number; sends?: number; passAt?: string; scanned?: string[]; doneAt?: string };
+  claim?: { otpHash?: string; otpAt?: string; tries?: number; sends?: number; passAt?: string; scanned?: string[]; doneAt?: string; photo?: string };
   printedAt?: string;
-  milestones?: Partial<Record<MilestoneKey, { at: string; by: string; note?: string }>>;
+  milestones?: Partial<Record<MilestoneKey, { at: string; by: string; note?: string; detail?: StepDetail; entry?: "ops" | "captain" }>>;
   scans?: Partial<Record<MilestoneKey, string[]>>;
   legs?: Partial<Record<LegKey, { assignee: string; mobile?: string; vendorId?: string; cost?: number; at: string }>>;
   target?: { total: number; legs: Record<LegKey, number> };
   overTarget?: { by: number; reason: string; approvedAt: string };
-  exceptions?: { kind: string; at: string; note: string; tag?: string; resolved?: boolean }[];
+  /** problems: the open ones show on the client's tracking page (with the new ETA) until resolved */
+  exceptions?: { kind: string; at: string; note: string; tag?: string; resolved?: boolean; resolvedAt?: string; eta?: string; by?: string }[];
+  /** undo log: a completed step taken back, with the reason */
+  undone?: { key: MilestoneKey; at: string; by: string; reason: string }[];
+  /** append-only chain of custody (src/lib/custody.ts) */
+  custody?: import("./custody").CustodyEvent[];
 }
 export const opsOf = (b: Booking): OpsState => ((b.admin as { ops?: OpsState }).ops ?? {});
 

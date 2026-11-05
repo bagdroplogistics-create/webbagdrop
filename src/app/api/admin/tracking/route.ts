@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       const when = at ? at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
       return {
         ...fresh, admin: { ...fresh.admin, tracking },
-        events: [...fresh.events, { at: now, by: "admin" as const, text: at ? `🕒 ETA for "${s.next.name}" set to ${when}${b.note ? ` · ${b.note}` : ""}` : "ETA cleared" }],
+        events: [...fresh.events, { at: now, by: "admin" as const, text: at ? `ETA for "${s.next.name}" set to ${when}${b.note ? ` · ${b.note}` : ""}` : "ETA cleared" }],
       };
     });
     if (out.refusal) return NextResponse.json({ error: "NOT_LIVE", detail: out.refusal }, { status: 409 });

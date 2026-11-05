@@ -6,7 +6,11 @@
  *  rate inquiry for the Bagdrop team. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
+import { pcsLabel } from "@/lib/opsModel";
 import { Badge, Button, Card, Field, Input } from "@/components/ui";
+import { AIRPORTS, CITIES } from "@/lib/pricing";
+import { airportEnd, cityAirportCodes } from "@/lib/airports";
+import AirportPicker from "@/components/booking/AirportPicker";
 
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 
@@ -29,7 +33,7 @@ interface PortalData {
   };
   rates: { from: string; to: string; r1: number; r2: number; addl: number }[];
   cities: string[];
-  tracking: { id: string; status: string; events: { at: string; text: string }[]; slot: string; date: string; verified?: boolean }[];
+  tracking: { id: string; status: string; events: { at: string; text: string }[]; slot: string; date: string; verified?: boolean; trackUrl?: string | null; passUrl?: string | null }[];
 }
 
 /* same service menu as the customer front end — full parity */
@@ -249,11 +253,17 @@ function FragmentRow({ r, trk, open, onToggle }: { r: PortalData["ledger"]["rows
       {open && trk && (
         <tr className="border-t border-dashed border-line bg-paper/60">
           <td colSpan={8} className="px-3 py-2 text-xs">
-            <b className="font-display">Tracking · {r.id}</b>
+            <span className="flex items-center justify-between gap-2">
+              <b className="font-display">Tracking · {r.id}</b>
+              <span className="flex gap-3">
+                {trk.passUrl && <a href={trk.passUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-semibold text-brand hover:underline">Move Pass</a>}
+                {trk.trackUrl && <a href={trk.trackUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-semibold text-brand hover:underline">Live tracking</a>}
+              </span>
+            </span>
             {trk.events.map((e, i) => (
               <p key={i} className="mt-1 text-muted"><span className="text-faint">{new Date(e.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span> — {e.text}</p>
             ))}
-            <p className="mt-1 text-faint">Your client receives the same updates automatically on WhatsApp/email at every milestone.</p>
+            <p className="mt-1 text-faint">Your client gets WhatsApp/email updates at pickup, departure, arrival, out-for-delivery and delivery, each with the live tracking link{trk.trackUrl ? " — you can forward the link above too" : ""}.</p>
           </td>
         </tr>
       )}
@@ -322,7 +332,7 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">1 · Service</p>
         <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {SERVICES.map((s) => (
-            <button key={s.uc} type="button" onClick={() => setF({ ...f, uc: s.uc, mode: s.mode })}
+            <button key={s.uc} type="button" onClick={() => setF({ ...f, uc: s.uc, mode: s.mode, ...(airportEnd(s.uc) !== airportEnd(f.uc) ? { pickAddr: "", dropAddr: "" } : {}) })}
               className={`cursor-pointer rounded-xl border p-2.5 text-left transition-colors ${f.uc === s.uc ? "border-brand bg-brand-soft" : "border-line bg-white hover:border-stone-300"}`}>
               <b className="block text-xs">{s.title}</b><span className="text-[10px] text-muted">{s.sub}</span>
             </button>
@@ -334,8 +344,18 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
           <Field label="Pickup city *"><Input list="pt-cities" value={f.fromName} onChange={(e) => setF({ ...f, fromName: e.target.value })} placeholder="Ahmedabad" /></Field>
           <Field label="Delivery city *"><Input list="pt-cities" value={f.toName} onChange={(e) => setF({ ...f, toName: e.target.value })} placeholder="Mumbai" /></Field>
           <datalist id="pt-cities">{cities.map((c) => <option key={c} value={c} />)}</datalist>
-          <Field label="Pickup address"><Input value={f.pickAddr} onChange={(e) => setF({ ...f, pickAddr: e.target.value })} placeholder="Flat, building, area or pincode" /></Field>
-          <Field label="Delivery address"><Input value={f.dropAddr} onChange={(e) => setF({ ...f, dropAddr: e.target.value })} placeholder="Hotel, home, terminal" /></Field>
+          {(() => {
+            /* the airport end of an air service: the airport(s) serving that city, filled into the address */
+            const end = airportEnd(f.uc), city = (end === "from" ? f.fromName : end === "to" ? f.toName : "").trim();
+            const known = CITIES.find((c) => c.name.toLowerCase() === city.toLowerCase());
+            const codes = cityAirportCodes(known);
+            return (<>
+              {end === "from" && known && codes.length ? <AirportPicker key={`${f.uc}|${known.name}`} label="Pickup airport" city={known.name} codes={codes} airports={AIRPORTS} onAddress={(a) => setF((p) => ({ ...p, pickAddr: a }))} />
+                : <Field label="Pickup address"><Input value={f.pickAddr} onChange={(e) => setF({ ...f, pickAddr: e.target.value })} placeholder={end === "from" ? "Airport and terminal" : "Flat, building, area or pincode"} /></Field>}
+              {end === "to" && known && codes.length ? <AirportPicker key={`${f.uc}|${known.name}`} label="Delivery airport" city={known.name} codes={codes} airports={AIRPORTS} onAddress={(a) => setF((p) => ({ ...p, dropAddr: a }))} />
+                : <Field label="Delivery address"><Input value={f.dropAddr} onChange={(e) => setF({ ...f, dropAddr: e.target.value })} placeholder={end === "to" ? "Airport and terminal" : "Hotel, home, terminal"} /></Field>}
+            </>);
+          })()}
         </div>
 
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">3 · When</p>
@@ -353,7 +373,7 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
 
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">4 · Pieces</p>
         <div className="mb-4 grid gap-2 sm:grid-cols-2">
-          {([["bags", "Bags · up to 32 kg each"], ["oversize", "Oversize · golf, surf, cycle"]] as const).map(([k, label]) => (
+          {([["bags", "Bags · up to 32 kg each"], ["oversize", "Oversize (XL) · golf, surf, cycle"]] as const).map(([k, label]) => (
             <div key={k} className="flex items-center justify-between rounded-xl border border-line p-2.5">
               <span className="text-xs">{label}</span>
               <span className="flex items-center gap-2">
@@ -390,7 +410,7 @@ function NewBooking({ data, reload }: { data: PortalData; reload: () => Promise<
             ["Route", f.fromName || f.toName ? `${f.fromName || "—"} → ${f.toName || "—"}` : "—"],
             ["Travel", `${f.date || "—"}${f.flight ? ` · ${f.flight.toUpperCase()}` : ""}`],
             ["Pickup", f.slot || "—"],
-            ["Pieces", `${f.bags} bags${f.oversize ? ` + ${f.oversize} oversize` : ""}`],
+            ["Pieces", pcsLabel(f.bags, f.oversize)],
             ["Client", f.name || "—"],
           ] as const).map(([k, v]) => (
             <div key={k} className="flex justify-between border-b border-dashed border-line py-1.5 text-[13px] last:border-0">

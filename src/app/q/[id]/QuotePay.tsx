@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { withBase } from "@/lib/basePath";
 import { inr } from "@/lib/pricing";
 import { Badge, Button, Card } from "@/components/ui";
+import { pcsLabel } from "@/lib/opsModel";
 import UpiPay, { type PayTo } from "@/components/UpiPay";
 
 interface V {
@@ -57,18 +58,18 @@ export default function QuotePay({ id }: { id: string }) {
         ["Service", b.service],
         ["Route", `${b.from} → ${b.to}`],
         ["Pickup", `${b.date}${b.slot ? ` · ${b.slot}` : ""}`],
-        ["Pieces", `${b.bags} bag(s)${b.oversize ? ` + ${b.oversize} oversize` : ""}`],
+        ["Pieces", pcsLabel(b.bags, b.oversize, "bags")],
       ] as const).map(([k, v]) => (
         <div key={k} className="flex justify-between border-b border-dashed border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><span className="text-right">{v}</span></div>
       ))}
       <p className="my-4 text-center font-display text-4xl font-extrabold">{b.priced ? inr(b.total) : "Rate on request"}</p>
 
       {b.paid ? (
-        <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Payment verified.</b> {b.identityOk ? "You're all set for pickup." : <>Next: <a className="font-semibold underline" href={`/verify/${b.id}`}>sign the baggage declaration &amp; bond →</a></>}</p>
+        <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Payment verified.</b> {b.identityOk ? "You're all set for pickup." : <>Next: <a className="font-semibold underline" href={`/verify/${b.id}`}>sign the baggage declaration &amp; bond</a></>}</p>
       ) : b.canPay ? (
         <>
           <UpiPay amount={b.total} reference={b.id} payTo={payTo} />
-          <a href={withBase("/account")} className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard →</Button></a>
+          <a href={withBase("/account")} className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard</Button></a>
         </>
       ) : b.pay?.status === "submitted" ? (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><b>Payment proof received</b> — finance is verifying it.</p>

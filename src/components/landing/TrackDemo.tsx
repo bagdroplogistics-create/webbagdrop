@@ -2,13 +2,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TRACK_DEMO_STEPS } from "./data";
-import { Icon } from "./Icon";
 import { Section, SectionHeading } from "./SectionHeading";
 
-const PROOFS: { label: string; icon: string }[] = [
-  { label: "Sealed", icon: "lock" },
-  { label: "Photographed", icon: "camera" },
-  { label: "Delivered", icon: "box" },
+const PROOFS: { label: string }[] = [
+  { label: "Sealed" },
+  { label: "Photographed" },
+  { label: "Delivered" },
 ];
 
 export default function TrackDemo() {
@@ -17,7 +16,7 @@ export default function TrackDemo() {
   const pct = (step / (total - 1)) * 100;
 
   return (
-    <Section id="track" tone="paper">
+    <Section id="track" tone="canvas">
       <SectionHeading kicker="Track your bags" title="From your door" accent="to delivered." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-white">
@@ -39,7 +38,7 @@ export default function TrackDemo() {
             onClick={() => setStep((s) => (s + 1) % total)}
             className="ml-auto inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-brand-dark"
           >
-            Track Bags <Icon name="arrow" size={14} />
+            Track Bags
           </button>
         </div>
 
@@ -48,11 +47,9 @@ export default function TrackDemo() {
             <div className="absolute inset-x-0 top-[13px] h-0.5 bg-[repeating-linear-gradient(90deg,var(--color-line)_0_8px,transparent_8px_14px)]" />
             <div className="absolute left-0 top-[12px] h-[3px] bg-brand transition-all duration-[1400ms] ease-out" style={{ width: `${pct}%` }} />
             <span
-              className="absolute top-0 flex size-7 items-center justify-center rounded-full bg-navy text-white shadow-card transition-all duration-[1400ms] ease-out"
-              style={{ left: `calc(${pct}% - ${(pct / 100) * 28}px)` }}
-            >
-              <Icon name="landing" size={15} />
-            </span>
+              className="absolute top-[7px] size-[15px] rounded-full border-[3px] border-white bg-navy shadow-card transition-all duration-[1400ms] ease-out"
+              style={{ left: `calc(${pct}% - ${(pct / 100) * 15}px)` }}
+            />
           </div>
           <div className="relative grid grid-cols-5 gap-2">
             {TRACK_DEMO_STEPS.map((s, i) => (
@@ -82,14 +79,12 @@ export default function TrackDemo() {
           <div className="flex flex-col gap-3 bg-section px-6 py-6">
             <span className="font-mono text-[11px] tracking-[0.18em] text-faint">CUSTODY RECORD</span>
             <div className="grid grid-cols-3 gap-2">
-              {PROOFS.map(({ label, icon }, i) => {
+              {PROOFS.map(({ label }, i) => {
                 const thresholds = [1, 1, 4];
                 const met = step >= thresholds[i];
                 return (
                   <div key={label} className={`flex flex-col gap-2 rounded-xl p-3 ${met ? "bg-ink text-white" : "bg-white text-faint"}`}>
-                    <span className={`flex size-7 items-center justify-center rounded-full border-2 ${met ? "border-white/30 bg-white/10" : "border-line"}`}>
-                      <Icon name={icon} size={14} />
-                    </span>
+                    <span className={`font-mono text-[11px] tracking-[0.14em] ${met ? "text-white/70" : "text-faint"}`}>{met ? "DONE" : "PENDING"}</span>
                     <span className="text-[14px] font-semibold">{label}</span>
                   </div>
                 );
@@ -107,7 +102,7 @@ export default function TrackDemo() {
           <span className="text-[14px] text-steel">Sign in with the mobile or email you booked with: see its status, pay, add bags or sign the baggage bond.</span>
         </div>
         <Link href="/account" className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-dark">
-          Track my booking <Icon name="arrow" size={14} />
+          Track my booking
         </Link>
       </div>
     </Section>

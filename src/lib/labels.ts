@@ -89,7 +89,7 @@ function loopStock(c: TagCtx, bag: BagRecord): string {
   ${loopFace(c, bag, false)}
   <div class="vert"><div class="bc bcv">${code128(bag.plate, 14, "R")}</div><div class="qrbox"><div class="bc">${qr(bagUrl(c, bag))}</div><span>SCAN · FOUND THIS BAG?</span></div></div>
   <div class="glue">ADHESIVE END · loop through the handle and stick here</div>
-  <div class="tear">✂ - - - - - - - - - - - - tear - - - - - - - - - - - -</div>
+  <div class="tear">- - - - - - - - - - - - - tear here - - - - - - - - - - - -</div>
   ${stub(c, bag)}
 </section>`;
 }
@@ -97,8 +97,8 @@ function loopStock(c: TagCtx, bag: BagRecord): string {
 function loopQl(c: TagCtx, bag: BagRecord, continuous: boolean): string {
   const face = `<div class="qlface">${loopFace(c, bag, true)}<div class="qlqr"><div class="bc">${qr(bagUrl(c, bag))}</div><span>FOUND THIS BAG? SCAN</span></div></div>`;
   if (continuous) return `<section class="label qlstrip">${face}
-  <div class="fold">▲ FOLD · loop through the handle · stick back ▲</div>
-  <div class="tear">✂ - - - - - - - tear - - - - - - -</div>${stub(c, bag)}</section>`;
+  <div class="fold">FOLD · loop through the handle · stick back</div>
+  <div class="tear">- - - - - - - - tear here - - - - - - -</div>${stub(c, bag)}</section>`;
   return `<section class="label ql100 qltag">${face}</section><section class="label ql100 qlstub">${stub(c, bag)}</section>`;
 }
 
@@ -108,8 +108,8 @@ function loop4x6(c: TagCtx, bag: BagRecord): string {
     <div class="facemain">${loopFace(c, bag, true)}</div>
     <div class="faceqr"><div class="bc">${qr(bagUrl(c, bag))}</div><span>FOUND THIS BAG?<br>SCAN</span></div>
   </div>
-  <div class="fold">▲ FOLD · loop through the handle · stick this strip back to the tag ▲</div>
-  <div class="tear">✂ - - - - - - - - - - - - - - tear - - - - - - - - - - - - - -</div>
+  <div class="fold">FOLD · loop through the handle · stick this strip back to the tag</div>
+  <div class="tear">- - - - - - - - - - - - - - - tear here - - - - - - - - - - - - - -</div>
   ${stub(c, bag)}
 </section>`;
 }
@@ -121,19 +121,8 @@ function backup(c: TagCtx, bag: BagRecord): string {
   <div class="row small"><span>PIECE ${bag.n}/${c.total}${bag.xl ? " · <b>XL</b>" : ""} · ${esc(c.name.toUpperCase())}</span><span class="mono">${esc(c.id)}</span></div>
 </section>`;
 }
-/* Black-only ISO-style pictograms (thermal printers can't do colour or grey —
- * emoji would dither into a blotch). Stroke-based SVG, scales to any label. */
-const svgIcon = (body: string) => `<svg viewBox="0 0 48 48" fill="none" stroke="#000" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round">${body}</svg>`;
-const PICTO: Record<Sticker, string> = {
-  FRAGILE: svgIcon(`<path d="M14 5h20l-1.5 13a8.5 8.5 0 0 1-17 0z"/><path d="M24 26.5V40M15 43h18"/><path d="M19 9l4 5-3 3 4 4" stroke-width="2.4"/>`),
-  UP: svgIcon(`<path d="M15 34V9M8 16l7-7 7 7M33 34V9M26 16l7-7 7 7M7 41h34"/>`),
-  HEAVY: svgIcon(`<path d="M18 13a6 6 0 1 1 12 0"/><path d="M12 17h24l5 25H7z"/><text x="24" y="36" fill="#000" stroke="none" font-size="10" font-weight="900" text-anchor="middle" font-family="Arial">KG</text>`),
-  PRIORITY: svgIcon(`<path fill="#000" d="M24 5l5.6 12 13.1 1.4-9.8 8.8 2.8 12.8L24 33.4 12.3 40l2.8-12.8-9.8-8.8L18.4 17z"/>`),
-  XL: svgIcon(`<rect x="7" y="13" width="34" height="27" rx="3"/><path d="M18 13V8h12v5"/><text x="24" y="33" fill="#000" stroke="none" font-size="12" font-weight="900" text-anchor="middle" font-family="Arial">XL</text>`),
-};
 function sticker(c: TagCtx, bag: BagRecord, s: Sticker): string {
   return `<section class="label sticker">
-  <div class="sicon">${PICTO[s]}</div>
   <div class="sword">${esc(STICKER_TEXT[s])}</div>
   <div class="row small"><span class="mono">${spaced(bag.plate)} · ${bag.n}/${c.total}</span><span>BAGDROP</span></div>
 </section>`;
@@ -170,7 +159,7 @@ const QL_CSS = `
 .qlstub .stub{border:none;padding:0;gap:2mm}.qlstub .stubrow .big{font-size:14mm}.qlstub .bcs{height:14mm}
 .backup,.sticker,.seal{width:62mm;height:100mm;padding:4mm 2.8mm;display:flex;flex-direction:column;justify-content:center;gap:2.5mm}
 .row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;font-size:2.4mm;gap:.6mm 1.5mm}.bcb{height:20mm}.plate2{font-size:4.2mm;font-weight:800;white-space:nowrap}.dest2{font-size:8mm;font-weight:900}
-.sicon{height:20mm;display:flex;justify-content:center}.sicon svg{height:100%;width:auto}.sword{font-size:7mm;font-weight:900;text-align:center;line-height:1.05;border:.8mm solid #000;padding:3mm 1mm}
+.sword{font-size:10mm;font-weight:900;text-align:center;line-height:1.05;border:.8mm solid #000;padding:3mm 1mm}
 .void{font-weight:900;border:.4mm solid #000;padding:.3mm 1.2mm}`;
 
 const SIZE_CSS: Record<Media, string> = {
@@ -205,7 +194,7 @@ const SIZE_CSS: Record<Media, string> = {
 .stubh{display:flex;justify-content:space-between;font-size:2.4mm}.stubrow{display:flex;justify-content:space-between;align-items:baseline;font-size:3mm}.stubrow .big{font-size:6mm;font-weight:900}.small{font-size:2.4mm}.bcs{height:7mm}
 .backup,.sticker,.seal{width:100mm;height:150mm;padding:8mm;display:flex;flex-direction:column;justify-content:center;gap:4mm}
 .row{display:flex;justify-content:space-between;align-items:baseline;font-size:3.6mm;gap:3mm}.bcb{height:34mm}.plate2{font-size:7mm;font-weight:800}.dest2{font-size:12mm;font-weight:900}
-.sicon{height:34mm;display:flex;justify-content:center}.sicon svg{height:100%;width:auto}.sword{font-size:12mm;font-weight:900;text-align:center;line-height:1.05;border:1.2mm solid #000;padding:5mm 2mm}
+.sword{font-size:14mm;font-weight:900;text-align:center;line-height:1.05;border:1.2mm solid #000;padding:5mm 2mm}
 .void{font-weight:900;border:.5mm solid #000;padding:.5mm 2mm}`,
   a4: `@page{size:A4;margin:8mm 5mm}
 .sheet{display:grid;grid-template-columns:99.1mm 99.1mm;grid-auto-rows:67.7mm;gap:0 2mm;justify-content:center}
@@ -214,7 +203,7 @@ const SIZE_CSS: Record<Media, string> = {
 .pair .l46{border:.3mm dashed #999;page-break-after:auto;break-after:auto}
 .backup,.sticker,.seal{width:99.1mm;height:67.7mm;padding:4mm 5mm;display:flex;flex-direction:column;justify-content:center;gap:2mm}
 .row{display:flex;justify-content:space-between;align-items:baseline;font-size:2.8mm;gap:2mm}.bcb{height:17mm}.plate2{font-size:4.6mm;font-weight:800}.dest2{font-size:7mm;font-weight:900}.small{font-size:2.3mm}
-.sicon{height:14mm;display:flex;justify-content:center}.sicon svg{height:100%;width:auto}.sword{font-size:7mm;font-weight:900;text-align:center;border:.8mm solid #000;padding:2mm}
+.sword{font-size:7mm;font-weight:900;text-align:center;border:.8mm solid #000;padding:2mm}
 .void{font-weight:900;border:.4mm solid #000;padding:.3mm 1.5mm}`,
 };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serviceClient, newToken } from "@/lib/supabaseAdmin";
-import { checkOtp, cleanEmail, cleanMobile } from "@/lib/otp";
+import { checkOtpLimited, cleanEmail, cleanMobile } from "@/lib/otp";
 import { quote, isChartPriced, cityByName, inr, routeFor } from "@/lib/pricing";
 import { decideInstant } from "@/lib/instantServer";
 import { ensurePaymentLink } from "@/lib/paymentLinks";
@@ -11,6 +11,9 @@ import { CLIENT_COOKIE, cookieOptions, identityFor, makeClientToken } from "@/li
 import { claimOnce, kickSweep, notifyInquiryDesk } from "@/lib/automation";
 import { clientView, loadPayConfig } from "@/lib/clientView";
 import type { Booking } from "@/lib/types";
+import { withAirportAddress } from "@/lib/airports";
+import { loadPocConfig } from "@/lib/airportServer";
+import { carrierOf, parseFlightRef } from "@/lib/airportPoc";
 
 /** The ONLY way a homepage booking enters the system.
  *  1. The OTP proof is checked server-side and can be used exactly once.
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
   const o = b.otp ?? {};
 
   /* ---- 1 · OTP proof ---- */
-  if (!o.to || !o.code || !o.exp || !o.token || !checkOtp(o.to, o.code, Number(o.exp), o.token)) {
+  if (!o.to || !o.code || !o.exp || !o.token || !(await checkOtpLimited(o.to, o.code, Number(o.exp), o.token))) {
     return NextResponse.json({ error: "OTP_INVALID", detail: "Your verification code has expired — please verify again." }, { status: 401 });
   }
   const mobile = cleanMobile(str(d.mobile, 20));
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
   if (!svc) return NextResponse.json({ error: "BAD_SERVICE" }, { status: 400 });
   const name = str(d.name, 80);
   const fromName = str(d.fromName, 60), toName = str(d.toName, 60);
-  const pickAddr = str(d.pickAddr, 200), dropAddr = str(d.dropAddr, 200);
+  const { pickAddr, dropAddr } = withAirportAddress(svc.uc, str(d.fromName, 60), str(d.toName, 60), str(d.pickAddr, 200), str(d.dropAddr, 200));
   const date = str(d.date, 10);
   const bags = int(d.bags, 0, 50), oversize = int(d.oversize, 0, 20);
   if (name.length < 2 || !fromName || !toName) return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
@@ -73,6 +76,20 @@ export async function POST(req: Request) {
   if (bags + oversize < 1) return NextResponse.json({ error: "NO_BAGS" }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < istTomorrow()) return NextResponse.json({ error: "BAD_DATE", detail: "Pickup needs at least 24 hours' notice." }, { status: 400 });
   const deliveryDate = /^\d{4}-\d{2}-\d{2}$/.test(str(d.deliveryDate, 10)) && str(d.deliveryDate, 10) >= date ? str(d.deliveryDate, 10) : null;
+
+  /* SITA T2 POC: once switched on, air bookings at Mumbai T2 must be on a carrier enabled on Print&Go */
+  if (svc.mode === "air") {
+    const poc = await loadPocConfig(sb);
+    const atT2 = /\(BOM\)/.test(svc.airportEnd === "from" ? pickAddr : dropAddr) && /Terminal 2/i.test(svc.airportEnd === "from" ? pickAddr : dropAddr);
+    if (poc.enabled && poc.enforceOnBooking && atT2) {
+      const fr = parseFlightRef(str(d.flight, 20));
+      const c = fr ? carrierOf(poc, fr.airline) : null;
+      if (!c?.enabled) {
+        const list = poc.carriers.filter((x) => x.enabled).map((x) => x.name).join(", ") || "no airline yet";
+        return NextResponse.json({ error: "T2_CARRIER", detail: `At Mumbai Terminal 2 we currently serve ${list}. Check the flight number, or choose Terminal 1.` }, { status: 400 });
+      }
+    }
+  }
 
   /* one booking per OTP proof — a replayed proof can't spam bookings */
   if (!(await claimOnce(`otpuse:book:${o.token.slice(0, 40)}`))) {
@@ -108,6 +125,8 @@ export async function POST(req: Request) {
     zo: fc?.zone ?? "", zd: tc?.zone ?? "",
     date, pickupDate: str(d.pickupDate, 10) || date, deliveryDate,
     flightTime: str(d.flightTime, 5) || null, ref: str(d.flight, 20).toUpperCase(), slot: str(d.slot, 40),
+    ...(/^[A-Z0-9]{6}$/.test(str(d.pnr, 6).toUpperCase()) ? { pnr: str(d.pnr, 6).toUpperCase() } : {}),
+    ...(str(d.surname, 30).toUpperCase().replace(/[^A-Z ]/g, "").trim() ? { paxSurname: str(d.surname, 30).toUpperCase().replace(/[^A-Z ]/g, "").trim() } : {}),
     bags, oversize, billed: priced ? q.billed : Math.max(bags + oversize, 1),
     traveller: { name, mobile, email: email ?? "", res: "in" },
     payer: null, note: str(d.note, 300), source: "website",
@@ -123,7 +142,7 @@ export async function POST(req: Request) {
     events: [
       { at: now, by: "customer", text: `Booking request submitted on the website · contact verified by ${o.channel === "email" ? "email" : "mobile"} OTP` },
       { at: now, by: "customer", text: priced ? `Price shown on screen: ${inr(q.total)} (sector rate chart, GST 5% incl.) · ${instant ? "instant booking" : "awaiting team approval"}` : "New sector — not on the rate chart · sent to the team as an inquiry (no price shown)" },
-      ...(instant ? [{ at: now, by: "admin" as const, text: `⚡ INSTANT booking — auto-approved; confirmed the moment it is paid. Held for ${instant.holdMinutes} minutes, then it goes to the team for approval.` }] : []),
+      ...(instant ? [{ at: now, by: "admin" as const, text: `INSTANT booking — auto-approved; confirmed the moment it is paid. Held for ${instant.holdMinutes} minutes, then it goes to the team for approval.` }] : []),
       ...(instantMiss ? [{ at: now, by: "admin" as const, text: `Not instant (${instantMiss.code}): ${instantMiss.reason} — needs team approval` }] : []),
     ],
   };
@@ -131,7 +150,7 @@ export async function POST(req: Request) {
   if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
 
   /* ---- 4 · alert the inquiry desk + ops ---- */
-  const summary = `${instant ? "⚡ New INSTANT booking (auto-approved, awaiting payment)" : priced ? "🧳 New booking request" : "📥 New SECTOR inquiry (not on rate chart)"} · ${id}\n${name} · +${mobile}${email ? ` · ${email}` : ""}\n${svc.title} · ${fromName} → ${toName} · ${bags} bag(s)${oversize ? ` + ${oversize} oversize` : ""} · pickup ${date}${str(d.slot, 40) ? ` ${str(d.slot, 40)}` : ""}\n${priced ? `Chart price shown: ${inr(q.total)}` : "No price shown — needs a rate"}\n${instant ? "Confirms itself when paid — no decision needed." : "Review and decide in BAGDROP OS → Shipments."}`;
+  const summary = `${instant ? "New INSTANT booking (auto-approved, awaiting payment)" : priced ? "🧳 New booking request" : "📥 New SECTOR inquiry (not on rate chart)"} · ${id}\n${name} · +${mobile}${email ? ` · ${email}` : ""}\n${svc.title} · ${fromName} → ${toName} · ${bags} bag(s)${oversize ? ` + ${oversize} oversize` : ""} · pickup ${date}${str(d.slot, 40) ? ` ${str(d.slot, 40)}` : ""}\n${priced ? `Chart price shown: ${inr(q.total)}` : "No price shown — needs a rate"}\n${instant ? "Confirms itself when paid — no decision needed." : "Review and decide in BAGDROP OS → Shipments → Quotes & payments."}`;
   await notifyInquiryDesk(summary, `${instant ? "Instant booking" : priced ? "New booking request" : "New sector inquiry"} · ${id} · ${fromName} → ${toName}`, `inq:${id}`);
   /* instant: a payment link too, so the WhatsApp/email acknowledgement can carry it */
   if (instant) {

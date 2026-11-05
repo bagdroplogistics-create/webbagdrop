@@ -5,6 +5,7 @@ import { quote, cityByName } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
 import type { Booking, Mode, UseCase } from "@/lib/types";
+import { withAirportAddress } from "@/lib/airports";
 
 /** Admin-made quote — for inquiries that reach the team by phone, WhatsApp,
  *  walk-in or a partner, rather than the self-serve website wizard. Same
@@ -18,6 +19,8 @@ interface QuoteRequest {
   uc?: UseCase; ucName?: string; mode?: Mode; date?: string; pickupDate?: string; deliveryDate?: string; flightTime?: string; slot?: string; flight?: string;
   bags: number; oversize: number; note?: string; source?: string;
   validHours?: 24 | 48 | 168;
+  /** the bagdrop.co lead this quote answers (quote desk) — hides that lead from the queue */
+  prodLeadId?: string;
 }
 
 export async function POST(req: Request) {
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
   const doc: Booking = {
     id, created: nowIso, status: "quoted",
     uc: b.uc ?? "", ucName: b.ucName ?? b.uc ?? "", mode,
-    from: b.fromName, to: b.toName, pickAddr: b.pickAddr ?? "", dropAddr: b.dropAddr ?? "",
+    from: b.fromName, to: b.toName, ...withAirportAddress(b.uc, b.fromName, b.toName, b.pickAddr ?? "", b.dropAddr ?? "", masters.cities),
     zo: fromCity?.zone ?? "", zd: toCity?.zone ?? "",
     date: b.date ?? "", pickupDate: b.pickupDate || b.date || undefined, deliveryDate: b.deliveryDate || null, flightTime: b.flightTime || null,
     ref: (b.flight ?? "").toUpperCase(), slot: b.slot ?? "",
@@ -64,7 +67,8 @@ export async function POST(req: Request) {
     traveller: { title: b.title, name: b.name, mobile: b.mobile, email: b.email, res: b.res ?? "in" },
     payer: null, note: b.note ?? "", source: b.source ?? "team quote",
     quote: signedQuote,
-    identity: null, pay: null, admin: {},
+    identity: null, pay: null,
+    admin: typeof b.prodLeadId === "string" && /^[\w-]{1,64}$/.test(b.prodLeadId) ? { prodLeadId: b.prodLeadId } : {},
     events: [{ at: nowIso, by: "admin", text: `Quote created by the team · ${ror ? "rate on request" : `₹${q.total.toLocaleString("en-IN")} locked ${validHours}h`}` }],
   };
 

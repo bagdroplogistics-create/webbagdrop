@@ -7,20 +7,21 @@
  *  Also: instant-booking setup per route (with a calendar preview), the
  *  profitability view (cost, margin, target-margin prices, actuals,
  *  benchmarks), routes to add from inquiries, and a new-route wizard. */
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { useNow } from "@/lib/useNow";
 import { useSyncedState } from "@/lib/stateSync";
 import { DEFAULT_MASTERS, ZONES, inr, type Masters } from "@/lib/pricing";
 import { getPricing, pricingAction, saveCostModel, type ApiResult, type PricingState } from "@/lib/pricingApi";
-import { diffCards, exGst, laneCost, laneName, marginAt, priceFor, targetPrices, validateCard, type Issue } from "@/lib/pricingRules";
+import { diffCards, exGst, hasReturn, laneCost, laneName, marginAt, priceFor, returnOf, targetPrices, validateCard, withReturns, type Issue } from "@/lib/pricingRules";
 import { instantCalendar, instantTaken, onRoute, WEEKDAYS, type CalendarState } from "@/lib/instant";
 import { actualCost, opsOf, type CostModel } from "@/lib/opsModel";
 import { isPaid } from "@/lib/payState";
 import { watchAdminBookings } from "@/lib/adminApi";
 import type { Booking, City, InstantAll, InstantRule, RouteRate, Zone } from "@/lib/types";
+import { Approvers, BulkChange, Calculator, CsvTools, DEFAULT_RULE, InstantMaster, OtpVerify, PublishFlow, ScheduledChange, type OtpProof } from "./PricingTools";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
-import { Approvers, BulkChange, Calculator, CsvTools, InstantMaster, PublishFlow, ScheduledChange } from "./PricingTools";
+import RateChart from "./RateChart";
 
 const EMPTY_ROUTE: RouteRate = { from: "", to: "", dir: "both", r1: 0, r2: 0, addl: 0, bulkMin: null, bulkRate: null, note: "" };
 const DAY = 86_400_000;
@@ -47,19 +48,22 @@ export default function Pricing() {
 /* ============================== the engine ============================== */
 function Engine({ data, bookings, now, reload }: { data: PricingState; bookings: Booking[]; now: number; reload: () => Promise<void> }) {
   const { live, draft, masters, costModel } = data;
-  const base = draft ? { routes: draft.routes, oversizeRate: draft.oversizeRate, instantAll: draft.instantAll !== undefined ? draft.instantAll : live.instantAll } : { routes: live.routes, oversizeRate: masters.oversizeRate, instantAll: live.instantAll };
+  const base = draft ? { routes: draft.routes, oversizeRate: draft.oversizeRate } : { routes: live.routes, oversizeRate: masters.oversizeRate };
   const [work, setWork] = useSyncedState(base.routes);
   const [oversize, setOversize] = useSyncedState(base.oversizeRate);
-  const [instantAll, setInstantAll] = useSyncedState<InstantAll | null>(base.instantAll);
+  const baseAll: InstantAll | null = draft && draft.instantAll !== undefined ? draft.instantAll ?? null : live.instantAll;
+  const [all, setAll] = useSyncedState<InstantAll | null>(baseAll);
+  const twoPerson = data.approvers.length >= 2;
+  const locked = !!draft?.submitted;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [openInstant, setOpenInstant] = useState<number | null>(null);
   const [wizard, setWizard] = useState<Partial<RouteRate> | null>(null);
   const today = istDay(now);
 
-  const dirty = JSON.stringify(work) !== JSON.stringify(base.routes) || oversize !== base.oversizeRate || JSON.stringify(instantAll ?? null) !== JSON.stringify(base.instantAll ?? null);
-  const issues = useMemo(() => validateCard({ routes: work, oversizeRate: oversize, cities: masters.cities, live: { routes: live.routes, oversizeRate: masters.oversizeRate }, costModel, instantAll }), [work, oversize, masters, live.routes, costModel, instantAll]);
-  const changes = useMemo(() => diffCards(live.routes, work, masters.oversizeRate, oversize, live.instantAll, instantAll), [live.routes, work, masters.oversizeRate, oversize, live.instantAll, instantAll]);
+  const dirty = JSON.stringify(work) !== JSON.stringify(base.routes) || oversize !== base.oversizeRate || JSON.stringify(all) !== JSON.stringify(baseAll);
+  const issues = useMemo(() => validateCard({ routes: work, oversizeRate: oversize, cities: masters.cities, live: { routes: live.routes, oversizeRate: masters.oversizeRate }, costModel, instantAll: all }), [work, oversize, masters, live.routes, costModel, all]);
+  const changes = useMemo(() => diffCards(live.routes, work, masters.oversizeRate, oversize, live.instantAll, all), [live.routes, work, masters.oversizeRate, oversize, live.instantAll, all]);
   const errors = issues.filter((i) => i.level === "error"), warnings = issues.filter((i) => i.level === "warn");
 
   async function run(fn: () => Promise<ApiResult>, okText: string) {
@@ -71,11 +75,11 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
     if (r.error === "STALE") await reload();
     return false;
   }
-  const saveDraft = () => run(() => pricingAction("saveDraft", { routes: work, oversizeRate: oversize, instantAll, rev: data.draftRev }), "Draft saved — nothing is live until you publish.");
+  const saveDraft = () => run(() => pricingAction("saveDraft", { routes: work, oversizeRate: oversize, instantAll: all, rev: data.draftRev }), "Draft saved — nothing is live until you publish.");
   const set = (i: number, patch: Partial<RouteRate>) => setWork((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       {/* ---------- status ---------- */}
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,7 +92,7 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={busy || !dirty} onClick={() => void saveDraft()}>{dirty ? "Save draft" : "Draft saved"}</Button>
+            <Button size="sm" disabled={busy || !dirty || locked} onClick={() => void saveDraft()}>{locked ? "Waiting for approval" : dirty ? "Save draft" : "Draft saved"}</Button>
             {draft && <Button size="sm" variant="outline" disabled={busy} onClick={() => { if (confirm("Discard the draft? Unpublished changes are lost.")) void run(() => pricingAction("discardDraft", { rev: data.draftRev }), "Draft discarded."); }}>Discard draft</Button>}
             <Button size="sm" variant="outline" onClick={() => setWizard({})}>+ New route</Button>
           </div>
@@ -96,8 +100,19 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
         {msg && <p className={`mt-3 rounded-xl p-2.5 text-xs ${msg.ok ? "bg-green-50 text-green-900" : "bg-red-50 text-red-900"}`}>{msg.text}</p>}
       </Card>
 
-      {wizard && <NewRouteWizard seed={wizard} masters={masters} costModel={costModel} onCancel={() => setWizard(null)}
-        onAdd={(r, model) => { setWork((p) => [...p, r]); setWizard(null); if (model) void saveCostModel(model).then(reload); setMsg({ ok: true, text: `${laneName(r)} added to the draft — review and publish to make it live.` }); }} />}
+      {locked && <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><b>This draft is waiting for approval</b> — it can&apos;t be edited until it is approved or withdrawn (see Review &amp; publish).</p>}
+
+      <ScheduledChange data={data} busy={busy} run={run} />
+
+      <InstantMaster all={all} routes={work} defaults={live.instantDefaults} onChange={(a) => setAll(a)} />
+
+      {wizard && <NewRouteWizard seed={wizard} masters={masters} costModel={costModel} instantOn={!all || all.enabled} onCancel={() => setWizard(null)}
+        onAdd={(r, model) => {
+          const back = hasReturn(work, r) ? [] : [returnOf(r)];
+          if (r.instantMode === "default" && !all) setAll({ enabled: true, rule: DEFAULT_RULE });
+          setWork((p) => [...p, r, ...back]); setWizard(null); if (model) void saveCostModel(model).then(reload);
+          setMsg({ ok: true, text: `${laneName(r)}${back.length ? ` and its return ${r.to} → ${r.from} (same prices — change them if they differ)` : ""} added to the draft — review and publish to make it live.` });
+        }} />}
 
       {/* ---------- route chart (draft) ---------- */}
       <Card>
@@ -105,99 +120,48 @@ function Engine({ data, bookings, now, reload }: { data: PricingState; bookings:
           <h3 className="font-display text-sm font-bold">Route rate chart <span className="font-normal text-faint">rates before GST (customers pay +5%) · the only prices anyone can book at — every off-chart lane is “rate on request”</span></h3>
           <span className="text-xs text-muted">Target margin {costModel.marginFloorPct}% · margins are on the price before GST</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-xs">
-            <thead>
-              <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-wider text-faint">
-                <th className="py-1.5 pr-2">From</th><th className="pr-2">To</th><th className="pr-2">Dir</th><th className="pr-2">1 bag</th><th className="pr-2">2 bags</th><th className="pr-2">+ bag</th>
-                <th className="pr-2">Bulk from</th><th className="pr-2">Bulk ₹/bag</th><th className="pr-2">Margin 1 · 2</th><th className="pr-2">Instant</th><th className="pr-2">Note</th><th />
-              </tr>
-            </thead>
-            <tbody>
-              {work.map((r, i) => {
-                const lane = laneName(r);
-                const rowIssues = issues.filter((x) => x.lane === lane);
-                const m1 = marginAt(r, 1, costModel), m2 = marginAt(r, 2, costModel);
-                return (
-                  <Fragment key={i}>
-                    <tr className={`border-b border-dashed border-line align-top last:border-0 ${rowIssues.some((x) => x.level === "error") ? "bg-red-50/60" : ""}`}>
-                      <td className="py-1 pr-2"><CitySelect cities={masters.cities} value={r.from} onChange={(v) => set(i, { from: v })} /></td>
-                      <td className="pr-2"><CitySelect cities={masters.cities} value={r.to} onChange={(v) => set(i, { to: v })} /></td>
-                      <td className="pr-2"><Select className="w-20" value={r.dir} onChange={(e) => set(i, { dir: e.target.value as RouteRate["dir"] })}><option value="both">both</option><option value="one">one</option></Select></td>
-                      <td className="pr-2"><Num value={r.r1} onChange={(v) => set(i, { r1: v ?? 0 })} /></td>
-                      <td className="pr-2"><Num value={r.r2} onChange={(v) => set(i, { r2: v ?? 0 })} /></td>
-                      <td className="pr-2"><Num value={r.addl} onChange={(v) => set(i, { addl: v ?? 0 })} /></td>
-                      <td className="pr-2"><Num w="w-16" value={r.bulkMin ?? null} onChange={(v) => set(i, { bulkMin: v })} /></td>
-                      <td className="pr-2"><Num value={r.bulkRate ?? null} onChange={(v) => set(i, { bulkRate: v })} /></td>
-                      <td className="whitespace-nowrap pr-2 pt-2"><Badge tone={tone(m1, costModel.marginFloorPct)}>{m1}%</Badge> <Badge tone={tone(m2, costModel.marginFloorPct)}>{m2}%</Badge></td>
-                      <td className="pr-2 pt-1"><Button size="sm" variant={r.instant?.enabled ? "outline" : "ghost"} onClick={() => setOpenInstant(openInstant === i ? null : i)}>{r.instant?.enabled ? "⚡ on" : "off"}</Button></td>
-                      <td className="pr-2"><Input className="w-28" value={r.note ?? ""} onChange={(e) => set(i, { note: e.target.value })} /></td>
-                      <td className="pt-2"><button className="text-red-700 hover:underline" onClick={() => { if (confirm(`Remove ${lane} from the draft?`)) setWork((p) => p.filter((_, idx) => idx !== i)); }}>remove</button></td>
-                    </tr>
-                    {/* "both" routes price identically either way (see pricingRules.ts/
-                     * pricing.ts dir==="both" matching) — this mirror row is the SAME
-                     * underlying record as the row above, just with From/To swapped, so
-                     * admins can see AND edit the reverse direction explicitly. Every
-                     * field here writes to the same work[i] — editing either row (incl.
-                     * flipping Dir to "one", which removes this mirror) keeps both in
-                     * sync, since they are one route, not two. */}
-                    {r.dir === "both" && r.from && r.to && (
-                      <tr className="border-b border-dashed border-line align-top last:border-0 bg-paper/50">
-                        <td className="py-1 pr-2"><CitySelect cities={masters.cities} value={r.to} onChange={(v) => set(i, { to: v })} /></td>
-                        <td className="pr-2"><CitySelect cities={masters.cities} value={r.from} onChange={(v) => set(i, { from: v })} /></td>
-                        <td className="pr-2"><Select className="w-20" value={r.dir} onChange={(e) => set(i, { dir: e.target.value as RouteRate["dir"] })}><option value="both">both</option><option value="one">one</option></Select></td>
-                        <td className="pr-2"><Num value={r.r1} onChange={(v) => set(i, { r1: v ?? 0 })} /></td>
-                        <td className="pr-2"><Num value={r.r2} onChange={(v) => set(i, { r2: v ?? 0 })} /></td>
-                        <td className="pr-2"><Num value={r.addl} onChange={(v) => set(i, { addl: v ?? 0 })} /></td>
-                        <td className="pr-2"><Num w="w-16" value={r.bulkMin ?? null} onChange={(v) => set(i, { bulkMin: v })} /></td>
-                        <td className="pr-2"><Num value={r.bulkRate ?? null} onChange={(v) => set(i, { bulkRate: v })} /></td>
-                        <td className="whitespace-nowrap pr-2 pt-2"><Badge tone={tone(m1, costModel.marginFloorPct)}>{m1}%</Badge> <Badge tone={tone(m2, costModel.marginFloorPct)}>{m2}%</Badge></td>
-                        <td className="pr-2 pt-1"><Button size="sm" variant={r.instant?.enabled ? "outline" : "ghost"} onClick={() => setOpenInstant(openInstant === i ? null : i)}>{r.instant?.enabled ? "⚡ on" : "off"}</Button></td>
-                        <td className="pr-2"><Input className="w-28" value={r.note ?? ""} onChange={(e) => set(i, { note: e.target.value })} /></td>
-                        <td className="pt-2"><button className="text-red-700 hover:underline" onClick={() => { if (confirm(`Remove ${lane} from the draft?`)) setWork((p) => p.filter((_, idx) => idx !== i)); }}>remove</button></td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mb-3 grid gap-2">
+          <BulkChange routes={work} cities={[...new Set(work.flatMap((r) => [r.from, r.to]))].sort()} onApply={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
+          <CsvTools routes={work} masters={masters} liveRoutes={live.routes} onImport={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
         </div>
-        <label className="mt-3 flex items-center gap-2 text-xs">Oversize add-on (per piece) <Num value={oversize} onChange={(v) => setOversize(v ?? 0)} /></label>
-        <IssueList issues={issues} />
+        {(() => {
+          const ret = withReturns(work);
+          if (!ret.split && !ret.added.length) return null;
+          return (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <span><b>Every route is listed both ways.</b>{ret.split ? ` ${ret.split} two-way row${ret.split === 1 ? "" : "s"} will become two rows, one per direction, at the same prices.` : ""}{ret.added.length ? ` Return routes to add, copying the outbound prices for you to check: ${ret.added.join(", ")}.` : ""}</span>
+              <Button size="sm" disabled={locked} onClick={() => { setWork(ret.routes); setMsg({ ok: true, text: `Both directions are now listed in the draft${ret.added.length ? ` — check the prices of ${ret.added.join(", ")}` : ""}, then review and publish.` }); }}>Add the return routes</Button>
+            </div>
+          );
+        })()}
+        <RateChart routes={work} issues={issues} cities={masters.cities} costModel={costModel} all={all} locked={locked}
+          onSet={set} onRemove={(i) => setWork((p) => p.filter((_, idx) => idx !== i))} onInstantAll={(a) => setAll(a)} onOpenLimits={(i) => setOpenInstant(i)}
+          oversize={oversize} onOversize={setOversize} liveVersion={live.version} />
       </Card>
 
       {openInstant != null && work[openInstant] && (
-        <InstantEditor key={openInstant} route={work[openInstant]} today={today} now={now} bookings={bookings} defaults={live.instantDefaults}
+        <InstantEditor key={openInstant} route={work[openInstant]} today={today} now={now} bookings={bookings} defaults={live.instantDefaults} ownRule={!!all}
           onChange={(rule) => set(openInstant, { instant: rule })} onClose={() => setOpenInstant(null)} />
       )}
 
-      {/* ---------- bulk tools: instant master switch, bulk %, CSV ---------- */}
-      <InstantMaster all={instantAll} routes={work} defaults={live.instantDefaults} onChange={setInstantAll} />
-      <div className="grid gap-3 sm:grid-cols-2">
-        <BulkChange routes={work} cities={[...new Set(masters.cities.map((c) => c.name))]} onApply={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
-        <CsvTools routes={work} masters={masters} liveRoutes={live.routes} onImport={(next, text) => { setWork(next); setMsg({ ok: true, text }); }} />
-      </div>
-
-      <ScheduledChange data={data} busy={busy} run={run} />
-
-      {/* ---------- review & publish (two-person approval when 2+ approvers are set) ---------- */}
+      {/* ---------- review & publish ---------- */}
       <PublishFlow data={data} changes={changes} errors={errors} warnings={warnings} dirty={dirty} busy={busy} run={run} saveDraft={saveDraft} />
 
-      <Approvers data={data} busy={busy} run={run} />
-
-      <InstantDefaultsCard defaults={live.instantDefaults} onSave={(d) => void run(() => pricingAction("instantDefaults", d), "Instant booking defaults saved.")} />
+      <InstantDefaultsCard defaults={live.instantDefaults} twoPerson={twoPerson} onSave={(d, otp) => void run(() => pricingAction("instantDefaults", { ...d, otp }), "Instant booking defaults saved.")} />
 
       <Profitability routes={live.routes} bookings={bookings} costModel={costModel} benchmarks={data.benchmarks} now={now} reload={reload}
         onUseTarget={(lane, t) => { setWork((p) => p.map((r) => (laneName(r) === lane ? { ...r, r1: Math.max(r.r1, t.r1), r2: Math.max(r.r2, t.r2), addl: Math.max(r.addl, t.addl) } : r))); setMsg({ ok: true, text: `Target-margin prices put into the draft for ${lane} — review and publish.` }); }} />
 
       <RoutesToAdd routes={work} bookings={bookings} costModel={costModel} now={now} onAdd={(seed) => setWizard(seed)} />
 
-      <VersionHistory log={data.log} liveVersion={live.version} busy={busy} hasDraft={!!draft}
-        onRollback={(v, note) => void run(() => pricingAction("rollback", { version: v, note, confirm: true }), `Rolled back — version ${v}'s prices are live again as a new version.`)} />
+      <VersionHistory log={data.log} liveVersion={live.version} busy={busy} hasDraft={!!draft} twoPerson={twoPerson}
+        onRollback={(v, note, otp) => void run(() => pricingAction("rollback", { version: v, note, confirm: true, otp }), `Rolled back — version ${v}'s prices are live again as a new version.`)} />
+
+      <Calculator masters={masters} live={{ routes: live.routes, all: live.instantAll }} draft={changes.length ? { routes: work, all, oversizeRate: oversize } : null}
+        defaults={live.instantDefaults} bookings={bookings} now={now} today={today} />
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Calculator masters={masters} live={{ routes: live.routes, all: live.instantAll }} draft={changes.length ? { routes: work, all: instantAll, oversizeRate: oversize } : null} defaults={live.instantDefaults} bookings={bookings} now={now} today={today} />
+        <Approvers data={data} busy={busy} run={run} />
         <CitiesEditor extraCities={masters.cities.slice(DEFAULT_MASTERS.cities.length)} onSave={(c) => void run(() => pricingAction("cities", { cities: c }), "Cities saved.")} />
       </div>
       <p className="text-xs text-faint">The old regional zone matrix is retired: a lane that isn&apos;t on the chart above is “rate on request” everywhere — website, partner desk, team quotes and imports.</p>
@@ -219,7 +183,7 @@ function CitySelect({ cities, value, onChange }: { cities: City[]; value: string
   );
 }
 function IssueList({ issues }: { issues: Issue[] }) {
-  if (!issues.length) return <p className="mt-3 rounded-xl bg-green-50 p-2.5 text-xs text-green-900">✓ Every route passes the checks.</p>;
+  if (!issues.length) return <p className="mt-3 rounded-xl bg-green-50 p-2.5 text-xs text-green-900">Every route passes the checks.</p>;
   return (
     <ul className="mt-3 space-y-1 text-xs">
       {issues.map((i, k) => (
@@ -236,11 +200,11 @@ const CAL_STYLE: Record<CalendarState, string> = {
   open: "bg-green-100 text-green-900", full: "bg-amber-100 text-amber-900", notice: "bg-paper text-faint",
   blackout: "bg-red-100 text-red-900 line-through", weekday: "bg-paper text-faint", outside: "bg-paper text-faint", off: "bg-paper text-faint",
 };
-function InstantEditor({ route, today, now, bookings, defaults, onChange, onClose }: {
-  route: RouteRate; today: string; now: number; bookings: Booking[]; defaults: { minNoticeDays: number; holdMinutes: number };
+function InstantEditor({ route, today, now, bookings, defaults, ownRule, onChange, onClose }: {
+  route: RouteRate; today: string; now: number; bookings: Booking[]; defaults: { minNoticeDays: number; holdMinutes: number }; ownRule?: boolean;
   onChange: (rule: InstantRule) => void; onClose: () => void;
 }) {
-  const rule: InstantRule = route.instant ?? { enabled: false };
+  const rule: InstantRule = ownRule ? { ...(route.instant ?? { enabled: true }), enabled: true } : route.instant ?? { enabled: false };
   const upd = (p: Partial<InstantRule>) => onChange({ ...rule, ...p });
   const [bo, setBo] = useState("");
   const taken = useMemo(() => instantTaken(bookings, route, now), [bookings, route, now]);
@@ -249,12 +213,13 @@ function InstantEditor({ route, today, now, bookings, defaults, onChange, onClos
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-display text-sm font-bold">⚡ Instant booking · {laneName(route)} <span className="font-normal text-faint">qualifying bookings are auto-approved and confirmed the moment they are paid</span></h3>
+        <h3 className="font-display text-sm font-bold">Instant booking · {laneName(route)} <span className="font-normal text-faint">qualifying bookings are auto-approved and confirmed the moment they are paid</span></h3>
         <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="grid gap-3 text-xs">
-          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={!!rule.enabled} onChange={(e) => upd({ enabled: e.target.checked })} /> Allow instant booking on this route</label>
+          {ownRule ? <p className="text-sm font-semibold">This route&apos;s own rule (used instead of the default rule while the master switch is ON)</p>
+            : <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={!!rule.enabled} onChange={(e) => upd({ enabled: e.target.checked })} /> Allow instant booking on this route</label>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label={`Min. notice (days, default ${defaults.minNoticeDays})`}><Num w="w-24" value={rule.minNoticeDays ?? null} onChange={(v) => upd({ minNoticeDays: v })} /></Field>
             <Field label="Instant bookings / day"><Num w="w-24" value={rule.dailyCap ?? null} onChange={(v) => upd({ dailyCap: v })} /></Field>
@@ -279,7 +244,7 @@ function InstantEditor({ route, today, now, bookings, defaults, onChange, onClos
             <div className="flex flex-wrap items-center gap-2">
               <Input type="date" className="w-40" value={bo} onChange={(e) => setBo(e.target.value)} />
               <Button size="sm" variant="outline" disabled={!bo} onClick={() => { upd({ blackout: [...new Set([...(rule.blackout ?? []), bo])].sort() }); setBo(""); }}>Add</Button>
-              {(rule.blackout ?? []).map((d) => <button key={d} className="rounded-full bg-red-50 px-2 py-0.5 text-red-900" onClick={() => upd({ blackout: (rule.blackout ?? []).filter((x) => x !== d) })}>{d} ✕</button>)}
+              {(rule.blackout ?? []).map((d) => <button key={d} className="rounded-full bg-red-50 px-2 py-0.5 text-red-900" onClick={() => upd({ blackout: (rule.blackout ?? []).filter((x) => x !== d) })}>{d} · remove</button>)}
             </div>
           </div>
           <p className="text-muted">Changes here go into the draft — publish to make them live. Unpaid instant bookings are held {defaults.holdMinutes} minutes, then go to the team for approval.</p>
@@ -305,16 +270,18 @@ function InstantEditor({ route, today, now, bookings, defaults, onChange, onClos
   );
 }
 
-function InstantDefaultsCard({ defaults, onSave }: { defaults: { minNoticeDays: number; holdMinutes: number }; onSave: (d: { minNoticeDays: number; holdMinutes: number }) => void }) {
+function InstantDefaultsCard({ defaults, twoPerson, onSave }: { defaults: { minNoticeDays: number; holdMinutes: number }; twoPerson: boolean; onSave: (d: { minNoticeDays: number; holdMinutes: number }, otp: OtpProof | null) => void }) {
   const [d, setD] = useSyncedState(defaults);
+  const [proof, setProof] = useState<OtpProof | null>(null);
   return (
     <Card>
       <h3 className="mb-2 font-display text-sm font-bold">Instant booking defaults <span className="font-normal text-faint">apply to every instant route unless the route sets its own notice</span></h3>
       <div className="flex flex-wrap items-end gap-3 text-xs">
         <Field label="Minimum notice (days before pickup)"><Num w="w-24" value={d.minNoticeDays} onChange={(v) => setD({ ...d, minNoticeDays: v ?? 0 })} /></Field>
         <Field label="Payment hold (minutes)"><Num w="w-24" value={d.holdMinutes} onChange={(v) => setD({ ...d, holdMinutes: v ?? 0 })} /></Field>
-        <Button size="sm" variant="outline" disabled={JSON.stringify(d) === JSON.stringify(defaults)} onClick={() => onSave(d)}>Save defaults</Button>
+        <Button size="sm" variant="outline" disabled={JSON.stringify(d) === JSON.stringify(defaults) || (twoPerson && !proof)} onClick={() => { onSave(d, proof); setProof(null); }}>Save defaults</Button>
       </div>
+      {twoPerson && <div className="mt-2"><OtpVerify label="Approver code (two-person publish is on)" proof={proof} onProof={setProof} /></div>}
     </Card>
   );
 }
@@ -363,7 +330,7 @@ function Profitability({ routes, bookings, costModel, benchmarks, now, reload, o
               const below = x.r.r1 < x.t.r1 || x.r.r2 < x.t.r2;
               return (
                 <tr key={x.lane} className="border-b border-dashed border-line align-top last:border-0">
-                  <td className="py-1.5 pr-2 font-semibold">{x.lane}{x.r.instant?.enabled ? " ⚡" : ""}</td>
+                  <td className="py-1.5 pr-2 font-semibold">{x.lane}{x.r.instant?.enabled ? " · instant" : ""}</td>
                   <td className="pr-2 tabular-nums">{inr(x.cost1)}</td>
                   <td className="pr-2 tabular-nums">{inr(x.r.r1)} · {inr(x.r.r2)} · {inr(x.r.addl)}</td>
                   <td className="whitespace-nowrap pr-2"><Badge tone={tone(x.m1, costModel.marginFloorPct)}>{x.m1}%</Badge> <Badge tone={tone(x.m2, costModel.marginFloorPct)}>{x.m2}%</Badge></td>
@@ -424,7 +391,7 @@ function RoutesToAdd({ routes, bookings, costModel, now, onAdd }: { routes: Rout
           return (
             <li key={`${a.from}|${a.to}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-line pb-1.5 last:border-0">
               <span><b>{a.from} → {a.to}</b> · {a.n} request{a.n === 1 ? "" : "s"} · last {fmt(a.last)} · target-margin rate {inr(t.r1)} / {inr(t.r2)} / +{inr(t.addl)} before GST</span>
-              <Button size="sm" variant="outline" onClick={() => onAdd({ from: a.from, to: a.to, ...t })}>Add route →</Button>
+              <Button size="sm" variant="outline" onClick={() => onAdd({ from: a.from, to: a.to, ...t })}>Add route</Button>
             </li>
           );
         })}
@@ -434,17 +401,17 @@ function RoutesToAdd({ routes, bookings, costModel, now, onAdd }: { routes: Rout
 }
 
 /* ============================== new route wizard ============================== */
-function NewRouteWizard({ seed, masters, costModel, onCancel, onAdd }: {
-  seed: Partial<RouteRate>; masters: Masters; costModel: CostModel; onCancel: () => void; onAdd: (r: RouteRate, model: CostModel | null) => void;
+function NewRouteWizard({ seed, masters, costModel, instantOn, onCancel, onAdd }: {
+  seed: Partial<RouteRate>; masters: Masters; costModel: CostModel; instantOn: boolean; onCancel: () => void; onAdd: (r: RouteRate, model: CostModel | null) => void;
 }) {
-  const [r, setR] = useState<RouteRate>({ ...EMPTY_ROUTE, ...seed });
+  const [r, setR] = useState<RouteRate>({ ...EMPTY_ROUTE, ...seed, dir: "one" });
   const lane = `${r.from} → ${r.to}`;
   const existing = costModel.lanes[lane] ?? {};
   const [legs, setLegs] = useState({ pickup: existing.pickup ?? costModel.defaults.pickup, linehaul: existing.linehaul ?? costModel.defaults.linehaul, lastmile: existing.lastmile ?? costModel.defaults.lastmile });
   const [margin, setMargin] = useState(costModel.marginFloorPct);
   const model: CostModel = { ...costModel, lanes: { ...costModel.lanes, [lane]: legs } };
   const t = r.from && r.to ? targetPrices(r, model, margin) : null;
-  const issues = r.from && r.to && r.r1 ? validateCard({ routes: [r], oversizeRate: masters.oversizeRate, cities: masters.cities, costModel: model }) : [];
+  const issues = r.from && r.to && r.r1 ? validateCard({ routes: [r, returnOf(r)], oversizeRate: masters.oversizeRate, cities: masters.cities, costModel: model }) : [];
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
@@ -454,7 +421,7 @@ function NewRouteWizard({ seed, masters, costModel, onCancel, onAdd }: {
       <div className="grid gap-3 text-xs sm:grid-cols-3">
         <Field label="From"><CitySelect cities={masters.cities} value={r.from} onChange={(v) => setR({ ...r, from: v })} /></Field>
         <Field label="To"><CitySelect cities={masters.cities} value={r.to} onChange={(v) => setR({ ...r, to: v })} /></Field>
-        <Field label="Direction"><Select value={r.dir} onChange={(e) => setR({ ...r, dir: e.target.value as RouteRate["dir"] })}><option value="both">both ways</option><option value="one">one way</option></Select></Field>
+        <Field label="Return route"><div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">{r.from && r.to ? `${r.to} → ${r.from}` : "To → From"} is added too, same prices — change it in the chart if it differs</div></Field>
         <Field label="Pickup cost ₹"><Num value={legs.pickup} onChange={(v) => setLegs({ ...legs, pickup: v ?? 0 })} /></Field>
         <Field label="Line haul cost ₹"><Num value={legs.linehaul} onChange={(v) => setLegs({ ...legs, linehaul: v ?? 0 })} /></Field>
         <Field label="Delivery cost ₹"><Num value={legs.lastmile} onChange={(v) => setLegs({ ...legs, lastmile: v ?? 0 })} /></Field>
@@ -473,6 +440,13 @@ function NewRouteWizard({ seed, masters, costModel, onCancel, onAdd }: {
         <Field label="Bulk from (bags)"><Num value={r.bulkMin ?? null} onChange={(v) => setR({ ...r, bulkMin: v })} /></Field>
         <Field label="Bulk ₹/bag"><Num value={r.bulkRate ?? null} onChange={(v) => setR({ ...r, bulkRate: v })} /></Field>
       </div>
+      <div className="mt-3 text-xs">
+        <Field label={`Instant booking on this route and its return${instantOn ? "" : " (instant booking is paused — applies when resumed)"}`}>
+          <Select className="w-72" value={r.instantMode === "default" ? "default" : "off"} onChange={(e) => setR({ ...r, instantMode: e.target.value as NonNullable<RouteRate["instantMode"]> })}>
+            <option value="off">OFF — every booking waits for approval</option><option value="default">ON — standard rule, confirmed when paid</option>
+          </Select>
+        </Field>
+      </div>
       {r.r1 > 0 && r.r2 > 0 && r.addl > 0 && (
         <p className="mt-2 text-xs text-muted">Customer pays (incl. GST): {[1, 2, 3, 4, 6].map((n) => `${n} bag${n > 1 ? "s" : ""} ${inr(priceFor(r, n))}`).join(" · ")} · margin {marginAt(r, 1, model)}% / {marginAt(r, 2, model)}%</p>
       )}
@@ -486,12 +460,14 @@ function NewRouteWizard({ seed, masters, costModel, onCancel, onAdd }: {
 }
 
 /* ============================== version history ============================== */
-function VersionHistory({ log, liveVersion, busy, hasDraft, onRollback }: { log: PricingState["log"]; liveVersion: number; busy: boolean; hasDraft: boolean; onRollback: (v: number, note: string) => void }) {
+function VersionHistory({ log, liveVersion, busy, hasDraft, twoPerson, onRollback }: { log: PricingState["log"]; liveVersion: number; busy: boolean; hasDraft: boolean; twoPerson: boolean; onRollback: (v: number, note: string, otp: OtpProof | null) => void }) {
   const [open, setOpen] = useState<number | null>(null);
+  const [proof, setProof] = useState<OtpProof | null>(null);
   const entries = [...log].reverse();
   return (
     <Card>
       <h3 className="mb-2 font-display text-sm font-bold">Version history <span className="font-normal text-faint">every publish, rollback and settings change</span></h3>
+      {twoPerson && <div className="mb-2"><OtpVerify label="Approver code for a rollback" proof={proof} onProof={setProof} /></div>}
       {entries.length === 0 && <p className="text-sm text-muted">Nothing published through the engine yet — the first publish keeps today&apos;s chart as version {liveVersion} so it can always be restored.</p>}
       <ul className="space-y-1.5 text-xs">
         {entries.map((e, k) => (
@@ -504,8 +480,8 @@ function VersionHistory({ log, liveVersion, busy, hasDraft, onRollback }: { log:
               <span className="flex gap-1.5">
                 {e.changes.length > 0 && <Button size="sm" variant="ghost" onClick={() => setOpen(open === k ? null : k)}>{open === k ? "Hide" : "Changes"}</Button>}
                 {e.routes && e.version !== liveVersion && (
-                  <Button size="sm" variant="outline" disabled={busy || hasDraft} title={hasDraft ? "Publish or discard the draft first" : ""}
-                    onClick={() => { const note = prompt(`Roll back to version ${e.version}? Its prices become live again as a new version.\nReason:`); if (note && note.trim().length >= 3) onRollback(e.version, note.trim()); }}>
+                  <Button size="sm" variant="outline" disabled={busy || hasDraft || (twoPerson && !proof)} title={hasDraft ? "Publish or discard the draft first" : twoPerson && !proof ? "Enter an approver code above" : ""}
+                    onClick={() => { const note = prompt(`Roll back to version ${e.version}? Its prices become live again as a new version.\nReason:`); if (note && note.trim().length >= 3) { onRollback(e.version, note.trim(), proof); setProof(null); } }}>
                     Roll back to v{e.version}
                   </Button>
                 )}
@@ -523,14 +499,15 @@ function VersionHistory({ log, liveVersion, busy, hasDraft, onRollback }: { log:
 function CitiesEditor({ extraCities, onSave }: { extraCities: City[]; onSave: (c: City[]) => void }) {
   const [list, setList] = useSyncedState(extraCities);
   const [draft, setDraft] = useState<City>({ name: "", zone: "MUM", ap: "" });
+  const [aps, setAps] = useState("");
   return (
     <Card>
-      <h3 className="mb-2 font-display text-sm font-bold">Extra cities <span className="font-normal text-faint">on top of the built-in {DEFAULT_MASTERS.cities.length} — a route needs both its cities here</span></h3>
+      <h3 className="mb-2 font-display text-sm font-bold">Extra cities <span className="font-normal text-faint">on top of the built-in {DEFAULT_MASTERS.cities.length} — a route needs both its cities here; the first airport is the main one for airport bookings</span></h3>
       <ul className="mb-2 text-xs">
         {list.length === 0 && <li className="text-muted">None added yet.</li>}
         {list.map((c, i) => (
           <li key={c.name} className="flex justify-between border-b border-dashed border-line py-1 last:border-0">
-            <span>{c.name} · {c.zone}{c.ap ? ` · ${c.ap}` : ""}</span>
+            <span>{c.name} · {c.zone}{c.ap ? ` · airports ${[c.ap, ...(c.aps ?? [])].join(", ")}` : " · no airport"}</span>
             <button className="text-red-700 hover:underline" onClick={() => { const next = list.filter((_, idx) => idx !== i); setList(next); onSave(next); }}>remove</button>
           </li>
         ))}
@@ -538,10 +515,11 @@ function CitiesEditor({ extraCities, onSave }: { extraCities: City[]; onSave: (c
       <div className="flex flex-wrap gap-1.5">
         <Input className="w-28" placeholder="City" value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} />
         <Select className="w-24" value={draft.zone} onChange={(e) => setDraft((p) => ({ ...p, zone: e.target.value as Zone }))}>{ZONES.map((z) => <option key={z}>{z}</option>)}</Select>
-        <Input className="w-20" placeholder="Airport code" value={draft.ap ?? ""} onChange={(e) => setDraft((p) => ({ ...p, ap: e.target.value }))} />
+        <Input className="w-44" placeholder="Airports, e.g. IDR or BOM, NMI" value={aps} onChange={(e) => setAps(e.target.value.toUpperCase())} />
         <Button size="sm" variant="outline" onClick={() => {
           if (!draft.name.trim() || list.some((c) => c.name === draft.name)) return;
-          const next = [...list, draft]; setList(next); onSave(next); setDraft({ name: "", zone: "MUM", ap: "" });
+          const codes = [...new Set(aps.split(/[\s,]+/).filter((x) => /^[A-Z]{3}$/.test(x)))];
+          const next = [...list, { ...draft, name: draft.name.trim(), ap: codes[0] ?? "", aps: codes.slice(1) }]; setList(next); onSave(next); setDraft({ name: "", zone: "MUM", ap: "" }); setAps("");
         }}>Add</Button>
       </div>
     </Card>

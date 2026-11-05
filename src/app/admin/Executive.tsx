@@ -136,7 +136,7 @@ function HeadLinks() {
           <p className="break-all font-mono text-[11px] text-ink">{link.url}</p>
           <div className="mt-2 flex items-center gap-2">
             <Button size="sm" onClick={() => { navigator.clipboard?.writeText(link.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>
-              {copied ? "Copied ✓" : "Copy link"}
+              {copied ? "Copied" : "Copy link"}
             </Button>
             <span className="text-[11px] text-faint">valid till {new Date(link.expires).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
           </div>

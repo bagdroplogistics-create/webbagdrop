@@ -107,7 +107,7 @@ export default function DriverClient({ token }: { token: string }) {
         </div>
       ) : (
         <div className="mt-5 grid gap-3">
-          <button onClick={start} className="cursor-pointer rounded-xl bg-brand px-4 py-4 text-lg font-bold text-white">▶ Start trip</button>
+          <button onClick={start} className="cursor-pointer rounded-xl bg-brand px-4 py-4 text-lg font-bold text-white">Start trip</button>
           <p className="text-xs text-muted">Your location is shared only for this job, only while this page is open, and stops when you tap Done.</p>
           {status && <p className="rounded-xl bg-paper p-3 text-sm">{status}</p>}
         </div>

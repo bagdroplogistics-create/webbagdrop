@@ -26,6 +26,7 @@ export const ZONES: Zone[] = ["MUM", "GUJ", "NOR", "SOU", "GOA", "EAS"];
  *  passenger terminal; the customer can always add detail in the address. */
 export const AIRPORTS: Record<string, { name: string; terminals?: string[] }> = {
   BOM: { name: "Mumbai — Chhatrapati Shivaji Maharaj Intl (BOM)", terminals: ["Terminal 1", "Terminal 2"] },
+  NMI: { name: "Navi Mumbai Intl (NMI)" },
   PNQ: { name: "Pune Airport (PNQ)" },
   AMD: { name: "Ahmedabad — Sardar Vallabhbhai Patel Intl (AMD)", terminals: ["Terminal 1", "Terminal 2"] },
   BDQ: { name: "Vadodara Airport (BDQ)" },
@@ -42,6 +43,7 @@ export const AIRPORTS: Record<string, { name: string; terminals?: string[] }> = 
   GOI: { name: "Goa — Dabolim Airport (GOI)" },
   GOX: { name: "North Goa — Manohar Intl, Mopa (GOX)" },
   CCU: { name: "Kolkata — Netaji Subhas Chandra Bose Intl (CCU)" },
+  IDR: { name: "Indore — Devi Ahilyabai Holkar Airport (IDR)" },
 };
 
 /** True only when the SECTOR RATE CHART prices this lane. Lanes the chart
@@ -52,13 +54,13 @@ export function isChartPriced(q: QuoteOutcome): q is QuoteResult & { source: "ro
 }
 
 export const CITIES: City[] = [
-  { name: "Mumbai", zone: "MUM", ap: "BOM" },
-  { name: "Navi Mumbai / Thane", zone: "MUM", ap: "BOM" },
+  { name: "Mumbai", zone: "MUM", ap: "BOM", aps: ["NMI"] },
+  { name: "Navi Mumbai / Thane", zone: "MUM", ap: "NMI", aps: ["BOM"] },
   { name: "Pune", zone: "MUM", ap: "PNQ" },
   { name: "Ahmedabad", zone: "GUJ", ap: "AMD" },
   { name: "Vadodara", zone: "GUJ", ap: "BDQ" },
-  { name: "Nadiad", zone: "GUJ", ap: "BDQ" },
-  { name: "Anand", zone: "GUJ", ap: "BDQ" },
+  { name: "Nadiad", zone: "GUJ", ap: "BDQ", aps: ["AMD"] },
+  { name: "Anand", zone: "GUJ", ap: "BDQ", aps: ["AMD"] },
   { name: "Surat", zone: "GUJ", ap: "STV" },
   { name: "Rajkot", zone: "GUJ", ap: "RAJ" },
   { name: "Delhi NCR", zone: "NOR", ap: "DEL" },
@@ -69,8 +71,8 @@ export const CITIES: City[] = [
   { name: "Hyderabad", zone: "SOU", ap: "HYD" },
   { name: "Chennai", zone: "SOU", ap: "MAA" },
   { name: "Kochi", zone: "SOU", ap: "COK" },
-  { name: "Goa", zone: "GOA", ap: "GOI" },
-  { name: "North Goa", zone: "GOA", ap: "GOX" },
+  { name: "Goa", zone: "GOA", ap: "GOI", aps: ["GOX"] },
+  { name: "North Goa", zone: "GOA", ap: "GOX", aps: ["GOI"] },
   { name: "Kolkata", zone: "EAS", ap: "CCU" },
 ];
 

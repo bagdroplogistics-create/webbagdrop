@@ -1,6 +1,7 @@
+"use client";
 /** shadcn-style primitives, hand-rolled and dependency-free. When the team
  *  adopts the shadcn CLI these swap out one-for-one (same names and props). */
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -48,11 +49,13 @@ const fieldCls =
   "w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] text-ink " +
   "focus:border-brand focus:outline-none focus:ring-[3px] focus:ring-brand/15";
 
+/** fieldCls is full width unless the caller gives its own width (w-*), which would otherwise lose to w-full in the CSS order. */
+const field = (c?: string) => (c && /(^|\s)!?w-/.test(c) ? fieldCls.replace("w-full ", "") : fieldCls);
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx(fieldCls, props.className)} />;
+  return <input {...props} className={cx(field(props.className), props.className)} />;
 }
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cx(fieldCls, "appearance-none", props.className)} />;
+  return <select {...props} className={cx(field(props.className), "appearance-none", props.className)} />;
 }
 
 export function Badge({ tone = "muted", children }: { tone?: "ok" | "warn" | "bad" | "info" | "muted"; children: ReactNode }) {
@@ -103,5 +106,56 @@ export function Tile({
       <b className="block font-display text-[15px] font-bold">{title}</b>
       <small className="mt-0.5 block text-xs text-muted">{sub}</small>
     </button>
+  );
+}
+
+/* ================= admin-only layout primitives (styles in globals.css, .admin-os scope) ================= */
+
+/** A record's detail in a panel that slides in from the right, so the list
+ *  behind it keeps the whole screen. Esc or the backdrop closes it. */
+export function Drawer({ open, onClose, title, children, wide = false }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; wide?: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <>
+      <div className="a-drawer-backdrop" onClick={onClose} aria-hidden />
+      <aside className="a-drawer" style={wide ? { width: "min(880px, 100vw)" } : undefined} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Detail"}>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-line bg-white px-5 py-3">
+          <div className="min-w-0 font-display text-sm font-bold">{title}</div>
+          <button onClick={onClose} className="cursor-pointer rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-muted hover:text-ink">Close</button>
+        </div>
+        <div className="p-5">{children}</div>
+      </aside>
+    </>
+  );
+}
+
+/** Scrolling table frame: sticky header, hairlines, full width. */
+export function TableFrame({ children, className, maxHeight }: { children: ReactNode; className?: string; maxHeight?: string }) {
+  return <div className={cx("a-table", className)} style={maxHeight ? { maxHeight } : undefined}>{children}</div>;
+}
+
+/** Row density for every table on the page (saved per browser). */
+export const DENSITY_KEY = "bagdrop-density";
+export function DensityToggle() {
+  const set = (d: "comfortable" | "compact") => {
+    try { localStorage.setItem(DENSITY_KEY, d); } catch {}
+    document.querySelector(".admin-os")?.setAttribute("data-density", d);
+    window.dispatchEvent(new Event("bagdrop:density"));
+  };
+  return (
+    <span className="hidden overflow-hidden rounded-lg border border-line text-[11px] font-semibold sm:inline-flex" role="group" aria-label="Row density">
+      {(["comfortable", "compact"] as const).map((d) => (
+        <button key={d} onClick={() => set(d)} className="cursor-pointer px-2.5 py-1 text-muted hover:text-ink data-[on]:bg-ink data-[on]:text-white"
+          data-on={typeof document !== "undefined" && (document.querySelector(".admin-os")?.getAttribute("data-density") ?? "comfortable") === d ? "" : undefined}>
+          {d === "compact" ? "Compact" : "Comfortable"}
+        </button>
+      ))}
+    </span>
   );
 }

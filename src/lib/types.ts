@@ -31,18 +31,14 @@ export interface RouteRate {
   /** Instant booking: when on, a qualifying booking is auto-approved and
    *  confirmed the moment it is paid — no team review (src/lib/instant.ts). */
   instant?: InstantRule | null;
-  /** Under the master instant switch (InstantAll): follow the default rule,
-   *  use this route's own rule (`instant`), or keep the route on team
-   *  approval. Optional — a chart with no master switch yet (today's live
-   *  chart) ignores this and keeps using `instant` exactly as before. */
+  /** Under the master instant switch: follow the default rule, use this
+   *  route's own rule (`instant`), or keep the route on team approval. */
   instantMode?: "default" | "own" | "off";
 }
 
 /** The master instant-booking switch for the whole chart, with the default
  *  rule every route follows unless it has its own rule or is switched off.
- *  Switch off → every booking waits for team approval. Optional/nullable —
- *  when absent (today's live chart), every route falls back to its own
- *  `instant` rule exactly as before (see effectiveInstant in instant.ts). */
+ *  Switch off → every booking waits for team approval. */
 export interface InstantAll { enabled: boolean; rule: InstantRule }
 
 export interface InstantRule {
@@ -145,6 +141,8 @@ export interface Booking {
   deliveryDate?: string | null;
   ref: string;
   pnr?: string;
+  /** surname as on the airline ticket (T2 POC boarding-pass match) */
+  paxSurname?: string;
   flightTime?: string | null;
   slot: string;
   bags: number;
@@ -187,7 +185,8 @@ export interface Booking {
   events: BookingEvent[];
   lr?: { no: string; at: string; trip: string } | null;
   eway?: { at: string; status: string } | null;
-  pod?: { no: string; at: string; receiver: string } | null;
+  /** proof of delivery: OTP-verified, with who took the bags, a photo and their signature (storage paths) */
+  pod?: { no: string; at: string; receiver: string; relation?: string; photo?: string; signature?: string; by?: string } | null;
   docs?: DocRecord[];
   /** Set when this booking belongs to a wedding/group event (WeddingEvent.id). */
   eventCode?: string | null;
@@ -235,6 +234,8 @@ export interface WeddingEvent {
   sectors: EventSector[];
   contacts: { host: string; hostMobile: string; planner?: string; onsite?: string };
   landing: { names?: string; hashtag?: string; datesText?: string; sides?: string; celebration?: string; destination?: string };
+  docs?: DocRecord[];
+  hostInvoice?: HostInvoiceRecord;
 }
 
 /** A wedding/event record read by the PUBLIC guest pages (/weddings,
@@ -288,6 +289,8 @@ export interface WeddingDeskRecord {
   returns?: Record<string, WeddingReturn>;
   /** tag id -> where the tag said the bag goes when it was printed (a change means reprint) */
   printed?: Record<string, { at: string; deliver: string }>;
+  /** the team's plan for this family: pickup runs (per pickup address), delivery, return (src/lib/weddingManifest.ts) */
+  plan?: import("./weddingManifest").WeddingPlan;
 }
 
 
@@ -316,6 +319,32 @@ export interface BagdropEvent {
     celebration?: string; destination?: string;
   };
   page?: string;
+  /** Finance documents issued against this event directly (e.g. the final
+   *  host invoice — see HostInvoiceRecord below). Separate from any
+   *  individual family booking's own .docs. */
+  docs?: DocRecord[];
+  /** The final, post-event bill to the host — generated once, deliberately,
+   *  from the event's real Commercials + every family's actual bag count
+   *  (not the live estimate shown while the event is still open). See
+   *  POST /api/admin/events/host-invoice. */
+  hostInvoice?: HostInvoiceRecord;
+}
+
+/** One line of the final host invoice — one family's billed amount. */
+export interface HostInvoiceLine {
+  bookingId: string; family: string; bags: number; billedBags: number; oversize: number; rate: number; amount: number;
+}
+
+/** The final host invoice for a host-billed event (WeddingEvent.billing ===
+ *  "host"): families × billed bags (floored at the event's minBags) × the
+ *  matching sector rate, + oversize add-ons, − the volume-slab discount,
+ *  then GST on top same as every other Finance document. Uses the same
+ *  race-safe next_doc_no("INV", fy) numbering as a booking's own invoices —
+ *  see /api/admin/events/host-invoice/route.ts. */
+export interface HostInvoiceRecord {
+  no: string; at: string; by: string;
+  lines: HostInvoiceLine[];
+  subtotal: number; discountPct: number; discount: number; total: number;
 }
 
 /** Document types that go through the same race-safe numbering as LR

@@ -63,8 +63,8 @@ export function renderSnapshot(view: ViewKey, m: Metrics): Promise<Blob> {
       const up = k.delta.pct >= 0;
       const good = k.goodDown ? !up || k.delta.pct === 0 : up;
       x.fillStyle = good ? GREEN : RED; sans("700", 26);
-      x.fillText(`${up ? "▲" : "▼"} ${Math.abs(k.delta.pct)}%`, dx, ty + 100);
-      dx += x.measureText(`▲ ${Math.abs(k.delta.pct)}%`).width + 10;
+      x.fillText(`${up ? "+" : "-"}${Math.abs(k.delta.pct)}%`, dx, ty + 100);
+      dx += x.measureText(`+${Math.abs(k.delta.pct)}%`).width + 10;
     }
     if (k.hint) { x.fillStyle = MUTED; sans("400", 20); x.fillText(k.hint, tx + 26, ty + 136); }
   });
@@ -92,7 +92,7 @@ export function renderSnapshot(view: ViewKey, m: Metrics): Promise<Blob> {
   /* attention */
   x.fillStyle = INK; sans("700", 26); x.fillText("Needs attention", pad, y + 6);
   if (att.length === 0) {
-    x.fillStyle = GREEN; sans("500", 24); x.fillText("Nothing. Clean board. ✓", pad, y + 50);
+    x.fillStyle = GREEN; sans("500", 24); x.fillText("Nothing. Clean board.", pad, y + 50);
     y += 90;
   } else {
     y += 30;
