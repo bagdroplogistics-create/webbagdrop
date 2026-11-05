@@ -13,9 +13,12 @@
  *    never changes, only the last hop.
  *  · A row failing MAX_ATTEMPTS lands in status "dead" (the dead-letter
  *    queue) — never silently dropped. The admin Automation desk shows it. */
+import { LR_CONFIRMED, buildLr, withLrMilestone } from "./lrIssue";
+import { AADHAAR_REQUIRED, DRIVER_APP_ENABLED, sincePhase1 } from "./phase";
 import { mutateBooking } from "./bookingStore";
+import { bagJourneyPass } from "./bagJourney";
 import { serviceClient } from "./supabaseAdmin";
-import { MILESTONES, opsOf, type MilestoneKey } from "./opsModel";
+import { MILESTONES, opsOf, pcsLabel, type MilestoneKey } from "./opsModel";
 import { inspect, DEFAULT_DEPARTMENTS, type DeptContact } from "./inspector";
 import { COMPANY } from "./company";
 import type { Booking, CrmActivity, Inquiry } from "./types";
@@ -23,8 +26,13 @@ import { isHostBilled, isPaid } from "./payState";
 import { loadAgents } from "./partners";
 import { confirmLinkPayment, ensurePaymentLink } from "./paymentLinks";
 import { cancelPaymentLink, gatewayLinkOf, razorpayConfigured } from "./razorpay";
-import { isTrackable } from "./tracking";
-import { trackPath, passPath } from "./trackLinks";
+import { isTrackable, LEG_END, LEG_NAME, type TrackLeg } from "./tracking";
+import { driverPath, passPath, trackPath } from "./trackLinks";
+import { promoteDue } from "./pricingSettings";
+import { dailyRecon, loadRecon } from "./gatewayRecon";
+import { istToday } from "./services";
+import { decisionOf } from "./clientView";
+import { after } from "next/server";
 
 const MAX_ATTEMPTS = 5;
 
@@ -36,7 +44,7 @@ export interface OutboxDoc {
   template?: string;
   text?: string;                // rendered body
   subject?: string;
-  status: "queued" | "done" | "dead";
+  status: "queued" | "sending" | "done" | "dead";
   stub?: boolean;               // completed without a provider (link logged)
   link?: string;                // wa.me/mailto link when stubbed
   attempts: number;
@@ -66,13 +74,15 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, payment of ${d.amount} received for ${d.ref} (${d.lane}). Your tax invoice follows. Your bags are on the plan — live tracking on your booking page.`,
     subject: (d) => `Payment received · ${d.ref}`,
   },
-  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup is scheduled — captain assigned for ${d.date}, window ${d.slot}.`, subject: (d) => `Pickup scheduled · ${d.ref}` },
-  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} bag(s) picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.track ? `\nTrack live: ${d.track}` : ""}${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
-  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags are checked in at our ${d.from} hub — all pieces scanned and accounted for.`, subject: (d) => `In hub · ${d.ref}` },
-  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
+  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}, coming on ${d.date}, window ${d.slot}. Please keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
+  ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}. Your delivery captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}. They hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
+  ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags. ${d.kind}: ${d.note}${d.eta ? `\nNew expected time: ${d.eta}` : ""}\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
+  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
+  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags have reached our ${d.hub || d.from} hub — all pieces scanned and accounted for. They leave for ${d.to} next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Reached our hub · ${d.ref}` },
+  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}${d.mode ? ` by ${d.mode.toLowerCase()}` : ""}.${d.eta ? ` Expected at ${d.to}: ${d.eta}.` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
   ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
-  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}. Bags are released only against your verified identity.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
-  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered. ${d.pieces} bag(s), every tag scanned end to end. Thank you for travelling light — we'd love your feedback.${d.pass ? `\nYour Move Pass: ${d.pass}` : ""}`, subject: (d) => `Delivered · ${d.ref}` },
+  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}${d.eta ? `, expected by ${d.eta}` : ""}. The captain hands your bags over to you or the person you name at the door.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
+  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered${d.receiver ? ` to ${d.receiver}` : ""}. ${d.pieces}, every tag scanned end to end. Thank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
   quote_ready: {
     wa: (d) => `Hi ${d.name}, your Bagdrop quote for ${d.lane} is ready: ${d.amount}, locked for 24 hours.\nPay securely here: ${d.link}\nRef: ${d.ref}.`,
     subject: (d) => `Your Bagdrop quote · ${d.amount} · ${d.lane}`,
@@ -109,6 +119,26 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, identity verified for ${d.ref} — you're all set. The captain seals your bags with you at pickup on ${d.date}.`,
     subject: (d) => `Identity verified · ${d.ref}`,
   },
+  booking_cancelled: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop booking ${d.ref} (${d.lane}) has been cancelled. Reason: ${d.reason}\nIf this isn't right, reply here and we'll put it straight back. Your bookings: ${d.dashboard}`,
+    subject: (d) => `Booking cancelled · ${d.ref}`,
+  },
+  booking_restored: {
+    wa: (d) => `Hi ${d.name}, good news — your Bagdrop booking ${d.ref} (${d.lane}) is back on, exactly where it was. Nothing else changes on your side. Your bookings: ${d.dashboard}`,
+    subject: (d) => `Booking restored · ${d.ref}`,
+  },
+  quote_amended_topup: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop booking ${d.ref} (${d.lane}) has been updated: ${d.changes}. The new total is ${d.total}; ${d.amount} more is due. Pay the difference from your bookings page: ${d.dashboard}`,
+    subject: (d) => `Booking updated · ${d.amount} more due · ${d.ref}`,
+  },
+  quote_amended_credit: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop booking ${d.ref} (${d.lane}) has been updated: ${d.changes}. The new total is ${d.total}, so we've issued you credit note ${d.cn} for ${d.amount}, valid till ${d.expires}. Use it on any Bagdrop booking. Your bookings: ${d.dashboard}`,
+    subject: (d) => `Booking updated · credit note ${d.cn} · ${d.ref}`,
+  },
+  quote_amended_same: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop booking ${d.ref} (${d.lane}) has been updated: ${d.changes}. The price stays ${d.total}. Your bookings: ${d.dashboard}`,
+    subject: (d) => `Booking updated · ${d.ref}`,
+  },
   /* internal — the ops alert channel renders its own text */
   ops_alert: {
     wa: (d) => d.text,
@@ -121,6 +151,20 @@ export const TEMPLATES: Record<string, T> = {
       : `Hi ${d.name}, good news — your Bagdrop booking ${d.ref} (${d.lane}) is APPROVED. Amount payable: ${d.amount} (GST 5% included).\nPay by UPI to ${d.upi}${d.bank ? ` or bank transfer to ${d.bank}` : ""}, then upload your payment screenshot in your dashboard: ${d.dashboard}\nPayment page with QR: ${d.link}`,
     subject: (d) => `Approved · pay ${d.amount} to confirm ${d.ref}`,
   },
+  /* wedding desk messages: a reply to the guest, and a guest's message to the event company */
+  wedding_reply: {
+    wa: (d) => `Hi ${d.name}, ${d.from} replied about your bags (${d.ref}):\n"${d.text}"\nSee your bags and reply here: ${d.link}`,
+    subject: (d) => `Reply about your bags · ${d.ref}`,
+  },
+  wedding_guest_message: {
+    wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
+    subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
+  },
+  /* hosted wedding family: confirmed by the team, nothing to pay */
+  wedding_confirmed: {
+    wa: (d) => `Hi ${d.name}, your bags for ${d.event} are CONFIRMED by Bagdrop (booking ${d.ref}, ${d.lane}). The hosts are covering this, so there is nothing to pay. Pickup: ${d.date}${d.slot ? `, ${d.slot}` : ""}. We will message you before the captain arrives.`,
+    subject: (d) => `Bags confirmed · ${d.ref}`,
+  },
   booking_rejected: {
     wa: (d) => `Hi ${d.name}, we're sorry — we can't take booking ${d.ref} (${d.lane}). Reason: ${d.note}. Reply here and our team will help with an alternative.`,
     subject: (d) => `About your Bagdrop booking ${d.ref}`,
@@ -128,6 +172,22 @@ export const TEMPLATES: Record<string, T> = {
   booking_on_hold: {
     wa: (d) => `Hi ${d.name}, your Bagdrop booking ${d.ref} (${d.lane}) is on hold for a moment: ${d.note}. We'll update you shortly — no action needed yet.`,
     subject: (d) => `Booking on hold · ${d.ref}`,
+  },
+  driver_link: {
+    wa: (d) => `Bagdrop job ${d.ref} · ${d.leg} · ${d.lane} · ${d.date}${d.slot ? `, ${d.slot}` : ""} · ${d.pieces}.\nOpen this link and tap "Start trip" so the customer and our team can see the move live. Keep the page open until you tap Done: ${d.link}`,
+    subject: (d) => `Bagdrop job ${d.ref} · ${d.leg} · driver link`,
+  },
+  move_pass: {
+    wa: (d) => `Hi ${d.name}, your Bagdrop Move Pass for ${d.ref} (${d.lane}) is ready — pickup ${d.date}${d.slot ? `, ${d.slot}` : ""}. It's your boarding pass for your bags: show it at pickup and at delivery. ${d.pass}`,
+    subject: (d) => `Your Move Pass · ${d.ref} · ${d.lane}`,
+  },
+  delivery_otp: {
+    wa: (d) => `Bagdrop ${d.ref}: your delivery OTP is ${d.otp}. Give it to captain ${d.captain} only after every bag has been handed over and matched to your Move Pass. Valid 30 minutes. Never share it on a call.`,
+    subject: (d) => `Delivery OTP for ${d.ref}`,
+  },
+  booking_rescheduled: {
+    wa: (d) => `Hi ${d.name}, the ${d.leg} for your Bagdrop booking ${d.ref} (${d.lane}) has moved to ${d.when} (was ${d.was}). Reason: ${d.note}.\nIf this doesn't suit you, just reply here and we'll sort it out. Your bookings: ${d.dashboard}`,
+    subject: (d) => `New ${d.leg} date for ${d.ref} · ${d.when}`,
   },
   booking_info_needed: {
     wa: (d) => `Hi ${d.name}, to process booking ${d.ref} (${d.lane}) we need a little more from you: ${d.note}\nReply here, or update it in your dashboard: ${d.dashboard}`,
@@ -149,24 +209,6 @@ export const TEMPLATES: Record<string, T> = {
   topup_verified: {
     wa: (d) => `Hi ${d.name}, the extra payment of ${d.amount} for ${d.ref} is verified. Your updated bag count is confirmed.`,
     subject: (d) => `Extra payment verified · ${d.ref}`,
-  },
-  /* ---- weddings & events: guest ↔ event company / Bagdrop messaging ---- */
-  wedding_reply: {
-    wa: (d) => `Hi ${d.name}, ${d.from} replied about your bags (${d.ref}):\n"${d.text}"\nSee your bags and reply here: ${d.link}`,
-    subject: (d) => `Reply about your bags · ${d.ref}`,
-  },
-  wedding_guest_message: {
-    wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
-    subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
-  },
-  /* hosted wedding family: confirmed by the team, nothing to pay */
-  wedding_confirmed: {
-    wa: (d) => `Hi ${d.name}, your bags for ${d.event} are CONFIRMED by Bagdrop (booking ${d.ref}, ${d.lane}). The hosts are covering this, so there is nothing to pay. Pickup: ${d.date}${d.slot ? `, ${d.slot}` : ""}. We will message you before the captain arrives.`,
-    subject: (d) => `Bags confirmed · ${d.ref}`,
-  },
-  move_pass: {
-    wa: (d) => `Hi ${d.name}, your Bagdrop Move Pass for ${d.ref} (${d.lane}) is ready — pickup ${d.date}${d.slot ? `, ${d.slot}` : ""}. It's your boarding pass for your bags: show it at pickup and at delivery. ${d.pass}`,
-    subject: (d) => `Your Move Pass · ${d.ref} · ${d.lane}`,
   },
 };
 
@@ -234,8 +276,18 @@ export async function loadDepartments(): Promise<DeptContact[]> {
 }
 
 export const MILESTONE_TEMPLATE: Partial<Record<MilestoneKey, string>> = {
-  assign: "ms_assign", picked: "ms_picked", inscan: "ms_inscan",
-  depart: "ms_depart", arrive: "ms_arrive", ofd: "ms_ofd", pod: "ms_pod",
+  /* key moments only (2026-10-31): the customer hears about pickup,
+   * departure, arrival, out-for-delivery and delivery — each with the live
+   * tracking link. LR, captain assignment and hub in-scan stay internal. */
+  /* phase 1 (2026-11-04): captain assigned and reached our hub are client moments too */
+  assign: "ms_assign", picked: "ms_picked", inscan: "ms_inscan", depart: "ms_depart", arrive: "ms_arrive", ofd: "ms_ofd", pod: "ms_pod",
+};
+/** Client moments added in phase 1 — sent only for steps taken since then. */
+const NEW_MOMENTS: MilestoneKey[] = ["assign", "inscan"];
+/** "10 Dec, 2:30 PM" in IST, for messages. */
+export const istWhen = (iso?: string) => {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return "";
+  return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 };
 
 /* ================= outbox primitives ================= */
@@ -281,38 +333,6 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
     body: JSON.stringify({ messaging_product: "whatsapp", to: msisdn, type: "text", text: { body: text } }),
   });
   if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
-  return { stub: false };
-}
-
-/** A free-form text message (what sendWhatsApp above sends) only reaches a
- *  number that messaged Bagdrop first within the last 24 hours — WhatsApp's
- *  Cloud API still answers 200 OK for one outside that window, then silently
- *  drops it, which is why a first-time guest's OTP looks "sent" here but
- *  never arrives. The fix is an approved Authentication-category template;
- *  this sends through it once WHATSAPP_OTP_TEMPLATE_NAME is set (unset =
- *  identical behaviour to today, falling back to sendWhatsApp above, so this
- *  is a no-op until that env var exists). Set WHATSAPP_OTP_TEMPLATE_LANG if
- *  the approved template isn't en_US, and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1
- *  if Meta's template wizard added its default "Copy code" quick-reply
- *  button (it adds a second, button-type component the request needs). */
-export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText: string): Promise<{ stub: boolean; link?: string }> {
-  const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME;
-  if (!templateName) return sendWhatsApp(mobile, fallbackText);
-  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
-  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
-  if (!token || !phoneId) return { stub: true, link: `https://wa.me/${msisdn}?text=${encodeURIComponent(code)}` };
-  const components: Record<string, unknown>[] = [{ type: "body", parameters: [{ type: "text", text: code }] }];
-  if (process.env.WHATSAPP_OTP_TEMPLATE_HAS_BUTTON === "1") {
-    components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] });
-  }
-  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", to: msisdn, type: "template",
-      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US" }, components },
-    }),
-  });
-  if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 600)}`);
   return { stub: false };
 }
 
@@ -382,7 +402,7 @@ async function capturePass(stats: SweepStats) {
       : await notify("inquiry_ack", { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email },
           { lane: `${b.from} → ${b.to}`, ref: b.id }, `ack:${b.id}`);
     stats.opsQueued += await opsNotify(
-      `${inst ? "⚡ INSTANT " : "🧳 New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · ${b.date || "date TBC"} · via ${b.source ?? "website"}${paid ? ` · PAID ${inr(b.pay!.amount)}` : " · rate to confirm"}`,
+      `${inst ? "INSTANT " : "New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · ${b.date || "date TBC"} · via ${b.source ?? "website"}${paid ? ` · PAID ${inr(b.pay!.amount)}` : " · rate to confirm"}`,
       `New ${paid ? "booking" : "request"} · ${b.id} · ${b.from} → ${b.to}`,
       `ops:new:${b.id}`);
   }
@@ -402,7 +422,7 @@ async function capturePass(stats: SweepStats) {
       { name: i.contact.name, mobile: i.contact.mobile, email: i.contact.email },
       { lane: i.venueCity ?? "your event", ref: i.id }, `ack:${i.id}`);
     stats.opsQueued += await opsNotify(
-      `📥 New inquiry ${i.id} · ${i.contact.name} (${i.contact.role ?? "event"}) · ${i.bags ?? "?"} bags · ${i.families ?? "?"} families · ${i.venue ?? i.venueCity ?? ""} — needs a rate.`,
+      `New inquiry ${i.id} · ${i.contact.name} (${i.contact.role ?? "event"}) · ${i.bags ?? "?"} bags · ${i.families ?? "?"} families · ${i.venue ?? i.venueCity ?? ""} — needs a rate.`,
       `New inquiry · ${i.id}`,
       `ops:inq:${i.id}`);
   }
@@ -420,45 +440,88 @@ async function eventPass(stats: SweepStats) {
   for (const r of data ?? []) {
     const b = r.doc as Booking;
     const to = { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email };
-    const d: Record<string, string> = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: String(b.bags + b.oversize), amount: inr(b.pay?.amount ?? 0) };
-    if (isTrackable(b)) { d.track = trackPath(b.id); d.pass = passPath(b.id); }
+    const d = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: pcsLabel(b.bags, b.oversize, "bags"), amount: inr(b.pay?.amount ?? 0) };
     if (isPaid(b)) {
       stats.paidQueued += await notify("payment_received", to, d, `paid:${b.id}`);
       stats.opsQueued += await opsNotify(
-        `💰 Payment verified · ${b.id} · ${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway} · ${b.from} → ${b.to}${b.identity?.ok ? "" : " · Aadhaar pending (pickup locked)"}`,
+        `Payment verified · ${b.id} · ${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway} · ${b.from} → ${b.to}${!AADHAAR_REQUIRED || b.identity?.ok ? "" : " · Aadhaar pending (pickup locked)"}`,
         `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`,
         `ops:paid:${b.id}`);
     }
     /* hosted wedding family confirmed (from Shipments "Confirm booking" or an approval) → one confirmation */
     if (isHostBilled(b) && ["accepted", "assigned"].includes(b.status)) {
-      stats.paidQueued += await notify("wedding_confirmed", to, { ...d, event: b.eventName || "the wedding" }, `wedconf:${b.id}`);
-    }
-    /* the Move Pass goes out once the move is confirmed (approved + paid / billed) */
-    if (d.pass && !opsOf(b).milestones?.pod && ["accepted", "assigned", "picked_up", "in_transit"].includes(b.status)) {
-      stats.milestoneQueued += await notify("move_pass", to, { ...d, slot: b.slot || "" }, `pass:${b.id}`);
+      stats.acksQueued += await notify("wedding_confirmed", to, { ...d, event: b.eventName || "the wedding" }, `wedconf:${b.id}`);
     }
     /* paid but not yet Aadhaar-verified → one verification ask (pickup is
      * blocked server-side until identity.ok, so this closes the loop) */
-    if ((isPaid(b) || (b.payer && b.status === "accepted")) && !b.identity?.ok && !["delivered", "cancelled", "rejected"].includes(b.status)) {
+    if (AADHAAR_REQUIRED && (isPaid(b) || (b.payer && b.status === "accepted")) && !b.identity?.ok && !["delivered", "cancelled", "rejected"].includes(b.status)) {
       stats.paidQueued += await notify("verify_identity", to, { ...d, link: `/verify/${b.id}` }, `idv:${b.id}`);
     }
-    if (b.identity?.ok && isPaid(b)) {
+    if (AADHAAR_REQUIRED && b.identity?.ok && isPaid(b)) {
       stats.paidQueued += await notify("identity_done", to, d, `idok:${b.id}`);
       stats.opsQueued += await opsNotify(
-        `🪪 Identity verified · ${b.id} · ${b.traveller.name} · pickup released (${b.slot || "slot TBC"} on ${b.date || "date TBC"})`,
+        `Identity verified · ${b.id} · ${b.traveller.name} · pickup released (${b.slot || "slot TBC"} on ${b.date || "date TBC"})`,
         `Identity verified · ${b.id}`,
         `ops:idok:${b.id}`);
     }
     const ms = opsOf(b).milestones ?? {};
+    const track = !ms.pod && isTrackable(b) ? trackPath(b.id) : "";
+    const pass = isTrackable(b) ? passPath(b.id) : "";
+    /* the Move Pass goes out once the move is confirmed (approved + paid / billed) */
+    if (pass && !ms.pod && ["accepted", "assigned", "picked_up", "in_transit"].includes(b.status)) {
+      stats.milestoneQueued += await notify("move_pass", to, { ...d, pass, slot: b.slot || "" }, `pass:${b.id}`);
+    }
+    const legs = opsOf(b).legs ?? {};
+    const phone = (m?: string) => { const x = (m ?? "").replace(/\D/g, "").slice(-10); return x.length === 10 ? `+91 ${x.slice(0, 5)} ${x.slice(5)}` : ""; };
+    const extra: Partial<Record<MilestoneKey, Record<string, string>>> = {
+      assign: { captain: legs.pickup?.assignee ?? "our captain", captainPhone: phone(legs.pickup?.mobile) },
+      inscan: { hub: ms.inscan?.detail?.hub ?? "" },
+      depart: { mode: ms.depart?.detail?.mode ?? "", eta: istWhen(ms.depart?.detail?.eta) },
+      ofd: { eta: istWhen(ms.ofd?.detail?.eta) },
+      pod: { receiver: b.pod?.receiver && b.pod.relation && b.pod.relation !== "Self" ? `${b.pod.receiver} (${b.pod.relation.toLowerCase()})` : b.pod?.receiver ?? "" },
+    };
+    /* a step taken back and done again doesn't message twice: keys are per step */
     for (const m of MILESTONES) {
       const tpl = MILESTONE_TEMPLATE[m.key];
-      if (tpl && ms[m.key]) {
-        stats.milestoneQueued += await notify(tpl, to, d, `ms:${b.id}:${m.key}`);
+      if (tpl && ms[m.key] && (!NEW_MOMENTS.includes(m.key) || sincePhase1(ms[m.key]!.at))) {
+        stats.milestoneQueued += await notify(tpl, to, { ...d, track, pass: m.key === "picked" ? pass : "", ...(extra[m.key] ?? {}) }, `ms:${b.id}:${m.key}`);
         stats.opsQueued += await opsNotify(
-          `🚚 ${b.id} · ${m.name} · ${b.from} → ${b.to} · ${b.traveller.name}`,
+          `${b.id} · ${m.name} · ${b.from} → ${b.to} · ${b.traveller.name}`,
           `${m.name} · ${b.id}`,
           `ops:ms:${b.id}:${m.key}`);
       }
+    }
+    /* the delivery captain, once assigned (a new captain = a new message) */
+    if (legs.lastmile?.assignee && sincePhase1(legs.lastmile.at) && !ms.pod && isTrackable(b)) {
+      stats.milestoneQueued += await notify("ms_dcaptain", to, { ...d, track, captain: legs.lastmile.assignee, captainPhone: phone(legs.lastmile.mobile) }, `dcap:${b.id}:${legs.lastmile.assignee}:${legs.lastmile.mobile ?? ""}`);
+    }
+    /* problems raised by ops: one message each, while the move is open */
+    if (isTrackable(b)) for (const e of opsOf(b).exceptions ?? []) {
+      if (e.resolved || !sincePhase1(e.at)) continue;
+      stats.milestoneQueued += await notify("ms_problem", to, { ...d, track, kind: e.kind, note: e.note, eta: istWhen(e.eta) }, `exc:${b.id}:${e.at}`);
+    }
+  }
+}
+
+/** Pass B2 — driver links: whoever is assigned to a leg (captain or
+ *  vendor, with a mobile) gets their /d/ link once, so their phone can share
+ *  GPS while the leg is open. A new assignee or number gets a fresh one. */
+async function driverLinkPass(stats: SweepStats) {
+  if (!DRIVER_APP_ENABLED) return; // phase 1: the team records every step in Operations
+  const sb = serviceClient()!;
+  const { data } = await sb.from("bookings").select("doc").in("status", ["accepted", "assigned", "picked_up", "in_transit"]);
+  for (const r of data ?? []) {
+    const b = r.doc as Booking;
+    if (!isTrackable(b)) continue;
+    const o = opsOf(b);
+    for (const leg of ["pickup", "linehaul", "lastmile"] as TrackLeg[]) {
+      const l = o.legs?.[leg];
+      const digits = (l?.mobile ?? "").replace(/\D/g, "");
+      if (!l?.assignee || digits.length < 10 || o.milestones?.[LEG_END[leg]]) continue;
+      stats.opsQueued += await notify("driver_link", { name: l.assignee, mobile: l.mobile }, {
+        ref: b.id, leg: LEG_NAME[leg], lane: `${b.from} → ${b.to}`, date: (b.pickupDate || b.date).slice(0, 10),
+        slot: leg === "pickup" ? b.slot : "", pieces: pcsLabel(b.bags, b.oversize), link: driverPath(b.id, leg),
+      }, `drv:${b.id}:${leg}:${digits.slice(-10)}`);
     }
   }
 }
@@ -470,12 +533,12 @@ async function eventPass(stats: SweepStats) {
  *  client's own messages. */
 const AGENT_MS: Partial<Record<MilestoneKey, [string, (b: Booking) => string]>> = {
   assign: ["Captain assigned", (b) => `captain assigned — pickup on ${b.date || "the planned date"}, ${b.slot || "window as planned"}.`],
-  picked: ["Picked up", (b) => `${b.bags + b.oversize} bag(s) picked up and sealed with your client.`],
+  picked: ["Picked up", (b) => `${pcsLabel(b.bags, b.oversize, "bags")} picked up and sealed with your client.`],
   inscan: ["At hub", (b) => `bags checked in at our ${b.from} hub, every piece scanned.`],
   depart: ["In transit", (b) => `bags departed ${b.from} for ${b.to}.`],
   arrive: ["Arrived", (b) => `bags arrived at ${b.to}; delivery is next.`],
   ofd: ["Out for delivery", (b) => `out for delivery in ${b.to}.`],
-  pod: ["Delivered", (b) => `delivered — ${b.bags + b.oversize} bag(s), every tag scanned end to end.`],
+  pod: ["Delivered", (b) => `delivered — ${pcsLabel(b.bags, b.oversize, "bags")}, every tag scanned end to end.`],
 };
 async function agentPass(stats: SweepStats) {
   const sb = serviceClient()!;
@@ -495,11 +558,11 @@ async function agentPass(stats: SweepStats) {
       stats.agentQueued += await notify("agent_update", to, { ...base, headline, update }, `ag:${b.id}:${step}`);
     };
     const closed = ["cancelled", "rejected"].includes(b.status);
-    await send("received", "Booking received", `booking received for ${b.bags + b.oversize} bag(s) on ${b.date || "date TBC"}. Bagdrop confirms it shortly.`);
+    await send("received", "Booking received", `booking received for ${pcsLabel(b.bags, b.oversize, "bags")} on ${b.date || "date TBC"}. Bagdrop confirms it shortly.`);
     if (closed) { await send("closed", "Booking cancelled", `this booking was ${b.status}. Contact your Bagdrop account manager for details.`); continue; }
     if (["accepted", "assigned", "picked_up", "in_transit", "delivered"].includes(b.status)) await send("confirmed", "Booking confirmed", "confirmed by Bagdrop.");
-    if (!b.identity?.ok && b.status !== "delivered") await send("bond", "Client to sign bond", `your client must sign the baggage declaration & bond before pickup — share this link with them: ${SITE}/verify/${b.id}`);
-    if (b.identity?.ok) await send("bondok", "Bond signed", "your client has signed the bond — pickup is released.");
+    if (AADHAAR_REQUIRED && !b.identity?.ok && b.status !== "delivered") await send("bond", "Client to sign bond", `your client must sign the baggage declaration & bond before pickup — share this link with them: ${SITE}/verify/${b.id}`);
+    if (AADHAAR_REQUIRED && b.identity?.ok) await send("bondok", "Bond signed", "your client has signed the bond — pickup is released.");
     const ms = opsOf(b).milestones ?? {};
     for (const m of MILESTONES) {
       const step = AGENT_MS[m.key];
@@ -514,11 +577,11 @@ async function agentPass(stats: SweepStats) {
 export async function announcePayment(b: Booking, p: { kind: "full" | "topup"; amount: number; paymentId: string; method?: string; duplicate: boolean; via: string }) {
   const to = { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email };
   if (p.duplicate) {
-    await opsNotify(`⚠ DUPLICATE ONLINE PAYMENT · ${b.id} · ${b.traveller.name} · ${inr(p.amount)} · Razorpay ${p.paymentId} — the booking was already paid. Refund this payment in the Razorpay dashboard.`, `Duplicate payment to refund · ${b.id}`, `rzpdup:${p.paymentId}`);
+    await opsNotify(`DUPLICATE ONLINE PAYMENT · ${b.id} · ${b.traveller.name} · ${inr(p.amount)} · Razorpay ${p.paymentId} — the booking was already paid. Refund this payment in the Razorpay dashboard.`, `Duplicate payment to refund · ${b.id}`, `rzpdup:${p.paymentId}`);
     return;
   }
   if (p.kind === "topup") await notify("topup_verified", to, { ref: b.id, amount: inr(p.amount) }, `topupok:${b.id}:${p.paymentId}`);
-  await opsNotify(`💳 PAID ONLINE · ${b.id} · ${b.traveller.name} · ${inr(p.amount)}${p.kind === "topup" ? " (extra bags)" : ""} · Razorpay ${p.paymentId}${p.method ? ` · ${p.method}` : ""} · via ${p.via} — auto-verified, no finance action needed.`, `Paid online · ${inr(p.amount)} · ${b.id}`, `rzp:${p.paymentId}`);
+  await opsNotify(`PAID ONLINE · ${b.id} · ${b.traveller.name} · ${inr(p.amount)}${p.kind === "topup" ? " (extra bags)" : ""} · Razorpay ${p.paymentId}${p.method ? ` · ${p.method}` : ""} · via ${p.via} — auto-verified, no finance action needed.`, `Paid online · ${inr(p.amount)} · ${b.id}`, `rzp:${p.paymentId}`);
   kickSweep();
 }
 
@@ -542,6 +605,25 @@ async function paymentLinkPass(stats: SweepStats) {
 /** Pass B1c — instant holds: an instant booking not paid within its hold
  *  goes back to the team for a normal approval (its link is cancelled), so
  *  an unpaid booking never keeps an instant place. */
+/** The standard approval rule: a booking on a route with instant booking OFF
+ *  (or outside its instant rule) waits in Shipments for someone with "Approve
+ *  bookings". If it is still waiting after APPROVAL_REMIND_HOURS, the team
+ *  gets one reminder for it. */
+const APPROVAL_REMIND_HOURS = 2;
+async function approvalReminderPass() {
+  const sb = serviceClient()!;
+  const since = new Date(Date.now() - 3 * 86_400_000).toISOString(); // recent requests only — older ones are already on the Shipments list
+  const { data } = await sb.from("bookings").select("doc").in("status", ["submitted", "revised"]).gte("created", since).limit(300);
+  const cutoff = Date.now() - APPROVAL_REMIND_HOURS * 3_600_000;
+  for (const r of data ?? []) {
+    const b = r.doc as Booking;
+    if (isPaid(b) || decisionOf(b).state !== "pending" || Date.parse(b.created) > cutoff) continue;
+    if (!(await claimOnce(`approval-remind:${b.id}`))) continue;
+    const hrs = Math.floor((Date.now() - Date.parse(b.created)) / 3_600_000);
+    await opsNotify(`Waiting for approval ${hrs}h: ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · ${b.date || "date TBC"}. Decide it in BAGDROP OS → Shipments → Quotes & payments.`, `Booking waiting for approval · ${b.id}`, `ops:approval:${b.id}`).catch(() => 0);
+  }
+}
+
 async function instantHoldPass(stats: SweepStats) {
   const sb = serviceClient()!;
   const { data } = await sb.from("bookings").select("doc").order("created", { ascending: false }).limit(300);
@@ -560,13 +642,13 @@ async function instantHoldPass(stats: SweepStats) {
       return {
         ...fresh, status: "submitted",
         admin: { ...admin, instant: { ...fi, expired: true, expiredAt: now }, decision: { state: "pending", at: now, note: "Instant hold lapsed unpaid — needs team approval" } },
-        events: [...fresh.events, { at: now, by: "admin", text: "⏱ Instant hold lapsed unpaid — moved to team approval" }],
+        events: [...fresh.events, { at: now, by: "admin", text: "Instant hold lapsed unpaid — moved to team approval" }],
       };
     });
     if (!saved) continue;
     const link = gatewayLinkOf(b);
     if (link) await cancelPaymentLink(link.id);
-    stats.opsQueued += await opsNotify(`⏱ Instant hold lapsed · ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} — not paid in time, now waiting for a decision in Shipments.`, `Instant hold lapsed · ${b.id}`, `ops:lapse:${b.id}`);
+    stats.opsQueued += await opsNotify(`Instant hold lapsed · ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} — not paid in time, now waiting for a decision in Shipments.`, `Instant hold lapsed · ${b.id}`, `ops:lapse:${b.id}`);
     await notify("instant_lapsed", { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email }, { ref: b.id, lane: `${b.from} → ${b.to}`, dashboard: "/account" }, `lapse:${b.id}`);
   }
 }
@@ -632,11 +714,11 @@ async function ctoPass(stats: SweepStats) {
   for (const f of flags) {
     const b = bookings.find((x) => x.id === f.bookingId)!;
     /* already flagged (by CTO or a human)? the event log is the ledger */
-    if (b.events.some((e) => e.text.startsWith(`⚑ Flagged ${f.rule}`))) continue;
+    if (b.events.some((e) => e.text.replace(/^\u2691 /, "").startsWith(`Flagged ${f.rule}`))) continue;
 
     const dept = depts.find((d) => d.key === f.dept);
-    const text = `⚑ CTO auto-flag · ${f.bookingId} · ${f.title} (${f.ageH.toFixed(0)}h off plan)\n${f.detail}\nSOP: ${f.sop}\nLane: ${f.lane} · ${f.date} ${f.slot} · client ${f.client.name} ${f.client.mobile}${f.captain ? ` · captain ${f.captain}` : ""}${f.vendorMobile ? ` · vendor ${f.vendorMobile}` : ""}\nAct now and update the Tracking Inspector.`;
-    const subject = `⚑ CTO auto-flag · ${f.title} · ${f.bookingId}`;
+    const text = `CTO auto-flag · ${f.bookingId} · ${f.title} (${f.ageH.toFixed(0)}h off plan)\n${f.detail}\nSOP: ${f.sop}\nLane: ${f.lane} · ${f.date} ${f.slot} · client ${f.client.name} ${f.client.mobile}${f.captain ? ` · captain ${f.captain}` : ""}${f.vendorMobile ? ` · vendor ${f.vendorMobile}` : ""}\nAct now and update the Tracking Inspector.`;
+    const subject = `CTO auto-flag · ${f.title} · ${f.bookingId}`;
 
     let queued = 0;
     if (dept?.mobile || dept?.email) {
@@ -648,7 +730,7 @@ async function ctoPass(stats: SweepStats) {
 
     const flag = {
       at: new Date().toISOString(), by: "admin" as const,
-      text: `⚑ Flagged ${f.rule} → ${dept?.name ?? "ops contact"} · auto · Chief Tracking Officer · ${f.title} (${f.ageH.toFixed(0)}h off plan)`,
+      text: `Flagged ${f.rule} → ${dept?.name ?? "ops contact"} · auto · Chief Tracking Officer · ${f.title} (${f.ageH.toFixed(0)}h off plan)`,
     };
     const next = await writeFresh(b.id, (fr) => ({ ...fr, events: [...fr.events, flag] }));
     if (next) b.events = next.events; // keep the in-memory copy consistent for this pass
@@ -696,7 +778,7 @@ async function lrDraftPass(stats: SweepStats) {
     });
     if (next) stats.lrDrafts++;
     stats.opsQueued += await opsNotify(
-      `📋 LR ready for approval · ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${pieces} pcs · dispatch ${b.date} — auto-drafted, approve it on the LR page.`,
+      `LR ready for approval · ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${pieces} pcs · dispatch ${b.date} — auto-drafted, approve it on the LR page.`,
       `LR awaiting approval · ${b.id}`,
       `lrdraft:${b.id}`);
   }
@@ -727,7 +809,7 @@ async function invoicePass(stats: SweepStats) {
   /* credit notes: active → expired once past their expiry date */
   const { data: cnRow } = await sb.from("settings").select("doc").eq("id", "creditnotes").maybeSingle();
   const notes = ((cnRow?.doc as { notes?: { id: string; status: string; expiresAt?: string }[] })?.notes ?? []);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
   let changed = false;
   for (const n of notes) {
     if (n.status === "active" && n.expiresAt && n.expiresAt < today) { n.status = "expired"; changed = true; }
@@ -738,9 +820,18 @@ async function invoicePass(stats: SweepStats) {
 /** Pass C — drain: deliver queued sends through the providers. */
 async function drainPass(stats: SweepStats, limit = 40) {
   const sb = serviceClient()!;
+  /* a send that crashed mid-way (claimed > 10 minutes ago) goes back in the queue */
+  const { data: stuck } = await sb.from("outbox").select("id, doc").eq("status", "sending").limit(100);
+  for (const r of stuck ?? []) {
+    const d = r.doc as OutboxDoc & { claimedAt?: string };
+    if (!d.claimedAt || Date.parse(d.claimedAt) < Date.now() - 10 * 60_000) await sb.from("outbox").update({ status: "queued", doc: { ...d, status: "queued" } }).eq("id", r.id).eq("status", "sending");
+  }
   const { data } = await sb.from("outbox").select("id, doc").eq("status", "queued").order("created").limit(limit);
   for (const row of data ?? []) {
     const doc = row.doc as OutboxDoc;
+    /* claim it first: only the runner that flips queued → sending sends it, so a cron run and a kick never double-send */
+    const { data: claimed } = await sb.from("outbox").update({ status: "sending", doc: { ...doc, status: "sending", claimedAt: new Date().toISOString() } }).eq("id", row.id).eq("status", "queued").select("id");
+    if (!claimed?.length) continue;
     try {
       const res = doc.kind === "send.wa"
         ? await sendWhatsApp(doc.to!, doc.text!)
@@ -760,6 +851,37 @@ async function drainPass(stats: SweepStats, limit = 40) {
   }
 }
 
+/** Pass B0 — PHASE 1: payment accepted starts the operation. Every
+ *  confirmed booking whose payment is settled (verified by finance, partner
+ *  wallet/credit, or host-billed) gets its LR issued automatically, which
+ *  ticks "LR issued" in Operations — the booking then waits there as
+ *  "To assign pickup". LRs issued earlier on the LR page get the step too. */
+async function autoLrPass(stats: SweepStats) {
+  const sb = serviceClient()!;
+  const { data } = await sb.from("bookings").select("doc").in("status", LR_CONFIRMED).limit(400);
+  for (const r of data ?? []) {
+    const b = r.doc as Booking;
+    if (!(isPaid(b) || b.payer)) continue;
+    if (b.lr) {
+      if (!opsOf(b).milestones?.lr) await writeFresh(b.id, (f) => (f.lr && !opsOf(f).milestones?.lr ? withLrMilestone(f, "LR desk") : null));
+      continue;
+    }
+    const built = await buildLr(sb, b, { by: "automation", auto: true });
+    if (!built.ok) continue;
+    const n = built.booking;
+    const saved = await writeFresh(b.id, (f) => f.lr || !(isPaid(f) || f.payer) || !LR_CONFIRMED.includes(f.status) ? null : withLrMilestone({
+      ...f, lr: n.lr, docs: [...(f.docs ?? []), ...(n.docs ?? []).slice((b.docs ?? []).length)],
+      admin: { ...Object.fromEntries(Object.entries(f.admin).filter(([k]) => k !== "lrDraft")), trip: (n.admin as { trip?: string }).trip, ...((n.admin as { lrDetails?: unknown }).lrDetails ? { lrDetails: (n.admin as { lrDetails?: unknown }).lrDetails } : {}) },
+      events: [...f.events, n.events[n.events.length - 1]],
+    }, "automation"));
+    if (saved) {
+      stats.lrDrafts++;
+      stats.opsQueued += await opsNotify(`LR ${saved.lr!.no} issued · ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · payment accepted — assign the pickup captain in Operations.`,
+        `To assign pickup · ${b.id}`, `ops:autolr:${b.id}`);
+    }
+  }
+}
+
 /** Pass B6 — COMPLIANCE: a paid booking whose bond is still unsigned on the
  *  day before (or the day of) pickup is an issue — the client gets a
  *  reminder and the BAGDROP OS compliance desk an alert, once per day. */
@@ -770,30 +892,55 @@ async function compliancePass(stats: SweepStats) {
   const { data } = await sb.from("bookings").select("doc").in("status", ["accepted", "assigned", "submitted", "revised"]).limit(300);
   for (const r of data ?? []) {
     const b = r.doc as Booking;
-    if (!(isPaid(b) || b.payer) || b.identity?.ok || !b.date || b.date > tomorrow || b.date < today) continue;
+    if (!AADHAAR_REQUIRED || !(isPaid(b) || b.payer) || b.identity?.ok || !b.date || b.date > tomorrow || b.date < today) continue;
     const to = { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email };
     const d = { ref: b.id, lane: `${b.from} → ${b.to}`, date: b.date, link: `/verify/${b.id}` };
     stats.paidQueued += await notify("kyc_due", to, d, `kycdue:${b.id}:${today}`);
     const why = (b.admin as { aadhaarLocked?: boolean }).aadhaarLocked ? "Aadhaar locked" : b.kyc?.status === "docs_submitted" ? "documents waiting for OUR review" : b.kyc?.status === "docs_rejected" ? "documents rejected, client to re-upload" : "bond not signed";
-    stats.opsQueued += await opsNotify(`🛂 PICKUP AT RISK · ${b.id} · ${b.traveller.name} · pickup ${b.date === today ? "TODAY" : "tomorrow"} · ${why} — Identity & compliance.`,
+    stats.opsQueued += await opsNotify(`PICKUP AT RISK · ${b.id} · ${b.traveller.name} · pickup ${b.date === today ? "TODAY" : "tomorrow"} · ${why} — Identity & compliance.`,
       `Pickup at risk · ${b.id}`, `ops:kycdue:${b.id}:${today}`);
   }
 }
 
 /** The full sweep — idempotent, safe to run as often as you like. */
+/** Pass G — Razorpay reconciliation once a day (last 7 days); one ops alert a day while problems are open. */
+async function gatewayReconPass(stats: SweepStats) {
+  const sb = serviceClient()!;
+  const day = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+  const doc = await loadRecon(sb);
+  if (doc.last?.source === "api" && Date.now() - Date.parse(doc.last.runAt) < 20 * 3600_000) return;
+  if (!(await claimOnce(`gwrecon:${day}`))) return; // one run a day, even with sweeps running side by side
+  const r = await dailyRecon(sb);
+  if (!r) return;
+  const { resolved } = await loadRecon(sb);
+  const open = r.issues.filter((i) => i.severity === "high" && !resolved[i.key]);
+  if (open.length) {
+    stats.opsQueued += await opsNotify(`Gateway reconciliation · ${open.length} problem${open.length === 1 ? "" : "s"} to check in Finance → Gateway: ${open.slice(0, 3).map((i) => i.text).join(" | ")}`, `Razorpay reconciliation · ${open.length} to check`, `ops:gwrecon:${day}`);
+  }
+}
+
 export async function runSweep(): Promise<SweepStats> {
   const stats: SweepStats = { leadsCreated: 0, acksQueued: 0, milestoneQueued: 0, paidQueued: 0, cadenceQueued: 0, requoted: 0, opsQueued: 0, ctoFlagged: 0, lrDrafts: 0, invoices: 0, sent: 0, stubbed: 0, failed: 0, dead: 0, agentQueued: 0 };
   if (!serviceClient()) throw new Error("SUPABASE_NOT_CONFIGURED");
+  await promoteDue(serviceClient()!).catch(() => "none"); // a scheduled price change whose time has come
+  await gatewayReconPass(stats).catch(() => undefined);
   await capturePass(stats);
+  await autoLrPass(stats);
   await eventPass(stats);
   await agentPass(stats);
+  await driverLinkPass(stats);
   await paymentLinkPass(stats);
   await instantHoldPass(stats);
+  await approvalReminderPass().catch(() => undefined);
+  /* OTP guess and failed-sign-in counters only matter for their window */
+  await serviceClient()!.from("settings").delete().eq("status", "otpfail").lt("created", new Date(Date.now() - 86_400_000).toISOString()).then(() => undefined, () => undefined);
   await cadencePass(stats);
   await ctoPass(stats);
   await lrDraftPass(stats);
   await compliancePass(stats);
   await invoicePass(stats);
+  /* SITA Bag Journey: custody entries of T2 POC bookings (src/lib/bagJourney.ts) */
+  await bagJourneyPass(serviceClient()!).catch(() => undefined);
   await drainPass(stats);
   return stats;
 }
@@ -801,5 +948,8 @@ export async function runSweep(): Promise<SweepStats> {
 /** Fire-and-forget kick so automation feels instant after admin actions;
  *  the cron sweep remains the guarantee. */
 export function kickSweep() {
-  runSweep().catch(() => { /* the scheduled sweep retries everything */ });
+  const run = () => runSweep().then(() => undefined, () => undefined); // the scheduled sweep retries everything
+  /* after(): on Vercel the sweep keeps running once the response is sent
+   * (waitUntil) instead of being frozen; outside a request it just runs */
+  try { after(run); } catch { void run(); }
 }

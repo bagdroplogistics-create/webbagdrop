@@ -15,8 +15,10 @@ import type { Booking } from "@/lib/types";
 import type { ProductionLead } from "../api/admin/production-leads/route";
 import { useProductionLeads } from "@/lib/useProductionLeads";
 import { Badge, Button, Card } from "@/components/ui";
+import { AIRPORT_EXCEPTIONS, attentionFor, type AirportPocConfig } from "@/lib/airportPoc";
+import { custodyGaps } from "@/lib/custody";
 
-interface ExceptionRow { key: string; bookingId: string; sev: "bad" | "warn"; text: string; action: string; prod?: boolean }
+interface ExceptionRow { key: string; bookingId: string; sev: "bad" | "warn"; text: string; action: string; prod?: boolean; airport?: boolean }
 
 const RESPONSES: [string, string][] = [
   ["Seal mismatch at handover", "Hold shipment · notify customer · photo evidence required before release"],
@@ -27,11 +29,13 @@ const RESPONSES: [string, string][] = [
   ["Address changed after booking", "Re-verify pickup/delivery address · re-check route pricing"],
   ["Damage claim raised", "Open claim file · insurance threshold ₹50,000/shipment · 48h response"],
   ["No-show at pickup", "Hold 2h · second attempt · cancellation fee after 2 missed attempts"],
+  ...Object.values(AIRPORT_EXCEPTIONS).map((x) => [`T2 POC · ${x.name}`, x.response] as [string, string]),
 ];
 
 function hrs(iso: string) { return (Date.now() - new Date(iso).getTime()) / 3600000; }
 
-export function deriveExceptions(all: Booking[]): ExceptionRow[] {
+/** With the T2 POC config, enrolled bookings add their airport rows (resolved in the Airport desk). */
+export function deriveExceptions(all: Booking[], poc?: AirportPocConfig | null): ExceptionRow[] {
   const out: ExceptionRow[] = [];
   const acked = (b: Booking, key: string) => ((b.admin as Record<string, unknown>).ackExceptions as string[] | undefined)?.includes(key);
 
@@ -44,6 +48,9 @@ export function deriveExceptions(all: Booking[]): ExceptionRow[] {
     }
     if (b.status === "revised" && hrs(b.events[b.events.length - 1]?.at ?? b.created) > 24 && !acked(b, "revision_stale")) {
       out.push({ key: "revision_stale", bookingId: b.id, sev: "bad", text: "Revised price sent over 24h ago with no customer response.", action: "Follow up" });
+    }
+    if (poc) for (const a of attentionFor(b, poc, Date.now(), custodyGaps(b))) {
+      out.push({ key: `apt:${a.key}`, bookingId: b.id, sev: a.sev, text: `T2 POC · ${a.text}`, action: "Resolve in Airport desk", airport: true });
     }
     if ((b.status === "quoted" || b.status === "identified") && b.quote.validUntil && new Date(b.quote.validUntil) < new Date() && !acked(b, "lock_expired")) {
       out.push({ key: "lock_expired", bookingId: b.id, sev: "warn", text: "Price lock expired, unpaid — customer will need a fresh quote.", action: "Acknowledge" });
@@ -71,11 +78,13 @@ export default function Exceptions() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => watchAdminBookings(setBookings, (e) => setErr(String(e))), []);
   const { leads: prodLeads } = useProductionLeads();
+  const [poc, setPoc] = useState<AirportPocConfig | null>(null);
+  useEffect(() => { fetch("/api/admin/airport").then((r) => (r.ok ? r.json() : null)).then((j) => setPoc(j?.config ?? null), () => setPoc(null)); }, []);
 
   // deriveExceptions reads the clock — only once in the browser (useNow), so
   // the server render and hydration always match; refreshed every minute.
   const now = useNow();
-  const rows = useMemo<ExceptionRow[]>(() => (now ? [...deriveExceptions(bookings), ...deriveProductionExceptions(prodLeads)] : []), [now, bookings, prodLeads]);
+  const rows = useMemo<ExceptionRow[]>(() => (now ? [...deriveExceptions(bookings, poc), ...deriveProductionExceptions(prodLeads)] : []), [now, bookings, prodLeads, poc]);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function ack(row: ExceptionRow) {
@@ -103,7 +112,8 @@ export default function Exceptions() {
                   <Badge tone={r.sev === "bad" ? "bad" : "warn"}>{r.bookingId}</Badge>
                   <p className="mt-1 text-xs text-muted">{r.text}</p>
                 </div>
-                {!r.prod && (
+                {r.airport && <span className="shrink-0 text-xs font-semibold text-muted">{r.action}</span>}
+                {!r.prod && !r.airport && (
                   <Button size="sm" variant="outline" disabled={busy === r.key + r.bookingId} onClick={() => void ack(r)}>
                     {busy === r.key + r.bookingId ? "…" : r.action}
                   </Button>

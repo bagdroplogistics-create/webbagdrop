@@ -2,9 +2,12 @@
  *  and the public payment page may see. Never exposes staff notes, admin
  *  internals, CTO flags, identity method details, or full contact data of
  *  anyone else. Server-only (reads payconfig from the settings table). */
+import { AADHAAR_REQUIRED } from "./phase";
 import { serviceClient } from "./supabaseAdmin";
 import { isPaid } from "./payState";
 import type { Booking } from "./types";
+import { isTrackable } from "./tracking";
+import { passPath, trackPath } from "./trackLinks";
 
 export interface PayConfig {
   upiId?: string; payeeName?: string; bankName?: string; accountName?: string;
@@ -21,9 +24,11 @@ export async function loadPayConfig(): Promise<PayConfig> {
 export type Decision = { state: "pending" | "approved" | "rejected" | "hold" | "info"; note?: string; at?: string };
 
 export function decisionOf(b: Booking): Decision {
+  /* a cancel wins over the stored approval: the client sees it closed, with the reason */
+  if (b.status === "cancelled") { const c = (b.admin as { cancel?: { reason?: string; at?: string } }).cancel; return { state: "rejected", note: c?.reason ? `Cancelled: ${c.reason}` : "Cancelled", at: c?.at }; }
   const d = (b.admin as { decision?: Decision }).decision;
   if (d) return d;
-  if (b.status === "rejected" || b.status === "cancelled") return { state: "rejected" };
+  if (b.status === "rejected") return { state: "rejected" };
   if (["accepted", "assigned", "picked_up", "in_transit", "delivered"].includes(b.status)) return { state: "approved" };
   return { state: "pending" };
 }
@@ -41,6 +46,10 @@ export interface ClientBookingView {
   paid: boolean; balanceDue: number;
   identityOk: boolean; indemnitySigned: boolean;
   canEdit: boolean; canPay: boolean; locked: boolean;
+  /** signed live-tracking link while the move is confirmed and not yet delivered */
+  trackUrl: string | null;
+  /** the boarding-pass style Move Pass, once the move is confirmed */
+  passUrl: string | null;
 }
 
 const MOVED = ["picked_up", "in_transit", "delivered"];
@@ -64,11 +73,13 @@ export function clientView(b: Booking): ClientBookingView {
       topup: topup ? { amount: topup.amount, status: topup.status, rejectedNote: topup.rejectedNote, hasProof: !!topup.proof } : null,
     } : null,
     paid, balanceDue,
-    identityOk: !!b.identity?.ok, indemnitySigned: !!b.indemnity,
+    identityOk: !AADHAAR_REQUIRED || !!b.identity?.ok, indemnitySigned: !!b.indemnity,
     /* edits allowed while open; after payment only ADDING bags (enforced server-side) */
     canEdit: !closed && b.pay?.status !== "submitted",
     /* payment is invited only once the team has approved the booking */
     canPay: !closed && decision.state === "approved" && priced && (!paid || (topup?.status === "due" || topup?.status === "rejected")),
     locked: paid,
+    trackUrl: isTrackable(b) && b.status !== "delivered" ? trackPath(b.id) : null,
+    passUrl: isTrackable(b) ? passPath(b.id) : null,
   };
 }

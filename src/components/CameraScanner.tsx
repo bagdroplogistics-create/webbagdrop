@@ -1,11 +1,14 @@
 "use client";
 /** Phone-camera barcode scanner (the browser's BarcodeDetector — no
- *  libraries). Reads Code 128, Code 39, QR and PDF417. Each distinct code
+ *  libraries). Reads Code 128, Code 39, QR and PDF417, plus the airline
+ *  formats: Interleaved 2 of 5 (IATA bag-tag licence plates) and Aztec /
+ *  Data Matrix (some mobile boarding passes). Each distinct code
  *  is reported once per 2 s, so holding the camera on a tag doesn't spam.
  *  Handheld scanner guns don't need this — they type into the input. */
 import { useEffect, useRef, useState } from "react";
 
-type Detector = new (o: { formats: string[] }) => { detect(v: HTMLVideoElement): Promise<{ rawValue: string }[]> };
+type Detector = (new (o: { formats: string[] }) => { detect(v: HTMLVideoElement): Promise<{ rawValue: string }[]> }) & { getSupportedFormats?: () => Promise<string[]> };
+const WANT = ["code_128", "code_39", "qr_code", "pdf417", "itf", "aztec", "data_matrix"];
 
 export default function CameraScanner({ onRead }: { onRead: (code: string) => void }) {
   const host = useRef<HTMLDivElement>(null);
@@ -27,7 +30,9 @@ export default function CameraScanner({ onRead }: { onRead: (code: string) => vo
         video.srcObject = stream;
         await video.play();
         setMsg("Point the camera at the barcode or QR…");
-        const det = new BD({ formats: ["code_128", "code_39", "qr_code", "pdf417"] });
+        /* only the formats this device can read — an unsupported one must not stop the others */
+        const have = await BD.getSupportedFormats?.().catch(() => null);
+        const det = new BD({ formats: have ? WANT.filter((f) => have.includes(f)) : WANT.slice(0, 4) });
         const loop = async () => {
           if (stop) return;
           try {

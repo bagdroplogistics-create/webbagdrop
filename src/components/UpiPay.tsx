@@ -34,7 +34,7 @@ export default function UpiPay({ amount, reference, payTo }: { amount: number; r
           <p className="flex flex-wrap items-center gap-2">
             <b className="rounded bg-paper px-2 py-1 font-mono text-[13px]">{payTo.upiId}</b>
             <Button size="sm" variant="outline" onClick={() => void navigator.clipboard?.writeText(payTo.upiId!)}>Copy</Button>
-            <a className="text-xs font-semibold text-brand underline sm:hidden" href={uri}>Open UPI app →</a>
+            <a className="text-xs font-semibold text-brand underline sm:hidden" href={uri}>Open UPI app</a>
           </p>
           {(payTo.accountNo || payTo.bankName) && (
             <p className="mt-2 text-xs text-muted">Bank transfer: <b>{payTo.accountName ?? payTo.payeeName}</b>{payTo.bankName ? ` · ${payTo.bankName}` : ""}{payTo.accountNo ? ` · A/c ${payTo.accountNo}` : ""}{payTo.ifsc ? ` · IFSC ${payTo.ifsc}` : ""}</p>

@@ -100,7 +100,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold-2);box-shadow:0 0 
 .stepperc button{width:38px;height:38px;min-height:0;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:20px;cursor:pointer;padding:0}
 .stepperc .n{font-family:var(--display);font-size:26px;min-width:30px;text-align:center}
 .bid{font-family:var(--mono);font-size:20px;letter-spacing:.06em}
-.done-tick{width:64px;height:64px;border-radius:50%;background:#EEF2E8;color:var(--ok);display:inline-flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:10px}
+.done-tick{width:64px;height:64px;border-radius:50%;background:#EEF2E8;color:var(--ok);display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin-bottom:10px}
 
 .trackw{background:var(--paper);padding-block:80px;border-top:1px solid var(--line-2)}
 .trk{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--card);margin-top:12px}
@@ -196,7 +196,7 @@ export const WEDDING_HTML = `
   </div>
 
   <div class="panel" id="doneview" hidden style="text-align:center">
-    <div class="done-tick">✓</div>
+    <div class="done-tick">Done</div>
     <h2 class="big" style="font-size:clamp(28px,4vw,40px)">Done. Your bags are on the plan.</h2>
     <p class="lede" style="margin:0 auto 16px">Reference <span class="bid" id="w-ref"></span><br>Confirmation on WhatsApp with each bag's tag. Track below any time with your mobile number.</p>
     <div class="callout ok" id="w-donedays" style="text-align:left"></div>

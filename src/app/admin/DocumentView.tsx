@@ -31,6 +31,7 @@ const TERMS: Partial<Record<DocType, string[]>> = {
 };
 
 import { buildOpsNote, CHARGE_HEADS, lrTotals, type LrDetails as LrD } from "@/lib/lrModel";
+import { pcsLabel } from "@/lib/opsModel";
 
 /** The official Bagdrop LR / Consignment Note — pixel layout pulled from the
  *  company's issued format (BDLR series PDF): orange masthead, GC block,
@@ -48,9 +49,9 @@ function LrNote({ booking: b, doc, onClose }: { booking: Booking; doc: DocRecord
   const bar = "bg-[#0B1426] px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white";
 
   return (
-    <div className="print-landscape fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
-      <div className="w-full max-w-[1250px] bg-white shadow-2xl print:max-w-none print:shadow-none">
-        <div className="flex items-center justify-between p-3 print:hidden">
+    <div className="print-landscape fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-[rgba(10,22,40,0.6)] p-2 lg:p-4 print:static print:bg-white print:p-0">
+      <div className="w-full max-w-[1500px] bg-white shadow-2xl print:max-w-none print:shadow-none">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
         </div>
@@ -220,7 +221,7 @@ export function OpsNoteDoc({ booking: b, onClose }: { booking: Booking; onClose:
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
       <div className="w-full max-w-xl bg-white shadow-2xl print:max-w-none print:shadow-none">
-        <div className="flex items-center justify-between p-3 print:hidden">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           <Button size="sm" onClick={() => window.print()}>Print</Button>
         </div>
@@ -343,7 +344,7 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">From</span>
                 <span className="font-display text-3xl font-extrabold uppercase text-ink">{b.from}</span>
               </div>
-              <span className="font-display text-2xl text-brand">→</span>
+              <span className="font-display text-sm font-semibold uppercase tracking-wide text-faint">to</span>
               <div className="text-right">
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">To</span>
                 <span className="font-display text-3xl font-extrabold uppercase text-brand">{b.to}</span>
@@ -361,7 +362,7 @@ export function BagLabelsDoc({ booking: b, onClose }: { booking: Booking; onClos
             <div className="mx-6 mt-4 flex overflow-hidden rounded-xl border border-line">
               <div className="flex flex-col justify-center bg-brand px-4 py-3 text-white">
                 <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">Bag No.</span>
-                <span className="font-display text-4xl font-extrabold leading-none">{n}<span className="text-lg font-bold opacity-80">/{bagNumbers.length}</span></span>
+                <span className="font-display text-4xl font-extrabold leading-none">{n}<span className="text-lg font-bold opacity-80">/{bagNumbers.length}</span>{n > total - b.oversize && <span className="ml-1.5 align-middle text-lg font-extrabold">XL</span>}</span>
               </div>
               <div className="grid flex-1 grid-cols-2 divide-x divide-line">
                 <div className="px-3 py-2">
@@ -443,7 +444,7 @@ export default function DocumentView({ booking, doc, onClose }: { booking: Booki
           <div>
             <p className="mb-1 text-[11px] font-semibold uppercase text-faint">Consignment</p>
             <p className="text-xs">{booking.from} → {booking.to}</p>
-            <p className="text-xs text-muted">{booking.bags} bag(s){booking.oversize ? ` + ${booking.oversize} oversize` : ""} · {booking.date}</p>
+            <p className="text-xs text-muted">{pcsLabel(booking.bags, booking.oversize)} · {booking.date}</p>
           </div>
         </div>
 

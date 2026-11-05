@@ -1,4 +1,3 @@
-import { Icon } from "./Icon";
 import { Reveal } from "./motion";
 import { CONTAINER } from "./SectionHeading";
 
@@ -16,7 +15,7 @@ export default function ClosingCta() {
             </p>
             <div className="flex flex-wrap gap-3">
               <a href="#book" className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-[16px] font-semibold text-white transition-colors hover:bg-white hover:text-navy">
-                Book a Pickup <Icon name="arrow" size={16} />
+                Book a Pickup
               </a>
               <a href="#solutions" className="inline-flex items-center gap-2 rounded-xl border border-white/25 px-6 py-3.5 text-[16px] font-semibold text-white transition-colors hover:bg-white hover:text-navy">
                 Explore Services

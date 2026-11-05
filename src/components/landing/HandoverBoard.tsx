@@ -7,10 +7,9 @@
  *  row also selects it for the diagram below and nudges every row's
  *  status forward a step, so the board visibly reacts to the click. */
 import { useEffect, useRef, useState } from "react";
-import { BOARD_STATUSES, HANDOVERS } from "./data";
-import { Icon } from "./Icon";
-import { Section, SectionHeading } from "./SectionHeading";
 import { useNow } from "@/lib/useNow";
+import { BOARD_STATUSES, HANDOVERS } from "./data";
+import { Section, SectionHeading } from "./SectionHeading";
 
 const STATUS_FG: Record<string, string> = {
   BOOKED: "text-white/60",
@@ -20,10 +19,6 @@ const STATUS_FG: Record<string, string> = {
 };
 const ROW_GRID = "grid-cols-[56px_64px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_150px] sm:grid-cols-[64px_72px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_170px]";
 const MAX_LEN = Math.max(...BOARD_STATUSES.map((s) => s.length));
-/* Colored flight-code chips — the same cue a real airport departures
- * screen uses (each row's number tagged in a different saturated color
- * so the eye can track rows while they scroll), cycled by row index. */
-const CODE_TAGS = ["bg-sky-500 text-white", "bg-brand text-white", "bg-fuchsia-500 text-white", "bg-amber-400 text-ink", "bg-emerald-500 text-white", "bg-violet-500 text-white"];
 
 function FlipStatus({ status, tone }: { status: string; tone: string }) {
   const padded = status.padEnd(MAX_LEN, " ");
@@ -45,9 +40,9 @@ function boardClock(t: number) {
 export default function HandoverBoard() {
   const [stage, setStage] = useState(0);
   const [venue, setVenue] = useState(0);
-  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const now = useNow(); // browser clock, ticks each minute; null until hydrated
   const clock = now ? boardClock(now) : null;
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -59,7 +54,7 @@ export default function HandoverBoard() {
   const v = HANDOVERS[venue];
 
   return (
-    <Section id="handovers" tone="canvas">
+    <Section id="handovers" tone="paper">
       <SectionHeading kicker="Live board" title="Every terminal." accent="One handover." />
 
       <div className="overflow-hidden rounded-2xl border border-line bg-navy text-white">
@@ -75,38 +70,27 @@ export default function HandoverBoard() {
             <div className={`grid ${ROW_GRID} gap-3 border-b border-white/10 px-5 py-2.5 font-mono text-[10px] tracking-[0.16em] text-white/40 sm:gap-4`}>
               <span>TIME</span><span>CODE</span><span>SERVICE</span><span>FROM</span><span>TO</span><span>STATUS</span>
             </div>
-            {/* Fixed-height viewport showing exactly 6 rows (6 × 56px) —
-             * the track below is the row list rendered twice back to
-             * back, drifting up by exactly one copy's height so it loops
-             * forever, airport-board style. Hover pauses it; reduced
-             * motion disables it (CSS). */}
-            <div className="h-[336px] overflow-hidden">
-              <div className="bd-board-track" style={{ animationDuration: "24s" }}>
-                {[0, 1].map((copy) =>
-                  HANDOVERS.map((r, i) => {
-                    const status = BOARD_STATUSES[(stage + i) % BOARD_STATUSES.length];
-                    const isSel = venue === i;
-                    return (
-                      <button
-                        key={`${copy}-${r.code}`}
-                        type="button"
-                        onClick={() => { setVenue(i); setStage((s) => (s + 1) % BOARD_STATUSES.length); }}
-                        className={`grid h-14 w-full ${ROW_GRID} items-center gap-3 border-b border-white/10 px-5 text-left transition-colors sm:gap-4 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
-                      >
-                        <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
-                        <span className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wider ${CODE_TAGS[i % CODE_TAGS.length]}`}>{r.code}</span>
-                        <span key={status} className={`bd-row-flash flex items-center gap-2.5 truncate text-[14px] font-bold ${STATUS_FG[status]}`}>
-                          <Icon name={r.icon} size={17} className="shrink-0" /> <span className="truncate">{r.service}</span>
-                        </span>
-                        <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.from}</span>
-                        <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.to}</span>
-                        <FlipStatus status={status} tone={STATUS_FG[status]} />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+            {HANDOVERS.map((r, i) => {
+              const status = BOARD_STATUSES[(stage + i) % BOARD_STATUSES.length];
+              const isSel = venue === i;
+              return (
+                <button
+                  key={r.code}
+                  type="button"
+                  onClick={() => { setVenue(i); setStage((s) => (s + 1) % BOARD_STATUSES.length); }}
+                  className={`grid w-full ${ROW_GRID} items-center gap-3 border-b border-white/10 px-5 py-3.5 text-left transition-colors last:border-b-0 sm:gap-4 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
+                >
+                  <span className="font-mono text-[14px] font-semibold text-amber-300">{r.time}</span>
+                  <span className="font-mono text-[12px] tracking-wider text-white/50">{r.code}</span>
+                  <span className="flex items-center gap-2.5 truncate text-[14px] font-bold">
+                    <span className="truncate">{r.service}</span>
+                  </span>
+                  <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.from}</span>
+                  <span className="hidden truncate text-[13px] text-white/60 sm:block">{r.to}</span>
+                  <FlipStatus status={status} tone={STATUS_FG[status]} />
+                </button>
+              );
+            })}
           </div>
         </div>
 

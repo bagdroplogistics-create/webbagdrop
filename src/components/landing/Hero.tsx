@@ -10,7 +10,6 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { STORY_STEPS } from "./data";
-import { Icon } from "./Icon";
 import { Reveal } from "./motion";
 import { CONTAINER } from "./SectionHeading";
 
@@ -61,7 +60,7 @@ export default function Hero() {
 
           <Reveal delay={240} className="flex flex-wrap gap-3">
             <a href="#book" className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-[16px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark">
-              Book a Pickup <Icon name="arrow" size={16} />
+              Book a Pickup
             </a>
             <a href="#how" className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-6 py-3.5 text-[16px] font-semibold text-ink transition-colors hover:border-ink/30">
               See how it works

@@ -9,6 +9,7 @@
  *  elsewhere for Drivers: no live GPS feed wired up, so it's a schematic,
  *  not real vehicle telemetry — everything else on this page is real data. */
 import { useEffect, useMemo, useState } from "react";
+import { AADHAAR_REQUIRED } from "@/lib/phase";
 import { useNow } from "@/lib/useNow";
 import { inr } from "@/lib/pricing";
 import { anomalies, brief, stats, type Notice, type Stats } from "@/lib/intelligence";
@@ -20,7 +21,7 @@ import { CAPTAINS } from "./Drivers";
 import { useProductionLeads } from "@/lib/useProductionLeads";
 import { isPaid } from "@/lib/payState";
 
-const needsBond = (b: Booking) => (isPaid(b) || !!b.payer) && !b.identity?.ok && !["delivered", "cancelled", "rejected", "picked_up", "in_transit"].includes(b.status);
+const needsBond = (b: Booking) => AADHAAR_REQUIRED && (isPaid(b) || !!b.payer) && !b.identity?.ok && !["delivered", "cancelled", "rejected", "picked_up", "in_transit"].includes(b.status);
 
 const PROD_PRE_CONVERT = ["new", "contacted", "qualified"];
 
@@ -101,7 +102,7 @@ function useDepartments(all: Booking[]) {
     const sev = (bad: boolean, warn: boolean): DeptCard["sev"] => (bad ? "bad" : warn ? "warn" : "ok");
     return [
       { key: "bookings", module: "ship", name: "Bookings desk", sev: sev(red("bookings") > 0, needsDecision > 0), kpis: [["needs decision", String(needsDecision)], ["red flags", String(red("bookings"))]], note: "accept within 2h — the CTO chases breaches" },
-      { key: "payverify", module: "fin", name: "💳 Payments to verify", sev: toVerify.length ? "pay" : "ok", kpis: [["proofs waiting", String(toVerify.length)], ["amount", inr(toVerifyAmt)]], note: toVerify.length ? "match UTR against the bank, then verify in Finance" : "no client proofs waiting" },
+      { key: "payverify", module: "fin", name: "Payments to verify", sev: toVerify.length ? "pay" : "ok", kpis: [["proofs waiting", String(toVerify.length)], ["amount", inr(toVerifyAmt)]], note: toVerify.length ? "match UTR against the bank, then verify in Finance" : "no client proofs waiting" },
       { key: "finance", module: "fin", name: "Finance", sev: sev(false, receivable > 0 || missingInv > 0), kpis: [["paid today", inr(paidToday)], ["receivable", inr(receivable)]], note: missingInv ? `${missingInv} invoice(s) auto-issuing` : `${ext?.cn ?? 0} credit notes live · invoices auto-issued` },
       { key: "ops", module: "opsx", name: "Operations", sev: sev(red("ops") > 0, amber("ops") > 0), kpis: [["in custody", String(inCustody)], ["red flags", String(red("ops"))]], note: "pickup window & captain SLAs" },
       { key: "lr", module: "lr", name: "LR & dispatch", sev: sev(false, noLr > 0), kpis: [["awaiting LR", String(noLr)], ["auto-drafts", "00:01 daily"]], note: "confirmed consignments queue on the LR page" },
@@ -363,7 +364,7 @@ function ComplianceIssues({ all, openModule }: { all: Booking[]; openModule?: (k
   if (!rows.length) return null;
   return (
     <div className="a-card" style={{ borderLeft: "4px solid var(--a-bad)" }}>
-      <H3 r="pickup is locked until each is cleared">🛂 Compliance issues · {rows.length}</H3>
+      <H3 r="pickup is locked until each is cleared">Compliance issues · {rows.length}</H3>
       <div className="grid gap-1.5">
         {rows.slice(0, 6).map(({ b, risk, why }) => (
           <button key={b.id} onClick={() => openModule?.("id")} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs" style={{ background: "var(--a-surface-2)" }}>

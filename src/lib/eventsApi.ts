@@ -90,7 +90,9 @@ export function y2kSeedEvent(): BagdropEvent {
     dates: { in: "2026-12-17", out: "2026-12-18" }, direction: "both", billing: "host",
     expected: { families: 40, bags: 120 },
     rates: { oversize: 900, minBags: 2, slabPct: 18, depositPct: 50 },
-    sectors: [{ city: "Mumbai", rate: 3500, pickDay: "2026-12-10", retDay: "2026-12-19" }],
+    sectors: [{ city: "Mumbai", rate: 3500, pickDay: "2026-12-09", retDay: "2026-12-19" }],
+    pickupDays: ["2026-12-09", "2026-12-10", "2026-12-11"],
+    bookingCloses: "2026-11-15",
     contacts: { host: "Host family", hostMobile: "", planner: "", onsite: "" },
     landing: {
       names: "Yashna & Yash", hashtag: "#Y2K", datesText: "17 & 18 December 2026",

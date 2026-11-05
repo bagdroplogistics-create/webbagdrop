@@ -138,14 +138,14 @@ export function applyGatewayPayment(b: Booking, p: {
       ...b, admin,
       pay: { ...b.pay, amount: b.pay.amount + p.amountInr, topup: null,
         history: [...(b.pay.history ?? []), { at: now, amount: p.amountInr, kind: "topup", utr: p.paymentId, verifiedBy }] },
-      events: [...b.events, { at: now, by: "customer", text: `✅ Extra-bags payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
+      events: [...b.events, { at: now, by: "customer", text: `Extra-bags payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
     } };
   }
   if (b.pay?.status === "captured") {
     /* already paid in full — keep the first payment, flag this one for refund */
     return { duplicate: true, next: {
       ...b, admin: { ...admin, duplicatePayments: [...dupes, { paymentId: p.paymentId, amount: p.amountInr, at: now, via: p.via }] },
-      events: [...b.events, { at: now, by: "admin", text: `⚠ DUPLICATE payment ${amt} received online (${p.paymentId}) on an already-paid booking — refund it in Razorpay` }],
+      events: [...b.events, { at: now, by: "admin", text: `DUPLICATE payment ${amt} received online (${p.paymentId}) on an already-paid booking — refund it in Razorpay` }],
     } };
   }
   return { duplicate: false, next: {
@@ -153,6 +153,6 @@ export function applyGatewayPayment(b: Booking, p: {
     pay: { mode: "full", amount: p.amountInr, status: "captured", gateway, at: now, utr: p.paymentId,
       verifiedAt: now, verifiedBy, proof: null, submittedAt: null, rejectedNote: undefined,
       history: [...(b.pay?.history ?? []), { at: now, amount: p.amountInr, kind: "full", utr: p.paymentId, verifiedBy }] },
-    events: [...b.events, { at: now, by: "customer", text: `✅ Payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
+    events: [...b.events, { at: now, by: "customer", text: `Payment ${amt} paid online · ${gateway} · ${p.paymentId}` }],
   } };
 }

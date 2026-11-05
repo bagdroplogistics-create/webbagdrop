@@ -18,6 +18,8 @@ import { createEvent, patchEvent, watchEvents } from "@/lib/eventsApi";
 import { setInquiryStatus, watchInquiries } from "@/lib/crmApi";
 import type { Booking, EventSector, Inquiry, WeddingEvent } from "@/lib/types";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { approvalCounts, weddingStatus } from "@/lib/weddingStatus";
+import { isHostBilled } from "@/lib/payState";
 
 const TYPES = [
   { v: "WED", t: "Wedding" }, { v: "MIC", t: "MICE / corporate" }, { v: "PIL", t: "Pilgrimage" },
@@ -26,7 +28,7 @@ const TYPES = [
 
 const EMPTY_SECTOR: EventSector = { city: "", rate: 0, pickDay: "", retDay: "" };
 
-export default function EventsAndBulk() {
+export default function EventsAndBulk({ onOpenBooking }: { onOpenBooking?: (id: string) => void }) {
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -110,6 +112,7 @@ export default function EventsAndBulk() {
           onBack={() => setSel(null)}
           onPatched={(e) => setEvents((p) => p.map((x) => (x.id === e.id ? e : x)))}
           onBookingChanged={(b) => setBookings((p) => p.map((x) => (x.id === b.id ? b : x)))}
+          onOpenBooking={onOpenBooking}
         />
       )}
     </div>
@@ -209,10 +212,11 @@ function EventForm({ onDone, onCancel }: { onDone: (e: WeddingEvent) => void; on
 }
 
 function EventDetail({
-  event, bookings, unassigned, onBack, onPatched, onBookingChanged,
+  event, bookings, unassigned, onBack, onPatched, onBookingChanged, onOpenBooking,
 }: {
   event: WeddingEvent; bookings: Booking[]; unassigned: Booking[];
   onBack: () => void; onPatched: (e: WeddingEvent) => void; onBookingChanged: (b: Booking) => void;
+  onOpenBooking?: (id: string) => void;
 }) {
   const [assignId, setAssignId] = useState("");
   const [err, setErr] = useState("");
@@ -235,22 +239,23 @@ function EventDetail({
     <Card>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <button className="mb-1 text-xs text-brand hover:underline" onClick={onBack}>← All events</button>
+          <button className="mb-1 text-xs text-brand hover:underline" onClick={onBack}>Back to all events</button>
           <h3 className="font-display text-base font-bold">{event.name} <span className="font-mono text-xs font-normal text-faint">{event.id}</span></h3>
           <p className="text-xs text-muted">{event.venue}, {event.venueCity} · {event.dates.in} → {event.dates.out}</p>
         </div>
         <div className="flex gap-2">
           <a href={`/weddings?code=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">
-            <Button size="sm" variant="outline">View guest page ↗</Button>
+            <Button size="sm" variant="outline">View guest page</Button>
           </a>
           <Button size="sm" variant="outline" onClick={() => void toggleStatus()}>{event.status === "open" ? "Close event" : "Reopen"}</Button>
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi label="Families travelling" value={String(totals.families)} />
         <Kpi label="Bags" value={String(totals.bags)} />
         <Kpi label="Value" value={inr(totals.value)} />
+        <Kpi label="Awaiting approval · confirmed" value={`${approvalCounts(bookings).waiting} · ${approvalCounts(bookings).confirmed}`} />
       </div>
 
       <div className="mb-4">
@@ -270,13 +275,14 @@ function EventDetail({
         <h4 className="mb-1.5 text-xs font-semibold text-muted">Guests on this event</h4>
         <table className="mb-2 w-full text-xs">
           <tbody>
-            {bookings.length === 0 && <tr><td className="py-2 text-muted">No bookings yet.</td></tr>}
+            {bookings.length === 0 && <tr><td colSpan={5} className="py-2 text-muted">No bookings yet.</td></tr>}
             {bookings.map((b) => (
               <tr key={b.id} className="border-b border-dashed border-line last:border-0">
-                <td className="py-1.5 pr-2 font-mono">{b.id}</td>
+                <td className="py-1.5 pr-2 font-mono">{onOpenBooking ? <button type="button" className="cursor-pointer text-brand hover:underline" onClick={() => onOpenBooking(b.id)}>{b.id}</button> : b.id}</td>
                 <td className="pr-2">{b.traveller.name}</td>
                 <td className="pr-2">{b.from} → {b.to}</td>
-                <td className="text-right">{inr(b.quote.total)}</td>
+                <td className="pr-2"><Badge tone={weddingStatus(b).tone}>{weddingStatus(b).label}</Badge></td>
+                <td className="text-right">{isHostBilled(b) && !b.quote.total ? "Hosts" : inr(b.quote.total)}</td>
               </tr>
             ))}
           </tbody>

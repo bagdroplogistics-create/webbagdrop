@@ -29,9 +29,7 @@ export function priceFor(r: RouteRate, bags: number, oversize = 0, oversizeRate 
 
 /* ---------------- both directions ---------------- */
 /** Every route is listed once per direction: Vadodara → Mumbai and, right
- *  under it, Mumbai → Vadodara, each with its own prices. Used by CSV
- *  import/export and the "add return routes" tool — not required reading
- *  for the main route chart, which keeps a "both" route as one record. */
+ *  under it, Mumbai → Vadodara, each with its own prices. */
 export const returnOf = (r: RouteRate, note?: string): RouteRate => ({ ...r, from: r.to, to: r.from, dir: "one", ...(note !== undefined ? { note } : {}) });
 export const hasReturn = (routes: RouteRate[], r: Pick<RouteRate, "from" | "to">) =>
   routes.some((x) => key(x) === key({ from: r.to, to: r.from }) || (x.dir === "both" && key(x) === key(r)));
@@ -71,13 +69,6 @@ export function validateCard(o: {
   routes: RouteRate[]; oversizeRate: number; cities: City[];
   live?: { routes: RouteRate[]; oversizeRate: number }; costModel?: CostModel;
   instantAll?: InstantAll | null;
-  /** Require every route to have a return listed (either "both" or an
-   *  explicit reverse "one" route). Off by default — the live chart has
-   *  intentionally one-way-only routes (e.g. Mumbai → Goa) that predate
-   *  this check; turning it on here would start blocking unrelated
-   *  publishes on the existing Pricing engine screen. Pass true only from
-   *  a caller that's deliberately enforcing full return-route coverage. */
-  requireReturns?: boolean;
 }): Issue[] {
   const out: Issue[] = [];
   if (o.instantAll?.enabled) {
@@ -158,8 +149,8 @@ export function validateCard(o: {
       else instantRuleIssues(r.instant, err, warn);
     }
 
-    /* every route is listed both ways — only enforced when explicitly requested (see requireReturns doc above) */
-    if (o.requireReturns && r.dir !== "both" && r.from?.trim() && r.to?.trim() && !hasReturn(o.routes, r)) err(`No return route — add ${r.to} → ${r.from} (Add the return routes does it).`);
+    /* every route is listed both ways */
+    if (r.dir !== "both" && r.from?.trim() && r.to?.trim() && !hasReturn(o.routes, r)) err(`No return route — add ${r.to} → ${r.from} (Add the return routes does it).`);
   }
   return out;
 }
