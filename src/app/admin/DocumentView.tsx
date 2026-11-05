@@ -527,7 +527,7 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
     if (!node || downloading) return;
     setDownloading(true);
     try {
-      const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+      const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([import("html2canvas-pro"), import("jspdf")]);
       const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       const pdf = new JsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
