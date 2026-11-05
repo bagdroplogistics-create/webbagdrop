@@ -370,7 +370,7 @@ export default function Wizard() {
                     <Button disabled={otp.busy || otp.entered.trim().length !== 6} onClick={() => void verifyAndSubmit()}>{otp.busy ? "Checking…" : onChart ? "Verify & see price" : "Verify & send inquiry"}</Button>
                     <Button variant="ghost" size="sm" disabled={otp.busy} onClick={() => void sendOtp(otp.channel)}>Resend</Button>
                   </div>
-                  <p className="mt-2 text-xs text-muted">Code sent to {otp.channel === "email" ? d.email.trim() : d.mobile.trim()}.{otp.demo ? <span className="font-mono"> (demo: {otp.demo})</span> : null}</p>
+                  <p className="mt-2 text-xs text-muted">Code sent to {otp.channel === "email" ? d.email.trim() : d.mobile.trim()}.{otp.demo ? <span className="font-mono"> Your code: {otp.demo}</span> : null}</p>
                   {otp.note && <p className="mt-1 text-xs text-amber-800">{otp.note}</p>}
                   {otp.channel === "mobile" && emailOk && <button type="button" className="mt-1 cursor-pointer text-xs font-semibold text-ink underline underline-offset-2" disabled={otp.busy} onClick={() => void sendOtp("email")}>Didn&apos;t get it? Send the code to {d.email.trim()} instead</button>}
                 </>
