@@ -5,7 +5,7 @@
  *  amount) but had nothing to show for it. Not a port of the static
  *  build's print-window HTML verbatim, but the same information: company
  *  letterhead, customer/consignment details, GST breakup, doc-type terms. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import qrcode from "qrcode-generator";
 import { useNow } from "@/lib/useNow";
 import { gstSplit, SAC, estimateDisplayNo } from "@/lib/docs";
@@ -520,6 +520,37 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
   const [pay, setPay] = useState<{ upiId?: string; payeeName?: string; bankName?: string; accountName?: string; accountNo?: string; ifsc?: string } | null>(null);
   useEffect(() => { void fetch("/api/payconfig").then((r) => r.json()).then((j) => setPay(j.config ?? {})).catch(() => setPay({})); }, []);
 
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+  async function downloadPdf() {
+    const node = pageRef.current;
+    if (!node || downloading) return;
+    setDownloading(true);
+    try {
+      const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+      const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const pdf = new JsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pageW) / canvas.width;
+      const img = canvas.toDataURL("image/png");
+      let y = 0, remaining = imgH;
+      pdf.addImage(img, "PNG", 0, y, pageW, imgH);
+      remaining -= pageH;
+      while (remaining > 0) {
+        y = remaining - imgH;
+        pdf.addPage();
+        pdf.addImage(img, "PNG", 0, y, pageW, imgH);
+        remaining -= pageH;
+      }
+      pdf.save(`Estimate-${estimateDisplayNo(doc.no).replace(/\//g, "-")}.pdf`);
+    } catch (e) {
+      console.error("Estimate PDF download failed:", e instanceof Error ? e.message : e);
+      alert("Couldn't build the PDF — try Print instead and save as PDF from there.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   const split = gstSplit(b.quote.total || doc.amount);
   const cgst = Math.round(split.gst / 2), sgst = split.gst - cgst;
   const pcs = b.bags + b.oversize;
@@ -538,11 +569,15 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/50 p-2 lg:p-4 print:static print:bg-white print:p-0">
       <div className="w-full max-w-[900px] bg-white shadow-2xl print:max-w-none print:shadow-none">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white p-3 print:hidden">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-line bg-white p-3 print:hidden">
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
-          <Button size="sm" onClick={() => window.print()}>Print / Download</Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => window.print()}>Print</Button>
+            <Button size="sm" disabled={downloading} onClick={() => void downloadPdf()}>{downloading ? "Preparing…" : "Download PDF"}</Button>
+          </div>
         </div>
 
+        <div ref={pageRef}>
         {/* masthead */}
         <div className="flex items-start justify-between bg-[#EA580C] px-6 py-4 text-white">
           <div>
@@ -662,11 +697,13 @@ function EstimateDoc({ booking: b, doc, onClose }: { booking: Booking; doc: DocR
               <p>GSTIN: {COMPANY.gstin} · Tel: {COMPANY.phone} · {COMPANY.email} · {COMPANY.web}</p>
             </div>
             <div className="text-right">
-              <p className="mb-6">&nbsp;</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/signature-stamp.png" alt="" className="ml-auto mb-1 h-16 w-16 object-contain" />
               <p className="border-t border-stone-400 pt-1 font-semibold text-ink">Authorized Signatory</p>
               <p>For {COMPANY.name}</p>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

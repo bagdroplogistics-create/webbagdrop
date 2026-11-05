@@ -132,15 +132,29 @@ async function handlePOST(req: Request) {
    * doc type, displayed as "Estimate"/"QT-…") the moment the price is final
    * — no separate "generate quote" click, matching how LR auto-issues on
    * payment. Hosted families aren't billed, so there's nothing to quote
-   * them. Idempotent: skip if this booking already has one (a retried
-   * request, or approve firing twice some other way) so Accept never mints
-   * a second estimate number for the same booking. Never blocks the
-   * approval itself — a numbering hiccup here shouldn't stop the customer
-   * from being told they're approved. */
-  if (b.decision === "approve" && !hosted && next.quote.total > 0 && !(next.docs ?? []).some((d) => d.type === "PI")) {
+   * them. Idempotent: if this booking already has one, the SAME number is
+   * kept (never a second estimate for one booking) — but if staff corrected
+   * a mistake since it was issued (a revise → re-approve cycle, or a price-
+   * changing edit from the quote desk) and the amount actually moved, the
+   * existing document is updated in place and the correction is logged —
+   * same principle as an LR amendment: number stays, every change is on the
+   * record. Never blocks the approval itself — a numbering hiccup here
+   * shouldn't stop the customer from being told they're approved. */
+  if (b.decision === "approve" && !hosted && next.quote.total > 0) {
+    const existing = (next.docs ?? []).find((d) => d.type === "PI");
     try {
-      const estimateNo = await nextDocNo(sb, "PI");
-      next = { ...next, docs: [...(next.docs ?? []), { type: "PI", no: estimateNo, at: now, amount: next.quote.total, by: await actorName() }] };
+      if (!existing) {
+        const estimateNo = await nextDocNo(sb, "PI");
+        next = { ...next, docs: [...(next.docs ?? []), { type: "PI", no: estimateNo, at: now, amount: next.quote.total, by: await actorName() }] };
+      } else if (existing.amount !== next.quote.total) {
+        const prevAmount = existing.amount;
+        const who = await actorName();
+        next = {
+          ...next,
+          docs: next.docs!.map((d) => (d === existing ? { ...d, amount: next.quote.total, at: now, by: who } : d)),
+          events: [...next.events, { at: now, by: "admin", text: `Estimate ${existing.no} corrected by ${who} — ${inr(prevAmount)} → ${inr(next.quote.total)}` }],
+        };
+      }
     } catch (e) {
       console.error("Auto-estimate generation failed:", e instanceof Error ? e.message : e);
     }
