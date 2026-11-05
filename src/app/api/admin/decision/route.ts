@@ -133,7 +133,10 @@ async function handlePOST(req: Request) {
        * captain/steps for Restore) or a manual correction, never this. */
       if (doc.status !== "accepted") return NextResponse.json({ error: "NOT_APPROVED", detail: "This booking isn't in the approved/awaiting-payment stage." }, { status: 409 });
       if (isPaid(doc) || doc.pay) return NextResponse.json({ error: "ALREADY_PAID", detail: "Payment is already on record — use Cancel booking instead, not un-approve." }, { status: 409 });
-      if ((doc.docs ?? []).some((d) => d.type === "LR" || d.type === "INV" || d.type === "PI")) return NextResponse.json({ error: "DOCS_ISSUED", detail: "A document (Estimate/LR/invoice) is already issued against this booking — use Cancel booking instead, not un-approve." }, { status: 409 });
+      /* the Estimate (PI) is auto-issued on every approval by design — that's
+       * expected and harmless to leave in place (it self-corrects on the next
+       * approve). Only a real dispatch/financial document blocks reverting. */
+      if ((doc.docs ?? []).some((d) => d.type === "LR" || d.type === "INV")) return NextResponse.json({ error: "DOCS_ISSUED", detail: "An LR or invoice is already issued against this booking — use Cancel booking instead, not un-approve." }, { status: 409 });
       next.status = "submitted"; state = "pending"; template = "";
       text = `Approval reversed by the team — back to needs decision${note ? ` · ${note}` : ""}`;
       break;
