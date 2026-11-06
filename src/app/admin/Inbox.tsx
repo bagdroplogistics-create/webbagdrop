@@ -380,7 +380,7 @@ export default function Inbox({ search = "", openId, onOpenQuote, onOpenOps }: {
               ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
               ["Pieces", pcsLabel(booking.bags, booking.oversize)],
               ["Quote", booking.quote.breakdown.ror ? "Rate on request" : isHostBilled(booking) && !booking.quote.total ? "Billed to the hosts · nothing to pay" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
-              ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "verified" : booking.pay.status === "submitted" ? "proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}` : "none"],
+              ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "verified" : booking.pay.status === "submitted" ? "proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}${booking.pay.gatewayFee ? ` + ${inr(booking.pay.gatewayFee)} Razorpay fee` : ""}` : "none"],
               ["Identity", booking.identity?.ok ? `verified · ${booking.identity.method}` : AADHAAR_REQUIRED ? "Aadhaar pending — pickup locked" : "not required in phase 1"],
             ] as const).map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px] last:border-0">

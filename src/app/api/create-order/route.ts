@@ -5,6 +5,7 @@ import { clientView } from "@/lib/clientView";
 import { isPaid } from "@/lib/payState";
 import { mutateBooking } from "@/lib/bookingStore";
 import { createOrder, razorpayConfigured, RazorpayError } from "@/lib/razorpay";
+import { gatewayFeeBreakdown } from "@/lib/pricing";
 import type { Booking } from "@/lib/types";
 
 /** Razorpay Standard Checkout · step 1 — create the order for a booking the
@@ -53,9 +54,16 @@ export async function POST(req: Request) {
   }
   if (Math.round(amount * 100) < 100) return NextResponse.json({ error: "AMOUNT_TOO_LOW", detail: "The minimum online payment is ₹1." }, { status: 400 });
 
+  /* Razorpay checkout ("pay online") carries the convenience fee, when it's
+   * switched on; "Scan & pay by UPI" below still goes through this same
+   * Razorpay order (it's Razorpay's own UPI block, not Bagdrop's UPI-QR /
+   * bank-transfer option), so the fee applies to both — only the separate
+   * UPI-QR option (never touches this route) stays fee-free. */
+  const { fee, total } = gatewayFeeBreakdown(amount);
+
   let order: Awaited<ReturnType<typeof createOrder>>;
   try {
-    order = await createOrder(amount, `${b.id}-${kind}`, { bookingId: b.id, kind });
+    order = await createOrder(total, `${b.id}-${kind}`, { bookingId: b.id, kind });
   } catch (e) {
     if (e instanceof RazorpayError && e.auth) return NextResponse.json({ error: "GATEWAY_AUTH_FAILED", detail: "Online payment is unavailable right now — please pay by UPI or bank transfer." }, { status: 401 });
     return NextResponse.json({ error: "GATEWAY_ERROR", detail: "Couldn't start the payment — please try again in a minute." }, { status: 500 });
@@ -64,7 +72,7 @@ export async function POST(req: Request) {
   /* remember the order on the booking — re-checked on the fresh copy */
   const saved = await mutateBooking(sb, b.id, (fresh) =>
     payable(fresh) === amount
-      ? { ...fresh, admin: { ...fresh.admin, rzpOrder: { id: order.orderId, amount, kind, at: new Date().toISOString() } } }
+      ? { ...fresh, admin: { ...fresh.admin, rzpOrder: { id: order.orderId, amount: total, baseAmount: amount, feeAmount: fee, kind, at: new Date().toISOString() } } }
       : null);
   if (!saved) return NextResponse.json({ error: "CHANGED", detail: "This booking just changed — please refresh and try again." }, { status: 409 });
 
@@ -72,5 +80,6 @@ export async function POST(req: Request) {
     order_id: order.orderId, amount: order.amount, currency: order.currency, key_id: order.keyId,
     name: "Bagdrop", description: `${kind === "topup" ? "Extra bags · " : ""}${b.id} · ${b.from} → ${b.to}`,
     prefill: { name: b.traveller.name, contact: b.traveller.mobile, email: b.traveller.email ?? "" },
+    base_amount: amount, fee_amount: fee, total_amount: total,
   });
 }
