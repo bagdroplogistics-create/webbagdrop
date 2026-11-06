@@ -35,7 +35,7 @@ const NOTE: Record<string, string> = {
 
 export default function MyBags() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<p style={{ padding: "60px 0", textAlign: "center", color: "#8A8172", font: "400 15px/1.55 system-ui,sans-serif" }}>Loading…</p>}>
       <Dashboard />
     </Suspense>
   );
