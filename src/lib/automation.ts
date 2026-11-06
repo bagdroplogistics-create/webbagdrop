@@ -42,6 +42,7 @@ export interface OutboxDoc {
   to?: string;                  // mobile or email
   name?: string;
   template?: string;
+  templateVars?: string[];      // set only when `template` has a Fast2SMS-approved match (see FAST2SMS_TEMPLATE_MAP) — computed at notify() time, from the same structured data `text` was rendered from, since by drain time only the rendered string survives
   text?: string;                // rendered body
   html?: string;                // branded HTML body, for send.email only
   subject?: string;
@@ -258,6 +259,38 @@ export const TEMPLATES: Record<string, T> = {
   },
 };
 
+/** 2026-11-06 — every one of the TEMPLATES above is free-form text, sent
+ *  via direct-Meta's "text" message type (see sendWhatsApp below), which
+ *  only reaches a customer within 24h of their last message to Bagdrop —
+ *  confirmed broken outside that window with a real OAuthException
+ *  (code 10, error_subcode 2593181) on the SAME token, caught while fixing
+ *  WhatsApp OTP. The fix for OTP was an approved Authentication template
+ *  via Fast2SMS; the same fix applies here ONLY where (a) one of the 29
+ *  already-approved Fast2SMS templates genuinely matches the event's
+ *  wording, and (b) the call site has the exact right data for every one
+ *  of that template's {{n}} slots — getting a slot wrong sends a WRONG
+ *  fact to a real customer, worse than the current silent failure.
+ *  `inquiry_ack` is the only one both true for today: its one approved
+ *  match (`inquiry_acknowledgment`) needs just the customer's name, and
+ *  every call site supplies exactly that. Every other internal template
+ *  either has no approved match (wedding_confirmed, move_pass,
+ *  delivery_otp, booking_cancelled/restored/rescheduled/on_hold/rejected,
+ *  the quote_amended_* trio, payment_rejected, booking_info_needed,
+ *  instant_ack/instant_lapsed — proposed, not created, pending approval),
+ *  is internal/staff-only (ops_alert, captain_pickup_brief, driver_link,
+ *  wedding_reply/wedding_guest_message — not worth a template, staff can
+ *  message the bot first), or has a real approved match but the call site
+ *  doesn't yet pass every field that match's body needs verified correct
+ *  (payment_received's approved template wants a Payment Date the call
+ *  sites don't currently track separately from the booking/pickup date;
+ *  ms_picked/ms_depart/ms_ofd/driver-assignment matches exist but need
+ *  their exact field order checked against each call site before adding
+ *  here) — add an entry below only once that's been verified, not just
+ *  because a template with a similar name exists. */
+const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Record<string, string>, firstName: string) => string[] }>> = {
+  inquiry_ack: { name: "inquiry_acknowledgment", vars: (_d, firstName) => [firstName] },
+};
+
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
  * Every major and minor platform event also fans out to ONE configured ops
  * contact — a WhatsApp number and/or email set in the Automation desk and
@@ -361,10 +394,13 @@ export async function notify(template: string, to: { name: string; mobile?: stri
   const t = TEMPLATES[template];
   if (!t) throw new Error(`NO_TEMPLATE:${template}`);
   const data = absolute(raw);
-  const text = t.wa({ name: to.name.split(" ")[0] || to.name, ...data });
+  const firstName = to.name.split(" ")[0] || to.name;
+  const text = t.wa({ name: firstName, ...data });
+  const fast2sms = FAST2SMS_TEMPLATE_MAP[template];
+  const templateVars = fast2sms ? fast2sms.vars(data, firstName) : undefined;
   const now = new Date().toISOString();
   const rows: OutboxDoc[] = [];
-  if (to.mobile) rows.push({ kind: "send.wa", key: `${key}:wa`, to: to.mobile, name: to.name, template, text, status: "queued", attempts: 0, createdAt: now });
+  if (to.mobile) rows.push({ kind: "send.wa", key: `${key}:wa`, to: to.mobile, name: to.name, template, templateVars, text, status: "queued", attempts: 0, createdAt: now });
   if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
   return insertRows(rows);
 }
@@ -389,6 +425,46 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
   });
   if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
   return { stub: false, waId: await waMessageId(r) };
+}
+
+/** Fast2SMS's Meta-format WhatsApp API for an approved, non-OTP template —
+ *  used only for entries in FAST2SMS_TEMPLATE_MAP above. Same endpoint/auth
+ *  as sendWhatsAppOtpFast2SMS below, generalised to any template name +
+ *  body variables (no button component — none of the mapped templates use
+ *  one). Returns a result object, never throws, so drainPass can fall back
+ *  to the free-text direct-Meta send on failure. */
+async function sendWhatsAppTemplateFast2SMS(mobile: string, templateName: string, variables: string[]): Promise<{ success: boolean; error?: string; waId?: string }> {
+  const apiKey = process.env.FAST2SMS_API_KEY, phoneNumberId = process.env.FAST2SMS_WHATSAPP_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneNumberId) return { success: false, error: "FAST2SMS_NOT_CONFIGURED" };
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  // Same platform restriction as every other WhatsApp sender in this file
+  // (Meta error #132018) — a template parameter value can't contain a
+  // literal newline/carriage-return/tab.
+  const sanitized = variables.map((v) => v.replace(/\r\n|\r|\n/g, " • ").replace(/\t/g, " ").replace(/ {5,}/g, "    "));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const r = await fetch(`https://www.fast2sms.com/dev/whatsapp/v26.0/${phoneNumberId}/messages`, {
+      method: "POST", headers: { Authorization: apiKey, "Content-Type": "application/json" }, signal: controller.signal,
+      body: JSON.stringify({
+        messaging_product: "whatsapp", recipient_type: "individual", to: msisdn, type: "template",
+        template: { name: templateName, language: { code: "en" }, components: [{ type: "body", parameters: sanitized.map((text) => ({ type: "text", text })) }] },
+      }),
+    });
+    const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+    const errObj = data.error as { message?: string } | undefined;
+    if (!r.ok || errObj) {
+      console.error(`[Fast2SMS WhatsApp] FAILED | template: ${templateName} | status:`, r.status, "| error:", errObj?.message ?? JSON.stringify(data));
+      return { success: false, error: errObj?.message ?? `HTTP_${r.status}` };
+    }
+    const messages = data.messages as Array<{ id?: string }> | undefined;
+    return { success: true, waId: messages?.[0]?.id };
+  } catch (err) {
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    return { success: false, error: isAbort ? "TIMEOUT" : (err instanceof Error ? err.message : String(err)) };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Fast2SMS's Meta-format WhatsApp API, used ONLY for the `bagdrop_otp`
@@ -987,6 +1063,27 @@ async function invoicePass(stats: SweepStats) {
   if (changed) await sb.from("settings").upsert({ id: "creditnotes", doc: { notes }, status: null, created: new Date().toISOString() });
 }
 
+/** send.wa dispatch for drainPass: an outbox row carrying `templateVars`
+ *  (set by notify() only for FAST2SMS_TEMPLATE_MAP entries) tries the real
+ *  approved template via Fast2SMS first — same explicit-failure-only
+ *  fallback rule as sendWhatsAppOtp above (never retry on timeout, to
+ *  avoid a duplicate message). Everything else keeps going straight to the
+ *  existing free-text direct-Meta send, unchanged. */
+async function sendCustomerWhatsApp(doc: OutboxDoc): Promise<{ stub: boolean; link?: string; waId?: string }> {
+  if (doc.template && doc.templateVars) {
+    const mapped = FAST2SMS_TEMPLATE_MAP[doc.template];
+    if (mapped) {
+      const fast2sms = await sendWhatsAppTemplateFast2SMS(doc.to!, mapped.name, doc.templateVars);
+      if (fast2sms.success) return { stub: false, waId: fast2sms.waId };
+      if (fast2sms.error === "TIMEOUT") throw new Error("WA_FAST2SMS_TIMEOUT");
+      if (fast2sms.error !== "FAST2SMS_NOT_CONFIGURED") {
+        console.warn(`[WhatsApp] Fast2SMS failed for template ${mapped.name} (${fast2sms.error}) — falling back to free-text direct-Meta`);
+      }
+    }
+  }
+  return sendWhatsApp(doc.to!, doc.text!);
+}
+
 /** Pass C — drain: deliver queued sends through the providers. */
 async function drainPass(stats: SweepStats, limit = 40) {
   const sb = serviceClient()!;
@@ -1004,7 +1101,7 @@ async function drainPass(stats: SweepStats, limit = 40) {
     if (!claimed?.length) continue;
     try {
       const res = doc.kind === "send.wa"
-        ? await sendWhatsApp(doc.to!, doc.text!)
+        ? await sendCustomerWhatsApp(doc)
         : doc.kind === "send.email"
           ? await sendEmail(doc.to!, doc.subject ?? "Bagdrop update", doc.text!, doc.html)
           : { stub: true as const };
