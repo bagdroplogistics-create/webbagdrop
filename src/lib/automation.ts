@@ -52,6 +52,9 @@ export interface OutboxDoc {
   lastError?: string;
   createdAt: string;
   doneAt?: string;
+  waId?: string;                 // Meta's wamid — the API accepted it; this is NOT delivery
+  waStatus?: "sent" | "delivered" | "read" | "failed"; // from the delivery-status webhook, once it reports
+  waError?: string;              // Meta's failure reason, when waStatus is "failed"
 }
 
 /* ================= templates — the WhatsApp + email pairs ================= */
@@ -367,7 +370,16 @@ export async function notify(template: string, to: { name: string; mobile?: stri
 }
 
 /* ================= providers (graceful stub without keys) ================= */
-export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub: boolean; link?: string }> {
+/** Meta's response to an accepted send carries its own message id (wamid) —
+ *  capturing it is what lets the delivery-status webhook (src/app/api/hooks/
+ *  whatsapp) report back what actually happened to a "done" row, instead of
+ *  everyone having to trust the accept response (see sendWhatsAppOtp's note:
+ *  "accepted" is not "delivered"). */
+async function waMessageId(r: Response): Promise<string | undefined> {
+  try { return ((await r.clone().json()) as { messages?: { id?: string }[] }).messages?.[0]?.id; } catch { return undefined; }
+}
+
+export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub: boolean; link?: string; waId?: string }> {
   const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
   const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
   if (!token || !phoneId) return { stub: true, link: `https://wa.me/${msisdn}?text=${encodeURIComponent(text)}` };
@@ -376,7 +388,7 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
     body: JSON.stringify({ messaging_product: "whatsapp", to: msisdn, type: "text", text: { body: text } }),
   });
   if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
-  return { stub: false };
+  return { stub: false, waId: await waMessageId(r) };
 }
 
 /** A free-form text message (what sendWhatsApp above sends) only reaches a
@@ -387,10 +399,12 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
  *  this sends through it once WHATSAPP_OTP_TEMPLATE_NAME is set (unset =
  *  identical behaviour to today, falling back to sendWhatsApp above, so this
  *  is a no-op until that env var exists). Set WHATSAPP_OTP_TEMPLATE_LANG if
- *  the approved template isn't en_US, and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1
+ *  the approved template isn't "en" (Meta's own language code for the
+ *  approved bagdrop_otp template — not "en_US", which 404s with "Template
+ *  name does not exist in the translation"), and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1
  *  if Meta's template wizard added its default "Copy code" quick-reply
  *  button (it adds a second, button-type component the request needs). */
-export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText: string): Promise<{ stub: boolean; link?: string }> {
+export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText: string): Promise<{ stub: boolean; link?: string; waId?: string }> {
   const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME;
   if (!templateName) return sendWhatsApp(mobile, fallbackText);
   const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
@@ -404,11 +418,11 @@ export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText
     method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       messaging_product: "whatsapp", to: msisdn, type: "template",
-      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US" }, components },
+      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en" }, components },
     }),
   });
   if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 200)}`);
-  return { stub: false };
+  return { stub: false, waId: await waMessageId(r) };
 }
 
 export async function sendEmail(email: string, subject: string, text: string, html?: string): Promise<{ stub: boolean; link?: string }> {
@@ -924,8 +938,12 @@ async function drainPass(stats: SweepStats, limit = 40) {
         : doc.kind === "send.email"
           ? await sendEmail(doc.to!, doc.subject ?? "Bagdrop update", doc.text!, doc.html)
           : { stub: true as const };
-      const done: OutboxDoc = { ...doc, status: "done", stub: res.stub, link: res.link, doneAt: new Date().toISOString() };
+      const waId = "waId" in res ? (res.waId as string | undefined) : undefined;
+      const done: OutboxDoc = { ...doc, status: "done", stub: res.stub, link: res.link, waId, doneAt: new Date().toISOString() };
       await sb.from("outbox").upsert({ id: row.id, doc: done, status: "done", created: doc.createdAt });
+      /* lets the delivery-status webhook (src/app/api/hooks/whatsapp) find this
+       * row again later by wamid — it only ever gets the wamid, never our key */
+      if (waId) await sb.from("settings").upsert({ id: `wa:${waId}`, doc: { outboxId: row.id }, status: null, created: new Date().toISOString() });
       if (res.stub) stats.stubbed++; else stats.sent++;
     } catch (e) {
       const attempts = (doc.attempts ?? 0) + 1;

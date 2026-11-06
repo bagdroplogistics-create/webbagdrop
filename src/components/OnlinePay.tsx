@@ -3,6 +3,13 @@ import { useState } from "react";
 import { inr } from "@/lib/pricing";
 import { Button } from "@/components/ui";
 
+/** Client-side preview only, for display before the order is created — the
+ *  real amount is always decided server-side in /api/create-order (see
+ *  gatewayFeeBreakdown there), which is what Razorpay and the booking record
+ *  actually use. Kept at the same percentage by whoever sets the server
+ *  env var; if they ever drift, the checkout amount (server) always wins. */
+const PREVIEW_FEE_PCT = Math.max(0, Number(process.env.NEXT_PUBLIC_RAZORPAY_CONVENIENCE_FEE_PCT) || 0);
+
 /* ---------- online payment · Razorpay Standard Checkout ---------- */
 type RzpResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 type RzpFailure = { error?: { description?: string; reason?: string } };
@@ -55,11 +62,21 @@ export default function OnlinePay({ bookingId, kind, amount, onPaid, fallbackHin
     rzp.on("payment.failed", (f: RzpFailure) => setMsg({ ok: false, text: `Payment failed: ${f.error?.description ?? "please try again"}.` }));
     rzp.open();
   }
+  const previewFee = Math.round(amount * (PREVIEW_FEE_PCT / 100));
+  const previewTotal = amount + previewFee;
   return (
     <div className="rounded-xl border border-brand/30 bg-brand-soft p-3">
+      <p className="mb-2 text-sm font-semibold">Option 1 · Pay via Razorpay</p>
+      {previewFee > 0 && (
+        <div className="mb-2 rounded-lg bg-white/60 p-2 text-xs text-muted">
+          <div className="flex justify-between"><span>Service price</span><span>{inr(amount)}</span></div>
+          <div className="flex justify-between"><span>Razorpay convenience fee ({PREVIEW_FEE_PCT}%)</span><span>{inr(previewFee)}</span></div>
+          <div className="flex justify-between font-semibold text-ink"><span>Total payable</span><span>{inr(previewTotal)}</span></div>
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
-        <Button className="w-full" disabled={busy} onClick={() => void pay()}>{busy ? "Opening secure payment…" : `Pay ${inr(amount)} online`}</Button>
-        <Button className="w-full" variant="outline" disabled={busy} onClick={() => void pay(true)}>Scan &amp; pay by UPI</Button>
+        <Button className="w-full" disabled={busy} onClick={() => void pay()}>{busy ? "Opening secure payment…" : `Pay ${inr(previewTotal)} online`}</Button>
+        <Button className="w-full" variant="outline" disabled={busy} onClick={() => void pay(true)}>Scan &amp; pay by UPI (Razorpay)</Button>
       </div>
       <p className="mt-1.5 text-center text-xs text-muted">Card, UPI, netbanking or wallet · secured by Razorpay · confirmed instantly — no screenshot needed</p>
       {msg && <p className={`mt-2 text-sm ${msg.ok ? "text-green-800" : "text-red-700"}`}>{msg.text}</p>}

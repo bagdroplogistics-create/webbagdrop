@@ -59,7 +59,7 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ ok: true, ignored: "AMOUNT_MISMATCH", expected: order.amount, got: (p.amount ?? 0) / 100 });
   }
 
-  const r = applyGatewayPayment(b, { paymentId: p.id, orderId: p.order_id, amountInr: order.amount, kind: order.kind, method: p.method, via: "webhook" });
+  const r = applyGatewayPayment(b, { paymentId: p.id, orderId: p.order_id, amountInr: order.amount, baseAmountInr: order.baseAmount, feeAmountInr: order.feeAmount, kind: order.kind, method: p.method, via: "webhook" });
   if (!r) return NextResponse.json({ ok: true, already: true });
   const { error } = await saveOrThrow(sb, r.next);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

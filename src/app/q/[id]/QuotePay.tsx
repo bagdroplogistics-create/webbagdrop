@@ -21,11 +21,12 @@ interface V {
 export default function QuotePay({ id }: { id: string }) {
   const [b, setB] = useState<V | null | "loading">("loading");
   const [payTo, setPayTo] = useState<PayTo>({});
+  const [gateway, setGateway] = useState(false);
   useEffect(() => {
     let dead = false;
     const load = () => fetch(`/api/booking?id=${encodeURIComponent(id)}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (dead) return;
-      if (j.error) setB(null); else { setB(j.booking); setPayTo(j.payTo ?? {}); }
+      if (j.error) setB(null); else { setB(j.booking); setPayTo(j.payTo ?? {}); setGateway(!!j.gateway); }
     }).catch(() => { if (!dead) setB(null); });
     void load();
     const t = setInterval(load, 15000);
@@ -68,6 +69,17 @@ export default function QuotePay({ id }: { id: string }) {
         <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900"><b>Payment verified.</b> {b.identityOk ? "You're all set for pickup." : <>Next: <a className="font-semibold underline" href={`/verify/${b.id}`}>sign the baggage declaration &amp; bond</a></>}</p>
       ) : b.canPay ? (
         <>
+          {gateway && (
+            <>
+              <div className="rounded-xl border border-brand/30 bg-brand-soft p-3 text-sm">
+                <p className="mb-1 font-semibold">Option 1 · Pay via Razorpay</p>
+                <p className="text-xs text-muted">Card, UPI, netbanking or wallet · confirmed instantly. Sign in to your dashboard to pay this way.</p>
+                <a href="/account" className="mt-2 block"><Button className="w-full" variant="outline">Sign in to pay via Razorpay</Button></a>
+              </div>
+              <p className="my-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-faint">or</p>
+              <p className="mb-2 text-sm font-semibold">Option 2 · Pay directly via UPI QR</p>
+            </>
+          )}
           <UpiPay amount={b.total} reference={b.id} payTo={payTo} />
           <a href={withBase("/account")} className="mt-3 block"><Button className="w-full">Paid? Upload your screenshot in your dashboard</Button></a>
         </>

@@ -10,6 +10,8 @@ import { Button } from "@/components/ui";
 
 export interface PayTo { upiId?: string; payeeName?: string; bankName?: string; accountName?: string; accountNo?: string; ifsc?: string; note?: string }
 
+const FEE_PCT_ELSEWHERE = Math.max(0, Number(process.env.NEXT_PUBLIC_RAZORPAY_CONVENIENCE_FEE_PCT) || 0);
+
 export default function UpiPay({ amount, reference, payTo }: { amount: number; reference: string; payTo: PayTo }) {
   const uri = payTo.upiId
     ? `upi://pay?pa=${encodeURIComponent(payTo.upiId)}&pn=${encodeURIComponent(payTo.payeeName ?? "Bagdrop Logistics Solutions")}&am=${amount}&tn=${encodeURIComponent(reference)}&cu=INR`
@@ -40,6 +42,7 @@ export default function UpiPay({ amount, reference, payTo }: { amount: number; r
             <p className="mt-2 text-xs text-muted">Bank transfer: <b>{payTo.accountName ?? payTo.payeeName}</b>{payTo.bankName ? ` · ${payTo.bankName}` : ""}{payTo.accountNo ? ` · A/c ${payTo.accountNo}` : ""}{payTo.ifsc ? ` · IFSC ${payTo.ifsc}` : ""}</p>
           )}
           <p className="mt-1 text-[11px] font-semibold text-amber-800">Please check the payee name ({payTo.payeeName ?? "Bagdrop Logistics Solutions"}) before paying.</p>
+          {FEE_PCT_ELSEWHERE > 0 && <p className="mt-0.5 text-[11px] text-green-700">No extra fee on this option — pay exactly {inr(amount)}.</p>}
           {payTo.note && <p className="mt-0.5 text-[11px] text-faint">{payTo.note}</p>}
         </div>
       </div>
