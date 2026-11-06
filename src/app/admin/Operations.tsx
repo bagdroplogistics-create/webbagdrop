@@ -880,8 +880,10 @@ interface AutoData {
   alerts?: { mobile?: string; email?: string };
 }
 
-/** The ops alert contact — ONE number + email that every platform event
- *  (bookings, payments, identity, milestones, inquiries) fans out to. */
+/** The ops alert contact — one or more WhatsApp numbers (comma-separated)
+ *  + email that every platform event (bookings, payments, identity,
+ *  milestones, inquiries) fans out to. Never the sending number itself —
+ *  WhatsApp can't deliver a message to the number it's sent from. */
 function AlertContact({ d, onSaved }: { d: AutoData; onSaved: () => Promise<void> }) {
   const [f, setF] = useState({ mobile: d.alerts?.mobile ?? "", email: d.alerts?.email ?? "" });
   const [busy, setBusy] = useState(false);
@@ -903,7 +905,7 @@ function AlertContact({ d, onSaved }: { d: AutoData; onSaved: () => Promise<void
         <span className="text-[11px] text-faint">WhatsApp + email for every booking · payment · identity · milestone · inquiry</span>
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
-        <Field label="WhatsApp number"><Input className="w-44 py-2 text-xs" inputMode="tel" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} placeholder="+91 98XXX XXXXX" /></Field>
+        <Field label="WhatsApp number(s)"><Input className="w-64 py-2 text-xs" inputMode="tel" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} placeholder="98XXXXXXXX, 98YYYYYYYY" /></Field>
         <Field label="Email"><Input className="w-56 py-2 text-xs" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="ops@bagdrop.co" /></Field>
         <Button size="sm" disabled={busy || (!f.mobile.trim() && !f.email.trim())} onClick={() => void save()}>{busy ? "Saving…" : "Save contact"}</Button>
       </div>
