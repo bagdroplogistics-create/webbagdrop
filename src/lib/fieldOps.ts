@@ -23,6 +23,7 @@ import { requiredSecret } from "./secrets";
 import { allPieces, bjOn, custodyEvent, withCustody } from "./custody";
 import { airportOf, untaggedPieces } from "./airportPoc";
 import { AADHAAR_REQUIRED } from "./phase";
+import { syncWeddingBagStage } from "./weddingOps";
 
 export type FieldResult = { ok: true; booking: Booking; note?: string } | { ok: false; error: string; detail: string };
 const fail = (error: string, detail: string): FieldResult => ({ ok: false, error, detail });
@@ -148,7 +149,7 @@ export async function completePickup(sb: SupabaseClient, id: string, captain: st
     const kg = Math.round(bags.reduce((a, x) => a + (x.weightKg ?? 0), 0) * 10) / 10;
     const accept = custodyEvent({ at: now, code: "ACCEPT", pieces: allPieces(b), place: `Pickup · ${b.from}`, by: `captain ${captain}`,
       seals: bags.flatMap((x) => (x.seal ? [x.seal] : [])), note: `check-in: tag, seal, weight and photo per bag · customer signed` }, bjOn(b));
-    return { next: withCustody(withOps(b, ops, { status: "picked_up" }, `Picked up & sealed · ${bags.length} piece(s), ${kg} kg · every tag and seal scanned · customer signed · ${entry === "ops" ? "entered by ops" : "captain"} ${captain}`), [accept]) };
+    return { next: withCustody(withOps(b, ops, { status: "picked_up", ...syncWeddingBagStage(b, "Picked up") }, `Picked up & sealed · ${bags.length} piece(s), ${kg} kg · every tag and seal scanned · customer signed · ${entry === "ops" ? "entered by ops" : "captain"} ${captain}`), [accept]) };
   });
 }
 
@@ -232,7 +233,7 @@ export async function completeDelivery(sb: SupabaseClient, id: string, captain: 
     };
     const podEv = custodyEvent({ at: now, code: "POD", pieces: allPieces(b), place: `Delivery · ${b.to}`, by: `captain ${captain}`, note: `Move Pass + every tag + OTP · received by ${receiver} (${relation})` }, bjOn(b));
     if (!c.photo) return { error: "NO_POD_PHOTO", detail: "Take a photo of the bags being handed over." };
-    return { next: withCustody(withOps(b, ops, { status: "delivered", pod: { no: `POD-${b.id}`, at: now, receiver, relation, photo: c.photo, signature: sig.path, by: captain } }, `Delivered · Move Pass scanned · all ${bags.length} tag(s) matched · OTP verified · photo taken · received by ${receiver} (${relation}), signed · ${entry === "ops" ? "entered by ops" : "captain"} ${captain}`), [podEv]) };
+    return { next: withCustody(withOps(b, ops, { status: "delivered", pod: { no: `POD-${b.id}`, at: now, receiver, relation, photo: c.photo, signature: sig.path, by: captain }, ...syncWeddingBagStage(b, "Delivered home") }, `Delivered · Move Pass scanned · all ${bags.length} tag(s) matched · OTP verified · photo taken · received by ${receiver} (${relation}), signed · ${entry === "ops" ? "entered by ops" : "captain"} ${captain}`), [podEv]) };
   });
   if (r.ok && wrong.left !== undefined) return fail("OTP_WRONG", wrong.left > 0 ? `Wrong OTP — ${wrong.left} tr${wrong.left === 1 ? "y" : "ies"} left.` : "Wrong OTP — send a new one.");
   return r;
@@ -261,6 +262,6 @@ export async function recordDelivery(sb: SupabaseClient, id: string, by: string,
       claim: { ...o.claim, scanned: bags.map((x) => x.plate), doneAt: when },
     };
     const pod: Booking["pod"] = { no: `POD-${b.id}`, at: when, receiver, relation, photo: o.claim?.photo, by: captain };
-    return { next: withOps(b, ops, { status: "delivered", pod }, `Delivered · received by ${receiver} (${relation})${o.claim?.photo ? " · photo on file" : ""} · captain ${captain} · recorded by ${by}`) };
+    return { next: withOps(b, ops, { status: "delivered", pod, ...syncWeddingBagStage(b, "Delivered home") }, `Delivered · received by ${receiver} (${relation})${o.claim?.photo ? " · photo on file" : ""} · captain ${captain} · recorded by ${by}`) };
   });
 }

@@ -71,6 +71,19 @@ export function acceptReturn(b: Booking, rawTag: string, condition: "ok" | "dama
   };
 }
 
+/** Keeps the guest-facing bag stage (My bags, and the Y2K/team ops desks)
+ *  in step with the real Operations milestones, for the two events guests
+ *  actually watch for: picked up and delivered. Intermediate hub/linehaul
+ *  stages are left to the team's own per-bag dropdown, since those use
+ *  venue-specific wording (e.g. "At Taj") this generic code shouldn't guess. */
+export function syncWeddingBagStage(b: Booking, stage: "Picked up" | "Delivered home"): Partial<Booking> {
+  if (!b.wedding) return {};
+  const bookingId = b.wedding.bookingId || b.id;
+  const bagStatus = { ...b.wedding.bagStatus };
+  for (const bag of deskStateOf(b).bags ?? []) bagStatus[`${bookingId}-${bag.owner}-${bag.id}`] = stage;
+  return { wedding: { ...b.wedding, bagStatus } };
+}
+
 export const MAX_MESSAGES = 60;
 export function addMessage(b: Booking, msg: WeddingMessage): Booking {
   const list = b.wedding!.messages ?? [];
