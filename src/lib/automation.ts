@@ -394,20 +394,90 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
   return { stub: false, waId: await waMessageId(r) };
 }
 
+/** Fast2SMS's Meta-format WhatsApp API, used ONLY for the `bagdrop_otp`
+ *  authentication template. Same WABA/phone number as sendWhatsApp /
+ *  sendWhatsAppOtp above (995935626929789) — Fast2SMS is Bagdrop's existing
+ *  Business Solution Provider for that number (see the WhatsApp Manager
+ *  template list), reached through a different endpoint/auth header than
+ *  Meta's own Graph API. Per Fast2SMS's docs (reference/sendauthentication
+ *  template) an authentication template needs the code in BOTH the body
+ *  parameter and the copy-code button parameter. Returns a result object —
+ *  never throws — so sendWhatsAppOtp below can fall back to the direct-Meta
+ *  path on any failure without an unhandled rejection. Mobile numbers
+ *  reaching this function are already Indian-only (src/lib/otp.ts's
+ *  cleanMobile only accepts 10/11/12-digit Indian shapes), so Fast2SMS's
+ *  India-only restriction on international numbers never applies here. */
+async function sendWhatsAppOtpFast2SMS(mobile: string, code: string): Promise<{ success: boolean; error?: string; waId?: string }> {
+  const apiKey = process.env.FAST2SMS_API_KEY, phoneNumberId = process.env.FAST2SMS_WHATSAPP_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneNumberId) return { success: false, error: "FAST2SMS_NOT_CONFIGURED" };
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  const templateName = process.env.FAST2SMS_OTP_TEMPLATE_NAME || "bagdrop_otp";
+  const language = process.env.FAST2SMS_OTP_LANGUAGE || "en";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const r = await fetch(`https://www.fast2sms.com/dev/whatsapp/v26.0/${phoneNumberId}/messages`, {
+      method: "POST", headers: { Authorization: apiKey, "Content-Type": "application/json" }, signal: controller.signal,
+      body: JSON.stringify({
+        messaging_product: "whatsapp", recipient_type: "individual", to: msisdn, type: "template",
+        template: {
+          name: templateName, language: { code: language },
+          components: [
+            { type: "body", parameters: [{ type: "text", text: code }] },
+            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+          ],
+        },
+      }),
+    });
+    const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+    const errObj = data.error as { message?: string } | undefined;
+    if (!r.ok || errObj) {
+      console.error("[Fast2SMS WhatsApp OTP] FAILED | status:", r.status, "| error:", errObj?.message ?? JSON.stringify(data)); // never logs the code itself
+      return { success: false, error: errObj?.message ?? `HTTP_${r.status}` };
+    }
+    const messages = data.messages as Array<{ id?: string }> | undefined;
+    return { success: true, waId: messages?.[0]?.id };
+  } catch (err) {
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    return { success: false, error: isAbort ? "TIMEOUT" : (err instanceof Error ? err.message : String(err)) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** A free-form text message (what sendWhatsApp above sends) only reaches a
  *  number that messaged Bagdrop first within the last 24 hours — WhatsApp's
  *  Cloud API still answers 200 OK for one outside that window, then silently
  *  drops it, which is why a first-time guest's OTP looks "sent" here but
- *  never arrives. The fix is an approved Authentication-category template;
- *  this sends through it once WHATSAPP_OTP_TEMPLATE_NAME is set (unset =
- *  identical behaviour to today, falling back to sendWhatsApp above, so this
- *  is a no-op until that env var exists). Set WHATSAPP_OTP_TEMPLATE_LANG if
- *  the approved template isn't "en" (Meta's own language code for the
- *  approved bagdrop_otp template — not "en_US", which 404s with "Template
- *  name does not exist in the translation"), and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1
- *  if Meta's template wizard added its default "Copy code" quick-reply
- *  button (it adds a second, button-type component the request needs). */
+ *  never arrives. The fix is an approved Authentication-category template.
+ *
+ *  Provider order: Fast2SMS's `bagdrop_otp` template first (when
+ *  FAST2SMS_API_KEY + FAST2SMS_WHATSAPP_PHONE_NUMBER_ID are set), falling
+ *  back to the direct-Meta template send below on any EXPLICIT failure —
+ *  never on a timeout, since the first provider may have already delivered
+ *  it and a second send would reach the customer twice (same rule
+ *  bagdrop-web's sendWhatsAppTemplate dispatcher uses). With neither
+ *  provider configured this is a no-op, falling back to sendWhatsApp
+ *  (free text) exactly as before this change. For the direct-Meta path:
+ *  set WHATSAPP_OTP_TEMPLATE_LANG if the approved template isn't "en"
+ *  (Meta's own language code for the approved bagdrop_otp template — not
+ *  "en_US", which 404s with "Template name does not exist in the
+ *  translation"), and WHATSAPP_OTP_TEMPLATE_HAS_BUTTON=1 if Meta's template
+ *  wizard added its default "Copy code" quick-reply button (it adds a
+ *  second, button-type component the request needs). */
 export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText: string): Promise<{ stub: boolean; link?: string; waId?: string }> {
+  const fast2sms = await sendWhatsAppOtpFast2SMS(mobile, code);
+  if (fast2sms.success) return { stub: false, waId: fast2sms.waId };
+  if (fast2sms.error === "TIMEOUT") {
+    // Unknown outcome — don't risk a duplicate OTP by trying a second
+    // provider. Throw (not a fake "sent") so the caller's catch block
+    // reports a real failure instead of claiming success.
+    throw new Error("WA_OTP_FAST2SMS_TIMEOUT");
+  }
+  if (fast2sms.error !== "FAST2SMS_NOT_CONFIGURED") {
+    console.warn(`[WhatsApp OTP] Fast2SMS failed (${fast2sms.error}) — falling back to direct Meta`);
+  }
+
   const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME;
   if (!templateName) return sendWhatsApp(mobile, fallbackText);
   const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
