@@ -32,28 +32,21 @@ async function overLimit(to: string, ip: string): Promise<boolean> {
 /** Local testing only: OTP_SIMULATE_WA_DOWN=1 makes WhatsApp sends fail so the
  *  email fallback can be tried end to end. Ignored on a live deployment. */
 const waDown = () => DEMO_ALLOWED && process.env.OTP_SIMULATE_WA_DOWN === "1";
-const waReady = () => !!(process.env.META_WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
+const waReady = () => !!((process.env.FAST2SMS_API_KEY && process.env.FAST2SMS_WHATSAPP_PHONE_NUMBER_ID) || (process.env.META_WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID));
 const emailReady = () => !!process.env.RESEND_API_KEY;
 
-/** Founder decision (2026-11-05): WhatsApp delivery depends on Meta's template
- *  approval/number-tier status and isn't reliable enough yet to gate the booking
- *  form's own verify step on it — the mobile channel shows its code on screen
- *  instead, the same way a stub send would on localhost, so staff and testers
- *  can verify and create inquiries without waiting on WhatsApp. The email
- *  channel is untouched (it already sends for real and the founder confirmed
- *  it's working). Set OTP_MOBILE_REAL_SEND=1 to require a genuine WhatsApp
- *  send again once template delivery is confirmed reliable. */
-const mobileOnScreen = () => process.env.OTP_MOBILE_REAL_SEND !== "1";
-
 /** Issue a code for one destination and send it on one channel. A stub send
- *  (no provider keys), or the mobile channel while mobileOnScreen() is true,
- *  counts only on localhost / here, where the code comes back as `demo`; on a
- *  live deployment with mobileOnScreen() off, a stub send is a failure, never
- *  a free code. */
+ *  (no provider keys) counts only on localhost / a preview with
+ *  ALLOW_DEMO_CODES=1 (DEMO_ALLOWED), where the code comes back as `demo`;
+ *  on a live deployment a stub send is a failure, never a free code — see
+ *  DEMO_ALLOWED's own doc comment. The on-screen fallback this used to have
+ *  for every mobile OTP (Founder decision, 2026-11-05, while direct-Meta
+ *  delivery was unproven) is gone now that sendWhatsAppOtp actually sends
+ *  through Fast2SMS (with direct-Meta as its own fallback) — see
+ *  src/lib/automation.ts. */
 async function tryChannel(channel: "mobile" | "email", to: string): Promise<{ ok: true; exp: number; token: string; demo?: string } | { ok: false; why: "not_configured" | "failed" }> {
   const { code, exp, token } = issueOtp(to);
   const text = `${code} is your Bagdrop verification code. Valid 10 minutes — never share it.`;
-  if (channel === "mobile" && mobileOnScreen()) return { ok: true, exp, token, demo: code };
   try {
     if (channel === "mobile" && waDown()) throw new Error("WA_SIMULATED_DOWN");
     const res = channel === "email" ? await sendEmail(to, `${code} is your Bagdrop code`, text) : await sendWhatsAppOtp(to, code, text);
