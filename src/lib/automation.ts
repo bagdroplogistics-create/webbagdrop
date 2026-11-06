@@ -321,8 +321,19 @@ export async function saveAlerts(cfg: AlertConfig): Promise<void> {
 
 export async function opsNotify(text: string, subject: string, key: string): Promise<number> {
   const cfg = await loadAlerts();
-  if (!cfg.mobile && !cfg.email) return 0;
-  return notify("ops_alert", { name: "Bagdrop Ops", mobile: cfg.mobile, email: cfg.email }, { text, subject }, key);
+  // "Ops alert contact" mobile field accepts one or several numbers,
+  // comma/semicolon-separated (2026-11-06) — e.g. sales team + owner.
+  // Never the sending number itself: WhatsApp's Cloud API can't deliver a
+  // message to the same number it sends from (confirmed via real
+  // dead-letter errors — "(#100) Invalid parameter" — while fixing this).
+  const mobiles = (cfg.mobile ?? "").split(/[,;]+/).map((m) => m.trim()).filter(Boolean);
+  if (!mobiles.length && !cfg.email) return 0;
+  let n = 0;
+  for (const mobile of mobiles) {
+    n += await notify("ops_alert", { name: "Bagdrop Ops", mobile }, { text, subject }, `${key}:${mobile}`);
+  }
+  if (cfg.email) n += await notify("ops_alert", { name: "Bagdrop Ops", email: cfg.email }, { text, subject }, `${key}:em`);
+  return n;
 }
 
 /** New-inquiry email to the inquiry desk (info@ + aditya@ by default),

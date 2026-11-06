@@ -38,13 +38,17 @@ export async function POST(req: Request) {
   let b: { action?: string; mobile?: string; email?: string } = {};
   try { b = await req.json(); } catch { /* empty body = run the sweep */ }
 
-  /* set the ops alert contact — every platform event fans out to it */
+  /* set the ops alert contact — every platform event fans out to it.
+   * Mobile accepts one or several numbers, comma/semicolon-separated
+   * (2026-11-06) — opsNotify() in lib/automation.ts sends to each. */
   if (b.action === "alerts") {
-    const mobile = b.mobile?.trim() ? cleanMobile(b.mobile) : undefined;
+    const rawMobiles = (b.mobile ?? "").split(/[,;]+/).map((m) => m.trim()).filter(Boolean);
+    const cleanedMobiles = rawMobiles.map(cleanMobile);
+    if (cleanedMobiles.some((m) => !m)) return NextResponse.json({ error: "BAD_MOBILE" }, { status: 400 });
+    const mobile = cleanedMobiles.length ? cleanedMobiles.join(",") : undefined;
     const email = b.email?.trim() ? cleanEmail(b.email) : undefined;
-    if (b.mobile?.trim() && !mobile) return NextResponse.json({ error: "BAD_MOBILE" }, { status: 400 });
     if (b.email?.trim() && !email) return NextResponse.json({ error: "BAD_EMAIL" }, { status: 400 });
-    await saveAlerts({ mobile: mobile ?? undefined, email: email ?? undefined });
+    await saveAlerts({ mobile, email: email ?? undefined });
     return NextResponse.json({ ok: true, alerts: { mobile, email } });
   }
 
