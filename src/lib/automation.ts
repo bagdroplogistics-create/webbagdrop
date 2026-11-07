@@ -99,7 +99,10 @@ ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot
 
 export const TEMPLATES: Record<string, T> = {
   inquiry_ack: {
-    wa: (d) => `Hi ${d.name}, Bagdrop here — we have your request for ${d.lane}. A specialist reaches you within 15 minutes with the rate and pickup plan. Your reference: ${d.ref}.`,
+    // Founder-reported 2026-11-07: "a specialist reaches you within 15
+    // minutes with the rate and pickup plan" overpromised a response time
+    // the team doesn't actually run — simplified to what's actually true.
+    wa: (d) => `Hi ${d.name}, Bagdrop here — we've received your request for ${d.lane}. We'll send you a quotation as per your request as soon as possible. Your reference: ${d.ref}.`,
     subject: () => "Bagdrop — we have your request",
   },
   instant_ack: {
