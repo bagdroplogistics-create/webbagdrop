@@ -6,7 +6,6 @@
 export const NAV = [
   { href: "#usecases", label: "Use cases" },
   { href: "#why", label: "Why Bagdrop" },
-  { href: "#solutions", label: "Solutions" },
   { href: "#handovers", label: "Handovers" },
   { href: "#track", label: "Track" },
   { href: "#faq", label: "FAQ" },
