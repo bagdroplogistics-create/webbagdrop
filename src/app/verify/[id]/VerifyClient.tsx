@@ -38,11 +38,11 @@ export default function VerifyClient({ id }: { id: string }) {
   const [fragile, setFragile] = useState("");
   const [signature, setSignature] = useState("");
   const [place, setPlace] = useState("");
-  const [aadhaar, setAadhaar] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState<{ demo?: string; exp?: number; token?: string; channel?: string } | null>(null);
   const [intl, setIntl] = useState({ nationality: "", passportNo: "", indiaAddress: "" });
   const [files, setFiles] = useState<{ passport?: File; visa?: File }>({});
+  const [idDoc, setIdDoc] = useState<File | undefined>(undefined);
 
   const load = useCallback(async () => {
     try {
@@ -69,13 +69,19 @@ export default function VerifyClient({ id }: { id: string }) {
   }
   const accepted = () => Object.keys(ticks).filter((k) => ticks[k]);
 
-  async function sendAadhaarOtp() {
-    const j = await post({ id: bid, action: "aadhaar_otp", aadhaar });
-    if (j) setOtpSent({ demo: j.demo });
-  }
-  async function signDomestic() {
-    const j = await post({ id: bid, action: "sign_domestic", aadhaar, otp, signature, place, fragile, accepted: accepted() });
-    if (j?.booking) setB(j.booking);
+  async function uploadIdAndSign() {
+    setBusy(true); setErr(null);
+    try {
+      const f = new FormData();
+      f.set("id", bid); f.set("signature", signature); f.set("place", place); f.set("fragile", fragile);
+      f.set("accepted", JSON.stringify(accepted()));
+      if (idDoc) f.set("idDoc", idDoc);
+      const r = await fetch("/api/kyc", { method: "POST", headers: { "x-bagdrop-kyc-mode": "id_upload" }, body: f });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) setErr(ERR[j.error] ?? j.detail ?? j.error ?? "Something went wrong.");
+      else setB(j.booking);
+    } catch { setErr("Could not reach the server — try again."); }
+    finally { setBusy(false); }
   }
   async function sendIntlOtp() {
     const j = await post({ id: bid, action: "intl_otp" });
@@ -188,21 +194,13 @@ export default function VerifyClient({ id }: { id: string }) {
                 <>
                   {bond}
                   <div className="mt-4 rounded-xl bg-paper p-3">
-                    <p className="mb-2 text-sm font-semibold">Sign with Aadhaar OTP</p>
-                    <div className="flex flex-wrap items-end gap-2">
-                      <Field label="Aadhaar number"><Input className="w-52 font-mono" inputMode="numeric" maxLength={14} value={aadhaar} onChange={(e) => { setAadhaar(e.target.value.replace(/[^\d ]/g, "")); setOtpSent(null); }} placeholder="XXXX XXXX XXXX" /></Field>
-                      <Button variant="outline" disabled={busy || aadhaar.replace(/\D/g, "").length !== 12} onClick={() => void sendAadhaarOtp()}>{otpSent ? "Resend OTP" : "Send OTP"}</Button>
-                    </div>
-                    {otpSent && (
-                      <div className="mt-2 flex flex-wrap items-end gap-2">
-                        <Field label={`OTP sent to your Aadhaar-linked mobile${otpSent.demo ? ` (your code: ${otpSent.demo})` : ""}`}>
-                          <Input className="w-40 font-mono tracking-[.3em]" maxLength={6} inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="••••••" />
-                        </Field>
-                        <Button disabled={busy || otp.length !== 6 || !allTicked || signature.trim().length < 3} onClick={() => void signDomestic()}>{busy ? "Signing…" : "Sign the bond"}</Button>
-                      </div>
-                    )}
-                    {!allTicked && <p className="mt-2 text-xs text-muted">Tick every declaration above to sign. {b.attemptsLeft < 3 ? `${b.attemptsLeft} attempt(s) left.` : ""}</p>}
-                    <p className="mt-2 text-[11px] text-faint">Your Aadhaar number is checked and discarded — only the last four digits are stored.</p>
+                    <p className="mb-2 text-sm font-semibold">Upload your Aadhaar card to sign</p>
+                    <Field label="Aadhaar card — front side (image or PDF, ≤5 MB)">
+                      <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="text-xs" onChange={(e) => setIdDoc(e.target.files?.[0])} />
+                    </Field>
+                    <Button className="mt-3" disabled={busy || !idDoc || !allTicked || signature.trim().length < 3} onClick={() => void uploadIdAndSign()}>{busy ? "Submitting…" : "Submit and sign the bond"}</Button>
+                    {!allTicked && <p className="mt-2 text-xs text-muted">Tick every declaration above to submit.</p>}
+                    <p className="mt-2 text-[11px] text-faint">Kept only as your identity record — we don&apos;t run a government verification check.</p>
                   </div>
                 </>
               )}
