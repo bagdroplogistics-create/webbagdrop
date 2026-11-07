@@ -130,7 +130,13 @@ export default function IdentityAndCompliance() {
                   <td className="py-2 pr-2 font-mono text-xs">{b.id}</td>
                   <td className="pr-2">{b.indemnity!.signature}{b.indemnity!.place ? <span className="text-xs text-muted"> · {b.indemnity!.place}</span> : null}</td>
                   <td className="pr-2 font-mono text-xs">{b.indemnity!.idType} {b.indemnity!.idNumber}</td>
-                  <td className="pr-2 text-xs text-muted">{b.indemnity!.method === "aadhaar_otp" ? "Aadhaar OTP" : "Documents + OTP"}{b.indemnity!.version !== INDEMNITY_VERSION ? ` · v${b.indemnity!.version}` : ""}</td>
+                  <td className="pr-2 text-xs text-muted">
+                    {b.indemnity!.method === "aadhaar_otp" ? "Aadhaar OTP" : b.indemnity!.method === "id_upload" ? "Aadhaar upload" : "Documents + OTP"}
+                    {b.indemnity!.version !== INDEMNITY_VERSION ? ` · v${b.indemnity!.version}` : ""}
+                    {b.indemnity!.method === "id_upload" && (b.kyc?.docs ?? []).filter((d) => d.kind === "aadhaar").slice(-1).map((d) => (
+                      <button key={d.path} className="ml-1.5 cursor-pointer font-semibold text-ink underline" disabled={!!busy} onClick={() => void act(b, "docUrl", { path: d.path })}>view</button>
+                    ))}
+                  </td>
                   <td className="pr-2 text-xs text-muted">{b.indemnity!.fragile ?? "—"}</td>
                   <td className="text-xs">{new Date(b.indemnity!.acceptedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                 </tr>
