@@ -4,9 +4,8 @@
  *  updates today, so copy says that, not "real-time GPS"). */
 
 export const NAV = [
-  { href: "#usecases", label: "Use cases" },
+  { href: "#usecases", label: "Services" },
   { href: "#why", label: "Why Bagdrop" },
-  { href: "#handovers", label: "Handovers" },
   { href: "#track", label: "Track" },
   { href: "#faq", label: "FAQ" },
 ] as const;
@@ -28,7 +27,7 @@ export const USE_CASES: UseCase[] = [
   { problem: "Long train journey ahead", solution: "Railway station drop", image: "/images/landing/railway.jpg" },
   { problem: "Family cruise departure", solution: "Cruise baggage", image: "/images/landing/cruise.jpg" },
   { problem: "Moving city to city", solution: "Door-to-door", image: "/images/landing/door.png" },
-  { problem: "Destination wedding", solution: "Wedding logistics", image: "/images/wedding-slide.jpg" },
+  { problem: "Destination wedding", solution: "Wedding logistics", image: "/images/landing/wedding.png" },
   { problem: "Moving abroad for study", solution: "Student relocation", image: "/images/student-slide.jpg" },
 ];
 
@@ -48,7 +47,7 @@ export const SOLUTIONS: Solution[] = [
   { title: "Railway Station", image: "/images/landing/railway.jpg" },
   { title: "Cruise Baggage", image: "/images/landing/cruise.jpg" },
   { title: "Excess Baggage", tag: "Save 40–60%", image: "/images/landing/excess.png" },
-  { title: "Destination Weddings", tag: "White-glove", image: "/images/wedding-slide.jpg" },
+  { title: "Destination Weddings", tag: "White-glove", image: "/images/landing/wedding.png" },
   { title: "Student Relocation", image: "/images/student-slide.jpg" },
   { title: "Corporate Travel", tag: "GST invoices", image: "/images/landing/corporate.jpg" },
   { title: "Group Bookings", tag: "Up to 30 bags", image: "/images/landing/group.jpg" },
