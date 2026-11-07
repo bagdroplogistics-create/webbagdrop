@@ -79,6 +79,9 @@ export default function OnlinePay({ bookingId, kind, amount, onPaid, fallbackHin
         <Button className="w-full" variant="outline" disabled={busy} onClick={() => void pay(true)}>Scan &amp; pay by UPI (Razorpay)</Button>
       </div>
       <p className="mt-1.5 text-center text-xs text-muted">Card, UPI, netbanking or wallet · secured by Razorpay · confirmed instantly — no screenshot needed</p>
+      {previewFee > 0 && (
+        <p className="mt-1 text-center text-xs text-muted">A {PREVIEW_FEE_PCT}% Razorpay convenience fee applies to both buttons above. Pay with no extra fee via Option 2 (UPI QR / bank transfer) below.</p>
+      )}
       {msg && <p className={`mt-2 text-sm ${msg.ok ? "text-green-800" : "text-red-700"}`}>{msg.text}</p>}
     </div>
   );
