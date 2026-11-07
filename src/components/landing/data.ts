@@ -22,19 +22,19 @@ export const CITIES = ["Mumbai", "Delhi", "Ahmedabad", "Vadodara", "Goa", "Gujar
 
 export type UseCase = { problem: string; solution: string; image: string };
 export const USE_CASES: UseCase[] = [
-  { problem: "Over your airline allowance", solution: "Excess baggage", image: "/images/landing/excess.jpg" },
+  { problem: "Over your airline allowance", solution: "Excess baggage", image: "/images/landing/excess.png" },
   { problem: "Landing in a new city", solution: "Airport delivery", image: "/images/landing/airport.jpg" },
-  { problem: "Need an early hotel check-in", solution: "Hotel delivery", image: "/images/landing/hotel.jpg" },
+  { problem: "Need an early hotel check-in", solution: "Hotel delivery", image: "/images/landing/hotel.webp" },
   { problem: "Long train journey ahead", solution: "Railway station drop", image: "/images/landing/railway.jpg" },
   { problem: "Family cruise departure", solution: "Cruise baggage", image: "/images/landing/cruise.jpg" },
-  { problem: "Moving city to city", solution: "Door-to-door", image: "/images/landing/door.jpg" },
+  { problem: "Moving city to city", solution: "Door-to-door", image: "/images/landing/door.png" },
   { problem: "Destination wedding", solution: "Wedding logistics", image: "/images/wedding-slide.jpg" },
   { problem: "Moving abroad for study", solution: "Student relocation", image: "/images/student-slide.jpg" },
 ];
 
 export type Pain = { big: string; pain: string; fix: string; image: string };
 export const PAINS: Pain[] = [
-  { big: "Excess fees", pain: "Airline excess-baggage fees, every trip", fix: "No more excess-baggage counter", image: "/images/landing/excess.jpg" },
+  { big: "Excess fees", pain: "Airline excess-baggage fees, every trip", fix: "No more excess-baggage counter", image: "/images/landing/excess.png" },
   { big: "Queues", pain: "Trolleys and queues at every terminal", fix: "Walk out empty-handed", image: "/images/landing/queue.jpg" },
   { big: "Stairs", pain: "Platforms, stairs and coach racks", fix: "Board with just a day bag", image: "/images/landing/railway.jpg" },
   { big: "Hands full", pain: "Kids, parents and wedding trunks to manage", fix: "We carry, you travel", image: "/images/landing/family.jpg" },
@@ -43,11 +43,11 @@ export const PAINS: Pain[] = [
 export type Solution = { title: string; tag?: string; image: string };
 export const SOLUTIONS: Solution[] = [
   { title: "Airport Delivery", tag: "Most popular", image: "/images/landing/airport.jpg" },
-  { title: "Door-to-Door", image: "/images/landing/door.jpg" },
-  { title: "Hotel Delivery", image: "/images/landing/hotel.jpg" },
+  { title: "Door-to-Door", image: "/images/landing/door.png" },
+  { title: "Hotel Delivery", image: "/images/landing/hotel.webp" },
   { title: "Railway Station", image: "/images/landing/railway.jpg" },
   { title: "Cruise Baggage", image: "/images/landing/cruise.jpg" },
-  { title: "Excess Baggage", tag: "Save 40–60%", image: "/images/landing/excess.jpg" },
+  { title: "Excess Baggage", tag: "Save 40–60%", image: "/images/landing/excess.png" },
   { title: "Destination Weddings", tag: "White-glove", image: "/images/wedding-slide.jpg" },
   { title: "Student Relocation", image: "/images/student-slide.jpg" },
   { title: "Corporate Travel", tag: "GST invoices", image: "/images/landing/corporate.jpg" },
