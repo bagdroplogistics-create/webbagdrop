@@ -11,6 +11,7 @@ import { buildManifest, groupPickups, manifestCsv, planOf, type LegPlan, type Pi
 import type { BagdropEvent, Booking } from "@/lib/types";
 import type { Captain, VehicleRec } from "@/lib/opsModel";
 import { Badge, Button, Input, Select, TableFrame } from "@/components/ui";
+import { withBase } from "@/lib/basePath";
 
 type Tab = "pickup" | "delivery" | "return" | "bags" | "gaps";
 const TABS: [Tab, string][] = [["pickup", "Pickup plan"], ["delivery", "Delivery plan"], ["return", "Return plan"], ["bags", "All bags"], ["gaps", "Missing"]];
@@ -76,7 +77,7 @@ export default function ManifestClient() {
           {events.length > 1 && <Select className="w-auto" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Event">{events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</Select>}
           <Button size="sm" variant="outline" onClick={download}>Download CSV</Button>
           <Button size="sm" variant="outline" onClick={() => window.print()}>Print</Button>
-          <a className="text-xs font-semibold text-brand hover:underline" href="/admin" target="_blank" rel="noreferrer">BAGDROP OS</a>
+          <a className="text-xs font-semibold text-brand hover:underline" href={withBase("/admin")} target="_blank" rel="noreferrer">BAGDROP OS</a>
         </div>
       </div>
       {err && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-900">{err}</p>}
