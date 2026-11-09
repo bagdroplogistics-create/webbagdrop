@@ -11,6 +11,7 @@ import { adminSaveEvent, generateHostInvoice, newEventCode, watchAdminEvents, y2
 import type { BagdropEvent, Booking, BookingStatus } from "@/lib/types";
 import { WEDDING_STAGES } from "@/lib/types";
 import { approvalCounts, bookingOpen, closesText, statusForStage, weddingStatus } from "@/lib/weddingStatus";
+import { withBase } from "@/lib/basePath";
 import { teamView } from "@/lib/weddingTeamView";
 import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
