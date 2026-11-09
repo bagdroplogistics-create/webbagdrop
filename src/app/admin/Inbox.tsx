@@ -295,7 +295,7 @@ export default function Inbox({ search = "", openId, onOpenQuote, onOpenOps }: {
         </div>
       </Card>
 
-      <Drawer open={!!(lead || booking)} onClose={() => setSel(null)} title={lead ? `Lead ${lead.leadNumber ?? lead.id.slice(0, 8)}` : booking ? `Booking ${booking.id}` : ""}>
+      <Drawer wide open={!!(lead || booking)} onClose={() => setSel(null)} title={lead ? `Lead ${lead.leadNumber ?? lead.id.slice(0, 8)}` : booking ? `Booking ${booking.id}` : ""}>
         {lead ? (
           <>
             <div className="mb-3 flex items-center justify-between">
