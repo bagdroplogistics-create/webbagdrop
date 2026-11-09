@@ -651,7 +651,7 @@ async function capturePass(stats: SweepStats) {
       : await notify("inquiry_ack", { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email },
           { lane: `${b.from} → ${b.to}`, ref: b.id }, `ack:${b.id}`);
     stats.opsQueued += await opsNotify(
-      `${inst ? "INSTANT " : "New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · ${b.date || "date TBC"} · via ${b.source ?? "website"}${paid ? ` · PAID ${inr(b.pay!.amount)}` : " · rate to confirm"}`,
+      `${inst ? "INSTANT " : "New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} · ${b.id}\n${b.traveller.name}${b.traveller.mobile ? ` · +${b.traveller.mobile}` : ""}\n${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · pickup ${b.date || "date TBC"}\nVia ${b.source ?? "website"}${paid ? ` · Paid ${inr(b.pay!.amount)}` : " · Rate to confirm"}`,
       `New ${paid ? "booking" : "request"} · ${b.id} · ${b.from} → ${b.to}`,
       `ops:new:${b.id}`);
   }
@@ -692,10 +692,14 @@ async function eventPass(stats: SweepStats) {
     const d = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: pcsLabel(b.bags, b.oversize, "bags"), amount: inr(b.pay?.amount ?? 0) };
     if (isPaid(b)) {
       stats.paidQueued += await notify("payment_received", to, d, `paid:${b.id}`);
-      stats.opsQueued += await opsNotify(
-        `Payment verified · ${b.id} · ${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway} · ${b.from} → ${b.to}${!AADHAAR_REQUIRED || b.identity?.ok ? "" : " · Aadhaar pending (pickup locked)"}`,
-        `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`,
-        `ops:paid:${b.id}`);
+      const paidSummary = `Payment verified · ${b.id}\n${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway}\n${b.from} → ${b.to}${!AADHAAR_REQUIRED || b.identity?.ok ? "" : "\nAadhaar pending — pickup locked"}`;
+      const paidSubject = `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`;
+      stats.opsQueued += await opsNotify(paidSummary, paidSubject, `ops:paid:${b.id}`);
+      // Founder request (2026-11-09): payment confirmations must always reach
+      // the inquiry desk (info@/aditya@), same as a new booking — unlike the
+      // single configurable ops-alert address above, which the team may point
+      // elsewhere without silently losing this one.
+      stats.opsQueued += await notifyInquiryDesk(paidSummary, paidSubject, `inqdesk:paid:${b.id}`);
     }
     /* hosted wedding family confirmed (from Shipments "Confirm booking" or an approval) → one confirmation */
     if (isHostBilled(b) && ["accepted", "assigned"].includes(b.status)) {
