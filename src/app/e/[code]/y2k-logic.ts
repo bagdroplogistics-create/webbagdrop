@@ -669,6 +669,9 @@ export function initY2k(): () => void {
     void opsTick();
     timers.push(setInterval(() => void opsTick(), 5000));
     renderOps();
+    // unhidden just above, but the guest sections render after load too, so
+    // the jump lands short without this — same fix as #book/#track.
+    setTimeout(() => $("#ops")?.scrollIntoView({ block: "start" }), 60);
   }
 
   return () => {
