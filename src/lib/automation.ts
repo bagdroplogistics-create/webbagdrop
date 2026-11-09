@@ -36,6 +36,15 @@ import { after } from "next/server";
 
 const MAX_ATTEMPTS = 5;
 
+/** Obvious QA/test traffic hitting the live booking + payment flow — "CTO
+ *  TEST A", "QR Test Client", "Prod Webhook Test family", etc. Real
+ *  travellers are never named this. Every sweep pass skips SENDING a
+ *  notification for one of these (the booking itself still saves and shows
+ *  in the admin lists) so test runs against production don't burn the
+ *  email/WhatsApp provider's daily quota that real customers need. */
+export const looksLikeTestName = (name: string): boolean => /\btest\b/i.test(name || "");
+export const looksLikeTestBooking = (b: Booking): boolean => looksLikeTestName(b.traveller.name);
+
 export interface OutboxDoc {
   kind: string;                 // send.wa | send.email | note
   key: string;                  // idempotency key == row id
@@ -536,6 +545,7 @@ async function capturePass(stats: SweepStats) {
     };
     newRows.push({ id: doc.id, doc, status: null, created: now });
     stats.leadsCreated++;
+    if (looksLikeTestBooking(b)) continue; // QA traffic against prod — save the lead, skip the provider quota
     const inst = (b.admin as { instant?: { holdMinutes?: number; holdUntil?: string | null; expired?: boolean } }).instant;
     let link = gatewayLinkOf(b);
     /* the booking route couldn't make the link (Razorpay briefly unavailable)? try again now */
@@ -586,6 +596,7 @@ async function eventPass(stats: SweepStats) {
   const { data } = await sb.from("bookings").select("doc").order("created", { ascending: false }).limit(200);
   for (const r of data ?? []) {
     const b = r.doc as Booking;
+    if (looksLikeTestBooking(b)) continue; // QA traffic against prod — never worth a WhatsApp/email send
     const to = { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email };
     const d = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: pcsLabel(b.bags, b.oversize, "bags"), amount: inr(b.pay?.amount ?? 0) };
     if (isPaid(b)) {

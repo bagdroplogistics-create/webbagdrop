@@ -8,7 +8,7 @@ import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
 import { SERVICES, istTomorrow } from "@/lib/services";
 import { CLIENT_COOKIE, cookieOptions, identityFor, makeClientToken } from "@/lib/clientAuth";
-import { claimOnce, kickSweep, notifyInquiryDesk } from "@/lib/automation";
+import { claimOnce, kickSweep, looksLikeTestName, notifyInquiryDesk } from "@/lib/automation";
 import { clientView, loadPayConfig } from "@/lib/clientView";
 import type { Booking } from "@/lib/types";
 import { withAirportAddress } from "@/lib/airports";
@@ -152,7 +152,7 @@ export async function POST(req: Request) {
 
   /* ---- 4 · alert the inquiry desk + ops ---- */
   const summary = `${instant ? "New INSTANT booking (auto-approved, awaiting payment)" : priced ? "🧳 New booking request" : "📥 New SECTOR inquiry (not on rate chart)"} · ${id}\n${name} · +${mobile}${email ? ` · ${email}` : ""}\n${svc.title} · ${fromName} → ${toName} · ${bags} bag(s)${oversize ? ` + ${oversize} oversize` : ""} · pickup ${date}${str(d.slot, 40) ? ` ${str(d.slot, 40)}` : ""}\n${priced ? `Chart price shown: ${inr(q.total)}` : "No price shown — needs a rate"}\n${instant ? "Confirms itself when paid — no decision needed." : "Review and decide in BAGDROP OS → Shipments → Quotes & payments."}`;
-  await notifyInquiryDesk(summary, `${instant ? "Instant booking" : priced ? "New booking request" : "New sector inquiry"} · ${id} · ${fromName} → ${toName}`, `inq:${id}`);
+  if (!looksLikeTestName(name)) await notifyInquiryDesk(summary, `${instant ? "Instant booking" : priced ? "New booking request" : "New sector inquiry"} · ${id} · ${fromName} → ${toName}`, `inq:${id}`);
   /* instant: a payment link too, so the WhatsApp/email acknowledgement can carry it */
   if (instant) {
     const l = await ensurePaymentLink(sb, id, publicOrigin(req)).catch((e) => ({ error: "EXCEPTION", detail: String(e) }));
