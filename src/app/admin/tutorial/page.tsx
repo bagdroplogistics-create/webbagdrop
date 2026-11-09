@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TUTORIAL } from "../tutorialSteps";
 import PrintButton from "../guide/PrintButton";
+import { withBase } from "@/lib/basePath";
 
 export const metadata = { title: "Tutorial · from inquiry to reconciled payment · BAGDROP OS" };
 
@@ -41,7 +42,7 @@ export default function TutorialPage() {
               </div>
               {s.image && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/tutorial/${s.image}`} alt={`${s.title} on screen`} className="w-full rounded-xl border border-line" loading="lazy" />
+                <img src={withBase(`/tutorial/${s.image}`)} alt={`${s.title} on screen`} className="w-full rounded-xl border border-line" loading="lazy" />
               )}
             </div>
           </li>

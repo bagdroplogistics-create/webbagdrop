@@ -5,6 +5,7 @@
  *  printable page at /admin/guide. Rules: src/lib/journey.ts. */
 import { useState } from "react";
 import { PHASES } from "@/lib/journey";
+import { withBase } from "@/lib/basePath";
 
 type Kind = "web" | "wed" | "partner";
 const KINDS: { k: Kind; name: string; blurb: string }[] = [
@@ -58,9 +59,9 @@ export default function Guide({ print = false }: { print?: boolean }) {
           {KINDS.map((x) => (
             <button key={x.k} onClick={() => setKind(x.k)} className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold ${kind === x.k ? "bg-ink text-white" : "bg-paper text-ink hover:bg-stone-200"}`}>{x.name}</button>
           ))}
-          <a className="ml-auto text-xs font-semibold text-brand hover:underline" href="/admin/tutorial" target="_blank" rel="noreferrer">Step-by-step tutorial with screens</a>
-          <a className="text-xs font-semibold text-brand hover:underline" href="/admin/tutorial/wedding" target="_blank" rel="noreferrer">Weddings &amp; events tutorial</a>
-          <a className="text-xs font-semibold text-brand hover:underline" href="/admin/guide" target="_blank" rel="noreferrer">Printable guide (all three)</a>
+          <a className="ml-auto text-xs font-semibold text-brand hover:underline" href={withBase("/admin/tutorial")} target="_blank" rel="noreferrer">Step-by-step tutorial with screens</a>
+          <a className="text-xs font-semibold text-brand hover:underline" href={withBase("/admin/tutorial/wedding")} target="_blank" rel="noreferrer">Weddings &amp; events tutorial</a>
+          <a className="text-xs font-semibold text-brand hover:underline" href={withBase("/admin/guide")} target="_blank" rel="noreferrer">Printable guide (all three)</a>
         </div>
       )}
       {kinds.map((x) => (
