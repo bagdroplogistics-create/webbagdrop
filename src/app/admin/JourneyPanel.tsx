@@ -8,6 +8,7 @@ import { PHASES, cancelInfo, journeyOf } from "@/lib/journey";
 import { isPaid } from "@/lib/payState";
 import type { Booking } from "@/lib/types";
 import { Button, Input } from "@/components/ui";
+import { withBase } from "@/lib/basePath";
 
 export async function lifecycle(id: string, action: "cancel" | "restore", reason = ""): Promise<{ ok: true; booking: Booking } | { ok: false; error: string }> {
   const r = await fetch("/api/admin/lifecycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action, reason }) });
@@ -86,8 +87,8 @@ export default function JourneyPanel({ b, compact = false, onChanged, onOpenOps 
             <Button size="sm" variant="ghost" onClick={() => { setCancelling(false); setReason(""); }}>Keep it</Button>
           </>
         )}
-        <a className="ml-auto text-[11px] font-semibold text-muted hover:text-brand" href="/admin/guide" target="_blank" rel="noreferrer">How this works</a>
-        <a className="text-[11px] font-semibold text-muted hover:text-brand" href="/admin/tutorial" target="_blank" rel="noreferrer">Tutorial</a>
+        <a className="ml-auto text-[11px] font-semibold text-muted hover:text-brand" href={withBase("/admin/guide")} target="_blank" rel="noreferrer">How this works</a>
+        <a className="text-[11px] font-semibold text-muted hover:text-brand" href={withBase("/admin/tutorial")} target="_blank" rel="noreferrer">Tutorial</a>
       </div>
       {err && <p className="mt-1 text-xs text-red-700">{err}</p>}
     </div>

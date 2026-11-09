@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import CameraScanner from "@/components/CameraScanner";
 import type { TeamFamily, TeamBag } from "@/lib/weddingTeamView";
+import { withBase } from "@/lib/basePath";
 
 export type TeamApi = (body: Record<string, unknown>) => Promise<{ ok: boolean; j: Record<string, unknown> }>;
 type Tab = "msg" | "rooms" | "returns" | "tags";
@@ -312,7 +313,7 @@ function ReturnsTab({ bags, api, onChanged, booked, done }: { bags: { f: TeamFam
 /* ---------------- Tags ---------------- */
 function TagsTab({ fams, eventId, tagsBase, total, fresh, reprint }: { fams: TeamFamily[]; eventId: string; tagsBase: string; total: number; fresh: number; reprint: number }) {
   const [media, setMedia] = useState("4x6");
-  const link = (extra: string) => `${tagsBase}?event=${encodeURIComponent(eventId)}&media=${media}&mark=1${extra}`;
+  const link = (extra: string) => withBase(`${tagsBase}?event=${encodeURIComponent(eventId)}&media=${media}&mark=1${extra}`);
   return (
     <Card>
       <div className="mb-3 flex flex-wrap items-center gap-2">

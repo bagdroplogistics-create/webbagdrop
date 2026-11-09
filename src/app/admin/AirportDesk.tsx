@@ -21,6 +21,7 @@ import {
   type AirportPocConfig, type Carrier, type FlightBlock, type Lane,
 } from "@/lib/airportPoc";
 import { custodyGaps } from "@/lib/custody";
+import { withBase } from "@/lib/basePath";
 import CameraScanner from "@/components/CameraScanner";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import type { Booking } from "@/lib/types";
@@ -191,7 +192,7 @@ function BookingDesk({ b, cfg, now, onErr }: { b: Booking; cfg: AirportPocConfig
             <p className="font-display text-base font-bold">{b.traveller.name} · {b.from} → {b.to}</p>
             <p className="text-xs text-muted">{b.ucName} · {pcsLabel(b.bags, b.oversize)} · pickup {b.pickupDate || b.date} {b.slot} · {b.status}</p>
           </div>
-          <a className="text-xs font-semibold text-brand underline" href={`/api/admin/airport?report=${encodeURIComponent(b.id)}`} target="_blank" rel="noreferrer">Custody report</a>
+          <a className="text-xs font-semibold text-brand underline" href={withBase(`/api/admin/airport?report=${encodeURIComponent(b.id)}`)} target="_blank" rel="noreferrer">Custody report</a>
         </div>
         <LaneRow b={b} busy={busy} run={run} />
         {msg && <p className="mt-2 rounded-lg bg-paper px-3 py-2 text-xs">{msg}</p>}

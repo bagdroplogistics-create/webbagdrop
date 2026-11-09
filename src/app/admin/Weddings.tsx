@@ -201,7 +201,7 @@ function EventDetail({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-display text-sm font-bold">{event.name} <span className="font-normal text-faint">{event.id}</span></h3>
         <div className="flex flex-wrap items-center gap-2">
-          <a className="text-xs font-semibold text-brand hover:underline" href={`/admin/manifest?event=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Manifest · plan pickups, deliveries, returns</a>
+          <a className="text-xs font-semibold text-brand hover:underline" href={withBase(`/admin/manifest?event=${encodeURIComponent(event.id)}`)} target="_blank" rel="noreferrer">Manifest · plan pickups, deliveries, returns</a>
           <a className="text-xs font-semibold text-brand hover:underline" href={landingUrl} target="_blank" rel="noreferrer">Landing page</a>
           {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={deskUrl} target="_blank" rel="noreferrer">Wedding desk</a>}
           {deskUrl && <a className="text-xs font-semibold text-brand hover:underline" href={`${deskUrl}?ops=1`} target="_blank" rel="noreferrer">Ops desk</a>}
@@ -272,7 +272,7 @@ function EventDetail({
                     </>
                   )}
                   {" · "}
-                  <a className="font-semibold text-brand hover:underline" href={`/api/admin/wedding-tags?event=${encodeURIComponent(event.id)}&id=${encodeURIComponent(b.id)}&media=4x6&mark=1`} target="_blank" rel="noreferrer">Print this family&apos;s tags</a>
+                  <a className="font-semibold text-brand hover:underline" href={withBase(`/api/admin/wedding-tags?event=${encodeURIComponent(event.id)}&id=${encodeURIComponent(b.id)}&media=4x6&mark=1`)} target="_blank" rel="noreferrer">Print this family&apos;s tags</a>
                 </p>
                 {st?.bags?.length ? (
                   <div className="overflow-x-auto">
@@ -440,7 +440,7 @@ function TeamSetting({ event, onError }: { event: BagdropEvent; onError: (e: str
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">Event company</span>
         <Input className="!w-56 !py-1 !text-xs" placeholder="Company name" value={company} onChange={(e) => setCompany(e.target.value)} />
-        <a className="font-semibold text-brand hover:underline" href="/event" target="_blank" rel="noreferrer">Event desk login</a>
+        <a className="font-semibold text-brand hover:underline" href={withBase("/event")} target="_blank" rel="noreferrer">Event desk login</a>
       </div>
       <p className="text-muted">People who can sign in at /event with a WhatsApp code to their mobile. Their name shows on every reply and action.</p>
       {people.map((p, i) => (
