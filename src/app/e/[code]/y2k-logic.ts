@@ -199,8 +199,7 @@ export function initY2k(): () => void {
     ${inp("family.email", "Email", { type: "email", opt: true, ph: "name@example.com", ac: "email" })}
     ${sideSeg()}
   </div>
-  <div class="lab" style="margin:26px 0 10px">Pickup address</div>
-  ${addressBlock(0, "Pickup")}
+  <div style="margin-top:26px">${addressBlock(0, "Pickup")}</div>
   <div class="lab" style="margin:26px 0 10px">Your bags</div>
   ${showErrors && E.bags ? `<p class="msg">${E.bags}</p>` : ""}
   ${bagsFor("G01")}
@@ -214,7 +213,7 @@ export function initY2k(): () => void {
     ${bagsFor(m.id)}
   </div>`; }).join("")}
   ${ready ? `<div class="adders"><button type="button" data-act="addMember">+ Add a family member</button></div>` : `<div class="callout">Fill in your name and mobile first, then add the family members whose bags we collect.</div>`}
-  ${inp("notes", "Anything we should know", { full: true, opt: true, ph: "Floor, gate instructions, a bag that needs extra care…" })}`;
+  <div style="margin-top:26px">${inp("notes", "Anything we should know", { full: true, opt: true, ph: "Floor, gate instructions, a bag that needs extra care…" })}</div>`;
   }
   function rReturn() {
     const p1 = S.pickups[0];
