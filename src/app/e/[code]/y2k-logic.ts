@@ -647,6 +647,7 @@ export function initY2k(): () => void {
      through the cookie-gated admin API, so sign in at /admin first. */
   isEditor = new URLSearchParams(location.search).get("ops") === "1";
   if (isEditor) {
+    let scrolledToOps = false;
     const opsTick = async () => {
       if (opsBusy || (document.activeElement as HTMLElement | null)?.closest?.("#opsList select")) return;
       try {
@@ -662,14 +663,16 @@ export function initY2k(): () => void {
         opsLocked = true;
       }
       renderOps();
+      // #ops is unhidden on the sync renderOps() below, but a 60ms timeout
+      // raced the streamed-in guest sections above it and lost — scroll once
+      // the manifest's real first tick (locked or loaded) has actually
+      // rendered, same destination as the #book/#track jump.
+      if (!scrolledToOps) { scrolledToOps = true; $("#ops")?.scrollIntoView({ block: "start" }); }
     };
     opsRefresh = async () => { opsBusy = false; await opsTick(); };
     void opsTick();
     timers.push(setInterval(() => void opsTick(), 5000));
     renderOps();
-    // unhidden just above, but the guest sections render after load too, so
-    // the jump lands short without this — same fix as #book/#track.
-    setTimeout(() => $("#ops")?.scrollIntoView({ block: "start" }), 60);
   }
 
   return () => {
