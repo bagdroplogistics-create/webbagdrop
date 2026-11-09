@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
-import { kickSweep } from "@/lib/automation";
+import { kickSweep, notifyInquiryDesk } from "@/lib/automation";
 import { retryOnConflict } from "@/lib/bookingStore";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
 
@@ -103,6 +103,9 @@ async function handlePOST(req: Request) {
   if (error?.code === "23505") return NextResponse.json({ error: "ALREADY_BOOKED" }, { status: 409 }); // same code saved a moment ago
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   notifySheet(doc);
+  const familyLabel = doc.family?.name || doc.traveller?.name || doc.id;
+  const summary = `🎉 New Y2K wedding booking · ${doc.id}\n${familyLabel} · +${doc.traveller?.mobile ?? ""}${doc.traveller?.email ? ` · ${doc.traveller.email}` : ""}${doc.family?.side ? ` · ${doc.family.side}'s side` : ""}\n${doc.from ?? ""} → ${doc.to ?? ""} · ${doc.bags ?? 0} bag(s)${doc.oversize ? ` + ${doc.oversize} oversize` : ""} · pickup ${doc.date ?? "TBC"}${doc.slot ? ` ${doc.slot}` : ""}${doc.note ? `\nNote: ${doc.note}` : ""}\nReview in BAGDROP OS → Weddings & events.`;
+  await notifyInquiryDesk(summary, `New Y2K wedding booking · ${doc.id} · ${familyLabel}`, `wedbooking:${doc.id}`);
   kickSweep();
   return NextResponse.json({ ok: true, booking: doc });
 }
