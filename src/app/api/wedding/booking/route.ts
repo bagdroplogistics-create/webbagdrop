@@ -3,6 +3,7 @@ import { serviceClient } from "@/lib/supabaseAdmin";
 import type { BagdropEvent, Booking } from "@/lib/types";
 import { kickSweep, looksLikeTestName, notifyInquiryDesk, notifyInquiryDeskRich } from "@/lib/automation";
 import { buildWeddingBookingEmail } from "@/lib/wedBookingEmail";
+import { forwardToOldSystem } from "@/lib/forwardToOldSystem";
 import { retryOnConflict } from "@/lib/bookingStore";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
 
@@ -108,15 +109,18 @@ async function handlePOST(req: Request) {
   if (!looksLikeTestName(familyLabel) && !looksLikeTestName(doc.traveller?.name ?? "")) {
     // Full professional email (all booking details). Falls back to the short text email if the template ever throws,
     // so a formatting problem can never stop the team being notified.
+    let detailsText = `New Y2K wedding booking · ${doc.id}\n${familyLabel}${doc.traveller?.mobile ? ` · +${doc.traveller.mobile}` : ""}${doc.traveller?.email ? ` · ${doc.traveller.email}` : ""}${doc.family?.side ? ` · ${doc.family.side}'s side` : ""}\n${doc.from ?? ""} → ${doc.to ?? ""} · ${doc.bags ?? 0} bag(s)${doc.oversize ? ` + ${doc.oversize} oversize` : ""} · pickup ${doc.date ?? "TBC"}${doc.slot ? ` ${doc.slot}` : ""}${doc.note ? `\nNote: ${doc.note}` : ""}`;
     try {
       const siteUrl = (process.env.SITE_URL || "https://www.bagdrop.co").replace(/\/$/, "");
       const mail = buildWeddingBookingEmail(doc, `${siteUrl}/admin-1/admin`);
+      detailsText = mail.text;
       await notifyInquiryDeskRich(mail.text, mail.subject, `wedbooking:${doc.id}`, mail.html);
     } catch (e) {
       console.error("Y2K rich email failed, sending plain:", e);
-      const summary = `New Y2K wedding booking · ${doc.id}\n${familyLabel}${doc.traveller?.mobile ? ` · +${doc.traveller.mobile}` : ""}${doc.traveller?.email ? ` · ${doc.traveller.email}` : ""}${doc.family?.side ? ` · ${doc.family.side}'s side` : ""}\n${doc.from ?? ""} → ${doc.to ?? ""} · ${doc.bags ?? 0} bag(s)${doc.oversize ? ` + ${doc.oversize} oversize` : ""} · pickup ${doc.date ?? "TBC"}${doc.slot ? ` ${doc.slot}` : ""}${doc.note ? `\nNote: ${doc.note}` : ""}\nReview in BAGDROP OS → Weddings & events.`;
-      await notifyInquiryDesk(summary, `New Y2K wedding booking · ${doc.id} · ${familyLabel}`, `wedbooking:${doc.id}`);
+      await notifyInquiryDesk(`${detailsText}\nReview in BAGDROP OS → Weddings & events.`, `New Y2K wedding booking · ${doc.id} · ${familyLabel}`, `wedbooking:${doc.id}`);
     }
+    // Also mirror into the old dashboard / Leads / ops WhatsApp (best effort — never blocks or fails the booking).
+    await forwardToOldSystem(doc, detailsText);
   }
   kickSweep();
   return NextResponse.json({ ok: true, booking: doc });
