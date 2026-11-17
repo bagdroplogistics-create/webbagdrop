@@ -525,57 +525,6 @@ async function sendWhatsAppOtpFast2SMS(mobile: string, code: string): Promise<{ 
   }
 }
 
-/** Fast2SMS's Meta-format WhatsApp API, used ONLY for the `bagdrop_otp`
- *  authentication template. Same WABA/phone number as sendWhatsApp /
- *  sendWhatsAppOtp above (995935626929789) — Fast2SMS is Bagdrop's existing
- *  Business Solution Provider for that number (see the WhatsApp Manager
- *  template list), reached through a different endpoint/auth header than
- *  Meta's own Graph API. Per Fast2SMS's docs (reference/sendauthentication
- *  template) an authentication template needs the code in BOTH the body
- *  parameter and the copy-code button parameter. Returns a result object —
- *  never throws — so sendWhatsAppOtp below can fall back to the direct-Meta
- *  path on any failure without an unhandled rejection. Mobile numbers
- *  reaching this function are already Indian-only (src/lib/otp.ts's
- *  cleanMobile only accepts 10/11/12-digit Indian shapes), so Fast2SMS's
- *  India-only restriction on international numbers never applies here. */
-async function sendWhatsAppOtpFast2SMS(mobile: string, code: string): Promise<{ success: boolean; error?: string; waId?: string }> {
-  const apiKey = process.env.FAST2SMS_API_KEY, phoneNumberId = process.env.FAST2SMS_WHATSAPP_PHONE_NUMBER_ID;
-  if (!apiKey || !phoneNumberId) return { success: false, error: "FAST2SMS_NOT_CONFIGURED" };
-  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
-  const templateName = process.env.FAST2SMS_OTP_TEMPLATE_NAME || "bagdrop_otp";
-  const language = process.env.FAST2SMS_OTP_LANGUAGE || "en";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const r = await fetch(`https://www.fast2sms.com/dev/whatsapp/v26.0/${phoneNumberId}/messages`, {
-      method: "POST", headers: { Authorization: apiKey, "Content-Type": "application/json" }, signal: controller.signal,
-      body: JSON.stringify({
-        messaging_product: "whatsapp", recipient_type: "individual", to: msisdn, type: "template",
-        template: {
-          name: templateName, language: { code: language },
-          components: [
-            { type: "body", parameters: [{ type: "text", text: code }] },
-            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
-          ],
-        },
-      }),
-    });
-    const data = await r.json().catch(() => ({})) as Record<string, unknown>;
-    const errObj = data.error as { message?: string } | undefined;
-    if (!r.ok || errObj) {
-      console.error("[Fast2SMS WhatsApp OTP] FAILED | status:", r.status, "| error:", errObj?.message ?? JSON.stringify(data)); // never logs the code itself
-      return { success: false, error: errObj?.message ?? `HTTP_${r.status}` };
-    }
-    const messages = data.messages as Array<{ id?: string }> | undefined;
-    return { success: true, waId: messages?.[0]?.id };
-  } catch (err) {
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    return { success: false, error: isAbort ? "TIMEOUT" : (err instanceof Error ? err.message : String(err)) };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 /** A free-form text message (what sendWhatsApp above sends) only reaches a
  *  number that messaged Bagdrop first within the last 24 hours — WhatsApp's
  *  Cloud API still answers 200 OK for one outside that window, then silently
