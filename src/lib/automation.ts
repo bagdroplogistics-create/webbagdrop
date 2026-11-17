@@ -316,6 +316,20 @@ export async function notifyInquiryDesk(text: string, subject: string, key: stri
   return n;
 }
 
+/** Same inquiry-desk email, but with a fully designed HTML body supplied by
+ *  the caller (used for new Y2K wedding bookings). Same recipients, same
+ *  idempotent outbox keys as notifyInquiryDesk — only the email body differs. */
+export async function notifyInquiryDeskRich(text: string, subject: string, key: string, html: string): Promise<number> {
+  const cfg = await loadAlerts();
+  const emails = cfg.inquiryEmails?.length ? cfg.inquiryEmails : DEFAULT_INQUIRY_EMAILS;
+  const now = new Date().toISOString();
+  const rows: OutboxDoc[] = emails.map((email) => ({
+    kind: "send.email", key: `${key}:${email}:em`, to: email, name: "Bagdrop Inquiry Desk", template: "ops_alert",
+    text, html, subject, status: "queued", attempts: 0, createdAt: now,
+  }));
+  return insertRows(rows);
+}
+
 /** Atomic "first time only" guard — returns true exactly once per key
  *  (e.g. an OTP proof can create one booking or one login, never two). */
 export async function claimOnce(key: string): Promise<boolean> {
