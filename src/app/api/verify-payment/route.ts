@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   /* applied on the fresh copy; a payment already on the booking is a no-op */
   let duplicate = false;
   const saved = await mutateBooking(sb, b.id, (fresh) => {
-    const r = applyGatewayPayment(fresh, { paymentId, orderId, amountInr: order.amount, kind: order.kind, method: p.method, via: "checkout" });
+    const r = applyGatewayPayment(fresh, { paymentId, orderId, amountInr: order.amount, baseAmountInr: order.baseAmount, feeAmountInr: order.feeAmount, kind: order.kind, method: p.method, via: "checkout" });
     duplicate = !!r?.duplicate;
     return r?.next ?? null;
   });

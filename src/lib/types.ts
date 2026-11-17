@@ -92,7 +92,15 @@ export interface Traveller {
 
 export interface Payment {
   mode: "full" | "cash";
+  /** the SERVICE price collected (GST-inclusive quote.total) — never
+   *  includes the Razorpay convenience fee below, so revenue/margin/GST
+   *  reporting never has to know the fee exists. */
   amount: number;
+  /** the Razorpay "pay online" convenience fee actually charged, when this
+   *  payment went through that option — a pass-through surcharge, never
+   *  service revenue. Unset (or 0) for every UPI-QR / bank-transfer payment,
+   *  and for any Razorpay payment made while the fee is switched off. */
+  gatewayFee?: number;
   /** pending: QR shown, nothing claimed yet. submitted: customer clicked
    *  "I Have Completed Payment" (+ optional UTR) — awaiting admin review.
    *  captured: admin verified. rejected: admin rejected — customer may
@@ -109,9 +117,12 @@ export interface Payment {
   /** payment proof the customer uploaded (private storage path) */
   proof?: { path: string; name?: string; at: string } | null;
   /** extra amount due after bags were ADDED post-payment */
-  topup?: { amount: number; status: "due" | "submitted" | "rejected"; utr?: string; proof?: { path: string; name?: string; at: string } | null; submittedAt?: string | null; rejectedNote?: string } | null;
-  /** every verified amount, for the audit trail */
-  history?: { at: string; amount: number; kind: "full" | "topup"; utr?: string; verifiedBy?: string }[];
+  topup?: { amount: number; gatewayFee?: number; status: "due" | "submitted" | "rejected"; utr?: string; proof?: { path: string; name?: string; at: string } | null; submittedAt?: string | null; rejectedNote?: string } | null;
+  /** every verified amount, for the audit trail — amount is always the
+   *  service-price portion; gatewayFee (when present) is the surcharge
+   *  actually collected alongside it, kept separate for the same reason
+   *  as above. */
+  history?: { at: string; amount: number; gatewayFee?: number; kind: "full" | "topup"; utr?: string; verifiedBy?: string }[];
   recon?: { at: string; ref: string };
 }
 
@@ -166,17 +177,20 @@ export interface Booking {
   indemnity?: {
     acceptedAt: string; idType: "aadhaar" | "passport" | "licence"; idNumber: string; signature: string; place?: string;
     /** bond version + SHA-256 of the exact text agreed, the boxes ticked and how it was signed */
-    version?: string; textHash?: string; accepted?: string[]; fragile?: string; method?: "aadhaar_otp" | "email_otp" | "mobile_otp";
+    version?: string; textHash?: string; accepted?: string[]; fragile?: string; method?: "aadhaar_otp" | "email_otp" | "mobile_otp" | "id_upload";
   } | null;
   /** Identity & compliance state for the pre-pickup bond. Domestic guests
-   *  sign with Aadhaar OTP; international guests upload documents that the
-   *  team reviews before they can sign. Document files live in the private
+   *  upload their Aadhaar card and sign in one step (2026-11-07 — the Aadhaar
+   *  UIDAI OTP eSign below is built but not yet connected to a licensed
+   *  provider, so it can't be required in production; this is the real path
+   *  until it is). International guests upload documents that the team
+   *  reviews before they can sign. Document files live in the private
    *  "identity-docs" bucket and are only ever served as short signed links. */
   kyc?: {
     kind: "domestic" | "international";
     status: "docs_submitted" | "docs_rejected" | "docs_approved" | "signed";
     nationality?: string; passportNo?: string; indiaAddress?: string;
-    docs?: { path: string; kind: "passport" | "visa" | "other"; name?: string; at: string }[];
+    docs?: { path: string; kind: "passport" | "visa" | "aadhaar" | "other"; name?: string; at: string }[];
     submissions?: number; note?: string; reviewedAt?: string; reviewedBy?: string;
   } | null;
   admin: Record<string, unknown>;

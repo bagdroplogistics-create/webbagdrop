@@ -173,3 +173,20 @@ export function quote(q: QuoteInput, masters: Masters = DEFAULT_MASTERS): QuoteO
 }
 
 export const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+/** The Razorpay "pay online" convenience fee — OFF (0%) until legal/compliance
+ *  on surcharging a payment method is confirmed (RBI and card-network rules
+ *  on this vary and are not something to assume). Set
+ *  RAZORPAY_CONVENIENCE_FEE_PCT (e.g. "3") only once that's been checked and
+ *  approved. The UPI-QR / bank-transfer option never carries this fee —
+ *  that's the whole point of offering it as the no-fee alternative. */
+export const RAZORPAY_FEE_PCT = Math.max(0, Number(process.env.RAZORPAY_CONVENIENCE_FEE_PCT) || 0);
+
+export interface GatewayFeeBreakdown { base: number; feePct: number; fee: number; total: number }
+/** `base` is the service price, GST already included (quote.total). Fee and
+ *  total are rounded to whole rupees, same as every other amount in the app
+ *  (inr() above rounds the same way, so the two always agree on screen). */
+export function gatewayFeeBreakdown(base: number): GatewayFeeBreakdown {
+  const fee = Math.round(base * (RAZORPAY_FEE_PCT / 100));
+  return { base, feePct: RAZORPAY_FEE_PCT, fee, total: base + fee };
+}

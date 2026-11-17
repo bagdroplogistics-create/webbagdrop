@@ -15,6 +15,7 @@ import { withAirportAddress } from "@/lib/airports";
 import { loadPocConfig } from "@/lib/airportServer";
 import { publicOrigin } from "@/lib/siteOrigin";
 import { carrierOf, parseFlightRef } from "@/lib/airportPoc";
+import { razorpayConfigured } from "@/lib/razorpay";
 
 /** The ONLY way a homepage booking enters the system.
  *  1. The OTP proof is checked server-side and can be used exactly once.
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     booking: { ...clientView(doc), name: doc.traveller.name.split(" ")[0] },
     payTo: { upiId: pay.upiId, payeeName: pay.payeeName, bankName: pay.bankName, accountName: pay.accountName, accountNo: pay.accountNo, ifsc: pay.ifsc, note: pay.note },
+    gateway: razorpayConfigured(),
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

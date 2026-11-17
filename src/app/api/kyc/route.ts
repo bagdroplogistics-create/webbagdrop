@@ -83,7 +83,7 @@ function checkBoxes(accepted: unknown): string[] | null {
 }
 
 /** shared final step: bond stored, identity released, pickup unlocked */
-async function sign(b: Booking, o: { accepted: string[]; fragile: string; signature: string; place: string; idType: "aadhaar" | "passport"; idTail: string; method: "aadhaar_otp" | "email_otp" | "mobile_otp"; identityMethod: string }) {
+async function sign(b: Booking, o: { accepted: string[]; fragile: string; signature: string; place: string; idType: "aadhaar" | "passport"; idTail: string; method: "aadhaar_otp" | "email_otp" | "mobile_otp" | "id_upload"; identityMethod: string }) {
   const now = new Date().toISOString();
   const next: Booking = {
     ...b,
@@ -98,7 +98,7 @@ async function sign(b: Booking, o: { accepted: string[]; fragile: string; signat
   };
   const up = await save(next);
   if (up.error) return NextResponse.json({ error: "SAVE_FAILED" }, { status: 500 });
-  await opsNotify(`Verified & ready for pickup · ${b.id} · ${b.traveller.name} · bond signed (${o.method === "aadhaar_otp" ? "Aadhaar OTP" : "documents + OTP"}) · ${b.from} → ${b.to} on ${b.date} — assign a captain.`,
+  await opsNotify(`Verified & ready for pickup · ${b.id} · ${b.traveller.name} · bond signed (${o.method === "aadhaar_otp" ? "Aadhaar OTP" : o.method === "id_upload" ? "Aadhaar upload" : "documents + OTP"}) · ${b.from} → ${b.to} on ${b.date} — assign a captain.`,
     `Ready for pickup · ${b.id}`, `ops:signed:${b.id}`);
   kickSweep(); // sends identity_done to the client
   return NextResponse.json({ ok: true, booking: view(next) });
@@ -116,6 +116,52 @@ export async function GET(req: Request) {
 async function handlePOST(req: Request) {
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
+
+  /* ---------- domestic: one-step bond sign + Aadhaar card upload, no OTP ----------
+   * 2026-11-07 — the Aadhaar OTP eSign above isn't connected to a licensed
+   * provider in production (ESIGN_OFF), so it can't gate pickup. This is the
+   * real domestic path: tick the declarations, sign (typed name), upload a
+   * photo/scan of the Aadhaar card, submit once — identity is marked ok and
+   * pickup releases immediately. The uploaded card is kept as the record;
+   * ops can review it afterwards from Identity & compliance same as any
+   * other kyc doc, it's just not a gate here. */
+  if ((req.headers.get("content-type") ?? "").includes("multipart/form-data") && String(req.headers.get("x-bagdrop-kyc-mode") ?? "") === "id_upload") {
+    const form = await req.formData();
+    const b = await load(String(form.get("id") ?? "").trim().toUpperCase());
+    if (!b) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (!settled(b)) return NextResponse.json({ error: "PAYMENT_NOT_VERIFIED", detail: "Identity checks open once your payment is verified." }, { status: 409 });
+    if (b.identity?.ok && b.indemnity?.textHash) return NextResponse.json({ ok: true, booking: view(b) }); // idempotent
+
+    let acceptedRaw: unknown = null;
+    try { acceptedRaw = JSON.parse(str(form.get("accepted"), 2000)); } catch { /* falls through to BOXES_REQUIRED */ }
+    const accepted = checkBoxes(acceptedRaw);
+    if (!accepted) return NextResponse.json({ error: "BOXES_REQUIRED", detail: "Please tick every declaration to sign the bond." }, { status: 400 });
+    const signature = str(form.get("signature"), 80), place = str(form.get("place"), 60), fragile = str(form.get("fragile"), 300);
+    if (signature.length < 3) return NextResponse.json({ error: "NEED_SIGNATURE", detail: "Type your full name as your signature." }, { status: 400 });
+
+    const file = form.get("idDoc");
+    if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "NEED_ID_DOC", detail: "Upload a photo or scan of your Aadhaar card." }, { status: 400 });
+    if (file.size > MAX_BYTES) return NextResponse.json({ error: "TOO_LARGE", detail: "The file can be up to 5 MB." }, { status: 413 });
+    const buf = Buffer.from(await file.arrayBuffer());
+    const t = sniff(buf);
+    if (!t) return NextResponse.json({ error: "BAD_FILE", detail: "Only PNG, JPG, WEBP images or PDF files are accepted." }, { status: 415 });
+
+    await sb.storage.createBucket(BUCKET, { public: false }).catch(() => undefined);
+    const path = `${b.id}/aadhaar-${Date.now()}-${randomBytes(6).toString("hex")}.${t.ext}`;
+    const up0 = await sb.storage.from(BUCKET).upload(path, buf, { contentType: t.type, upsert: false });
+    if (up0.error) return NextResponse.json({ error: "UPLOAD_FAILED" }, { status: 500 });
+
+    const withDoc: Booking = {
+      ...b,
+      kyc: {
+        ...(b.kyc ?? { kind: "domestic" as const, status: "docs_submitted" as const }),
+        kind: "domestic",
+        docs: [...(b.kyc?.docs ?? []), { path, kind: "aadhaar", name: file.name.slice(0, 80), at: new Date().toISOString() }],
+        submissions: (b.kyc?.submissions ?? 0) + 1,
+      },
+    };
+    return sign(withDoc, { accepted, fragile, signature, place, idType: "aadhaar", idTail: "UPLD", method: "id_upload", identityMethod: "Aadhaar card uploaded by customer (Aadhaar OTP eSign not yet connected)" });
+  }
 
   /* ---------- international: document upload (multipart) ---------- */
   if ((req.headers.get("content-type") ?? "").includes("multipart/form-data")) {

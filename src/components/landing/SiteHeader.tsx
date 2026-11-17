@@ -3,6 +3,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { NAV } from "./data";
+import { Icon } from "./Icon";
 import { CONTAINER } from "./SectionHeading";
 
 export default function SiteHeader() {
@@ -41,7 +42,7 @@ export default function SiteHeader() {
           href="#book"
           className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark sm:inline-flex"
         >
-          Book Now
+          Book Now <Icon name="arrow" size={15} />
         </a>
 
         <button
@@ -49,9 +50,13 @@ export default function SiteHeader() {
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="ml-auto inline-flex h-10 items-center justify-center rounded-lg border border-line px-3 text-[14px] font-semibold text-ink md:hidden"
+          className="ml-auto inline-flex size-10 items-center justify-center rounded-lg text-ink md:hidden"
         >
-          {open ? "Close" : "Menu"}
+          {open ? (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          )}
         </button>
       </div>
 

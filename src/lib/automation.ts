@@ -61,6 +61,9 @@ export interface OutboxDoc {
   lastError?: string;
   createdAt: string;
   doneAt?: string;
+  waId?: string;                 // Meta's wamid — the API accepted it; this is NOT delivery
+  waStatus?: "sent" | "delivered" | "read" | "failed"; // from the delivery-status webhook, once it reports
+  waError?: string;              // Meta's failure reason, when waStatus is "failed"
 }
 
 /* ================= templates — the WhatsApp + email pairs ================= */
@@ -73,27 +76,84 @@ type T = { wa: (d: Record<string, string>) => string; subject: (d: Record<string
  *  every URL in it turned into a proper button instead of a pasted link.
  *  Keeps one message per event (notify()) instead of a second HTML-only
  *  copy of every template to maintain. */
-function emailHtml(text: string): string {
+function emailHtml(text: string, subject = "", template = ""): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const urlRe = /(https?:\/\/\S+)/g;
-  const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : "Open link";
-  const body = text.split("\n").filter((l) => l.trim()).map((line) => {
-    const parts = line.split(urlRe);
-    const html = parts.map((part, i) => i % 2 === 1
-      ? `<a href="${esc(part)}" style="display:inline-block;margin:8px 0;padding:11px 22px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${buttonLabel(part)}</a>`
-      : esc(part)
-    ).join("");
-    return `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.6">${html}</p>`;
-  }).join("");
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+  const internal = template === "ops_alert" || template === "captain_pickup_brief" || template === "driver_link";
+  const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : /\/verify\//.test(url) ? "Verify now" : /\/admin/.test(url) ? "Open BAGDROP OS" : "Open link";
+  const btn = (url: string) => `<a href="${esc(url)}" style="display:inline-block;padding:12px 24px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">${buttonLabel(url)}</a>`;
+  const P = (h: string) => `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.65">${h}</p>`;
+  const table = (rows: [string, string][]) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border:1px solid #E7E2DC;border-radius:10px;border-collapse:separate;overflow:hidden">${rows.map(([k, v], i) => `<tr><td valign="top" style="padding:10px 14px;width:32%;background:#FAF8F5;color:#78716C;font-size:12px;${i ? "border-top:1px solid #F0ECE7;" : ""}">${esc(k)}</td><td style="padding:10px 14px;color:#292524;font-size:14px;font-weight:600;${i ? "border-top:1px solid #F0ECE7;" : ""}">${esc(v)}</td></tr>`).join("")}</table>`;
+  const callout = (h: string) => `<div style="margin:4px 0 18px;padding:13px 16px;background:#FFF7ED;border-left:4px solid #EA580C;border-radius:6px;color:#7C2D12;font-size:14px;line-height:1.6;font-weight:600">${h}</div>`;
+  const labelFor = (seg: string, i: number): string =>
+    /^[A-Z][A-Z0-9]{1,4}-[A-Z0-9-]{3,}$/.test(seg) ? "Booking" : /→/.test(seg) ? "Route" : /₹/.test(seg) ? "Amount" : /payment|accepted|paid|verified|received|confirmed/i.test(seg) ? "Status" : i === 0 ? "Customer" : "Detail";
+
+  const buttons: string[] = [];
+  const blocks: string[] = [];
+  let kvRun: [string, string][] = [];
+  const flushKv = () => { if (kvRun.length) { blocks.push(table(kvRun)); kvRun = []; } };
+  const sentences = (s: string) => s.length > 190 ? s.split(/(?<=[.!?])\s+(?=[A-Z"])/) : [s];
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  lines.forEach((line, idx) => {
+    // 1) a line carrying a link → text + a proper button
+    if (urlRe.test(line)) {
+      urlRe.lastIndex = 0;
+      flushKv();
+      const parts = line.split(urlRe);
+      const lead = parts.filter((_, i) => i % 2 === 0).join(" ").replace(/\s*[:—-]\s*$/, "").trim();
+      const urls = parts.filter((_, i) => i % 2 === 1);
+      if (lead && !/^(track live|your bookings|payment page with qr|pay securely here)\b/i.test(lead)) sentences(lead).forEach((s) => blocks.push(P(esc(s))));
+      urls.forEach((u) => buttons.push(btn(u)));
+      return;
+    }
+    urlRe.lastIndex = 0;
+    // 2) "Label: value" run → details table (pickup brief, etc.)
+    const kv = /^([A-Za-z][A-Za-z /]{1,22}):\s+(\S.*)$/.exec(line);
+    if (kv && !/^(hi|note|reason)\b/i.test(kv[1])) { kvRun.push([kv[1], kv[2]]); return; }
+    flushKv();
+    // 3) internal alert line "headline · fact · fact — action" → headline, facts table, action callout
+    if (internal && (line.match(/ · /g) ?? []).length >= 2) {
+      const segs = line.split(" · ").map((s) => s.trim());
+      let action = "";
+      const last = segs[segs.length - 1];
+      const dash = last.indexOf(" — ");
+      if (dash > -1) { action = last.slice(dash + 3).trim(); segs[segs.length - 1] = last.slice(0, dash).trim(); }
+      const head = segs.shift()!;
+      blocks.push(`<p style="margin:0 0 14px;color:#1C1917;font-size:17px;line-height:1.5;font-weight:800">${esc(head)}</p>`);
+      let ci = 0;
+      const rows: [string, string][] = segs.filter(Boolean).map((s) => { const l = labelFor(s, ci); if (l === "Customer") ci++; return [l, s]; });
+      if (rows.length) blocks.push(table(rows));
+      if (action) blocks.push(callout(`Next step: ${esc(action.charAt(0).toUpperCase() + action.slice(1))}`));
+      return;
+    }
+    // 4) OTP / verification codes get a big code box
+    const code = /otp|code/.test(template) ? /\b(\d{4,8})\b/.exec(line)?.[1] : "";
+    if (code && idx < 3) {
+      blocks.push(P(esc(line.replace(code, "the code below"))));
+      blocks.push(`<div style="margin:4px 0 18px;text-align:center;padding:16px;background:#FAF8F5;border:1px dashed #D6CFC7;border-radius:10px;font-family:Consolas,Menlo,monospace;font-size:30px;font-weight:800;letter-spacing:.3em;color:#1C1917">${code}</div>`);
+      return;
+    }
+    // 5) ordinary paragraph(s); greeting gets its own line
+    const g = /^(Hi [^,]{1,40},)\s+(.+)$/.exec(line);
+    if (g) { blocks.push(`<p style="margin:0 0 12px;color:#1C1917;font-size:16px;font-weight:700">${esc(g[1])}</p>`); sentences(g[2]).forEach((s) => blocks.push(P(esc(s.charAt(0).toUpperCase() + s.slice(1))))); }
+    else sentences(line).forEach((s) => blocks.push(P(esc(s))));
+  });
+  flushKv();
+  if (internal && !buttons.length) buttons.push(btn(`${(process.env.SITE_URL || "https://www.bagdrop.co").replace(/\/$/, "")}/admin-1/admin`));
+
+  const title = subject ? `<div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:#78716C;text-transform:uppercase">${internal ? "Bagdrop team alert" : "Booking update"}</div><div style="font-size:22px;font-weight:800;color:#1C1917;line-height:1.3;margin:6px 0 0">${esc(subject)}</div>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3F0;padding:24px 0">
 <tr><td align="center">
-<table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
 <tr><td style="background:#EA580C;padding:22px 28px">
 <div style="color:#ffffff;font-size:21px;font-weight:800;letter-spacing:.01em;font-family:Georgia,serif">BAGDROP</div>
 <div style="color:#ffffff;opacity:.9;font-size:10px;font-weight:600;letter-spacing:.15em;margin-top:3px">INDIA'S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</div>
 </td></tr>
-<tr><td style="padding:28px 28px 8px">${body}</td></tr>
+${title ? `<tr><td style="padding:24px 28px 4px">${title}<div style="height:1px;background:#E7E2DC;margin-top:16px"></div></td></tr>` : ""}
+<tr><td style="padding:20px 28px 6px">${blocks.join("")}</td></tr>
+${buttons.length ? `<tr><td style="padding:0 28px 22px">${buttons.join("&nbsp;&nbsp;")}</td></tr>` : ""}
 <tr><td style="padding:16px 28px 24px;border-top:1px solid #E7E2DC;color:#78716C;font-size:11px;line-height:1.6">
 ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot; ${esc(COMPANY.email)} &middot; ${esc(COMPANY.web)}
 </td></tr>
@@ -105,7 +165,10 @@ ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot
 
 export const TEMPLATES: Record<string, T> = {
   inquiry_ack: {
-    wa: (d) => `Hi ${d.name}, Bagdrop here — we have your request for ${d.lane}. A specialist reaches you within 15 minutes with the rate and pickup plan. Your reference: ${d.ref}.`,
+    // Founder-reported 2026-11-07: "a specialist reaches you within 15
+    // minutes with the rate and pickup plan" overpromised a response time
+    // the team doesn't actually run — simplified to what's actually true.
+    wa: (d) => `Hi ${d.name}, Bagdrop here — we've received your request for ${d.lane}. We'll send you a quotation as per your request as soon as possible. Your reference: ${d.ref}.`,
     subject: () => "Bagdrop — we have your request",
   },
   instant_ack: {
@@ -310,6 +373,20 @@ export async function notifyInquiryDesk(text: string, subject: string, key: stri
   return n;
 }
 
+/** Same inquiry-desk email, but with a fully designed HTML body supplied by
+ *  the caller (used for new Y2K wedding bookings). Same recipients, same
+ *  idempotent outbox keys as notifyInquiryDesk — only the email body differs. */
+export async function notifyInquiryDeskRich(text: string, subject: string, key: string, html: string): Promise<number> {
+  const cfg = await loadAlerts();
+  const emails = cfg.inquiryEmails?.length ? cfg.inquiryEmails : DEFAULT_INQUIRY_EMAILS;
+  const now = new Date().toISOString();
+  const rows: OutboxDoc[] = emails.map((email) => ({
+    kind: "send.email", key: `${key}:${email}:em`, to: email, name: "Bagdrop Inquiry Desk", template: "ops_alert",
+    text, html, subject, status: "queued", attempts: 0, createdAt: now,
+  }));
+  return insertRows(rows);
+}
+
 /** Atomic "first time only" guard — returns true exactly once per key
  *  (e.g. an OTP proof can create one booking or one login, never two). */
 export async function claimOnce(key: string): Promise<boolean> {
@@ -371,12 +448,21 @@ export async function notify(template: string, to: { name: string; mobile?: stri
   const now = new Date().toISOString();
   const rows: OutboxDoc[] = [];
   if (to.mobile) rows.push({ kind: "send.wa", key: `${key}:wa`, to: to.mobile, name: to.name, template, text, status: "queued", attempts: 0, createdAt: now });
-  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
+  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text, t.subject(data), template), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
   return insertRows(rows);
 }
 
 /* ================= providers (graceful stub without keys) ================= */
-export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub: boolean; link?: string }> {
+/** Meta's response to an accepted send carries its own message id (wamid) —
+ *  capturing it is what lets the delivery-status webhook (src/app/api/hooks/
+ *  whatsapp) report back what actually happened to a "done" row, instead of
+ *  everyone having to trust the accept response (see sendWhatsAppOtp's note:
+ *  "accepted" is not "delivered"). */
+async function waMessageId(r: Response): Promise<string | undefined> {
+  try { return ((await r.clone().json()) as { messages?: { id?: string }[] }).messages?.[0]?.id; } catch { return undefined; }
+}
+
+export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub: boolean; link?: string; waId?: string }> {
   const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
   const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
   if (!token || !phoneId) return { stub: true, link: `https://wa.me/${msisdn}?text=${encodeURIComponent(text)}` };
@@ -385,7 +471,58 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
     body: JSON.stringify({ messaging_product: "whatsapp", to: msisdn, type: "text", text: { body: text } }),
   });
   if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
-  return { stub: false };
+  return { stub: false, waId: await waMessageId(r) };
+}
+
+/** Fast2SMS's Meta-format WhatsApp API, used ONLY for the `bagdrop_otp`
+ *  authentication template. Same WABA/phone number as sendWhatsApp /
+ *  sendWhatsAppOtp above (995935626929789) — Fast2SMS is Bagdrop's existing
+ *  Business Solution Provider for that number (see the WhatsApp Manager
+ *  template list), reached through a different endpoint/auth header than
+ *  Meta's own Graph API. Per Fast2SMS's docs (reference/sendauthentication
+ *  template) an authentication template needs the code in BOTH the body
+ *  parameter and the copy-code button parameter. Returns a result object —
+ *  never throws — so sendWhatsAppOtp below can fall back to the direct-Meta
+ *  path on any failure without an unhandled rejection. Mobile numbers
+ *  reaching this function are already Indian-only (src/lib/otp.ts's
+ *  cleanMobile only accepts 10/11/12-digit Indian shapes), so Fast2SMS's
+ *  India-only restriction on international numbers never applies here. */
+async function sendWhatsAppOtpFast2SMS(mobile: string, code: string): Promise<{ success: boolean; error?: string; waId?: string }> {
+  const apiKey = process.env.FAST2SMS_API_KEY, phoneNumberId = process.env.FAST2SMS_WHATSAPP_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneNumberId) return { success: false, error: "FAST2SMS_NOT_CONFIGURED" };
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  const templateName = process.env.FAST2SMS_OTP_TEMPLATE_NAME || "bagdrop_otp";
+  const language = process.env.FAST2SMS_OTP_LANGUAGE || "en";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const r = await fetch(`https://www.fast2sms.com/dev/whatsapp/v26.0/${phoneNumberId}/messages`, {
+      method: "POST", headers: { Authorization: apiKey, "Content-Type": "application/json" }, signal: controller.signal,
+      body: JSON.stringify({
+        messaging_product: "whatsapp", recipient_type: "individual", to: msisdn, type: "template",
+        template: {
+          name: templateName, language: { code: language },
+          components: [
+            { type: "body", parameters: [{ type: "text", text: code }] },
+            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+          ],
+        },
+      }),
+    });
+    const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+    const errObj = data.error as { message?: string } | undefined;
+    if (!r.ok || errObj) {
+      console.error("[Fast2SMS WhatsApp OTP] FAILED | status:", r.status, "| error:", errObj?.message ?? JSON.stringify(data)); // never logs the code itself
+      return { success: false, error: errObj?.message ?? `HTTP_${r.status}` };
+    }
+    const messages = data.messages as Array<{ id?: string }> | undefined;
+    return { success: true, waId: messages?.[0]?.id };
+  } catch (err) {
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    return { success: false, error: isAbort ? "TIMEOUT" : (err instanceof Error ? err.message : String(err)) };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Fast2SMS's Meta-format WhatsApp API, used ONLY for the `bagdrop_otp`
@@ -485,11 +622,11 @@ export async function sendWhatsAppOtp(mobile: string, code: string, fallbackText
     method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       messaging_product: "whatsapp", to: msisdn, type: "template",
-      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US" }, components },
+      template: { name: templateName, language: { code: process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en" }, components },
     }),
   });
   if (!r.ok) throw new Error(`WA_TEMPLATE_${r.status}:${(await r.text()).slice(0, 200)}`);
-  return { stub: false };
+  return { stub: false, waId: await waMessageId(r) };
 }
 
 export async function sendEmail(email: string, subject: string, text: string, html?: string): Promise<{ stub: boolean; link?: string }> {
@@ -1011,8 +1148,12 @@ async function drainPass(stats: SweepStats, limit = 40) {
         : doc.kind === "send.email"
           ? await sendEmail(doc.to!, doc.subject ?? "Bagdrop update", doc.text!, doc.html)
           : { stub: true as const };
-      const done: OutboxDoc = { ...doc, status: "done", stub: res.stub, link: res.link, doneAt: new Date().toISOString() };
+      const waId = "waId" in res ? (res.waId as string | undefined) : undefined;
+      const done: OutboxDoc = { ...doc, status: "done", stub: res.stub, link: res.link, waId, doneAt: new Date().toISOString() };
       await sb.from("outbox").upsert({ id: row.id, doc: done, status: "done", created: doc.createdAt });
+      /* lets the delivery-status webhook (src/app/api/hooks/whatsapp) find this
+       * row again later by wamid — it only ever gets the wamid, never our key */
+      if (waId) await sb.from("settings").upsert({ id: `wa:${waId}`, doc: { outboxId: row.id }, status: null, created: new Date().toISOString() });
       if (res.stub) stats.stubbed++; else stats.sent++;
     } catch (e) {
       const attempts = (doc.attempts ?? 0) + 1;

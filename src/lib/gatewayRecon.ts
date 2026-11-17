@@ -137,8 +137,12 @@ export function reconcile(o: {
   const byPayment = new Map<string, { b: Booking; amount: number }>();
   const ids = new Map(o.bookings.map((b) => [b.id, b]));
   for (const b of o.bookings) {
-    for (const h of b.pay?.history ?? []) if (h.utr?.startsWith("pay_")) byPayment.set(h.utr, { b, amount: h.amount });
-    if (b.pay?.utr?.startsWith("pay_") && !byPayment.has(b.pay.utr)) byPayment.set(b.pay.utr, { b, amount: b.pay.amount });
+    /* history/pay.amount is the SERVICE price only (never the Razorpay
+     * convenience fee, kept separate — see Payment.gatewayFee); Razorpay's
+     * own capture is for the fee-inclusive total, so the fee has to be
+     * added back here or every fee-inclusive payment reads as a mismatch. */
+    for (const h of b.pay?.history ?? []) if (h.utr?.startsWith("pay_")) byPayment.set(h.utr, { b, amount: h.amount + (h.gatewayFee ?? 0) });
+    if (b.pay?.utr?.startsWith("pay_") && !byPayment.has(b.pay.utr)) byPayment.set(b.pay.utr, { b, amount: b.pay.amount + (b.pay.gatewayFee ?? 0) });
     for (const d of (b.admin as { duplicatePayments?: { paymentId: string; amount: number }[] }).duplicatePayments ?? []) byPayment.set(d.paymentId, { b, amount: d.amount });
   }
   const bookingOf = (p: GwPayment): Booking | null => {
