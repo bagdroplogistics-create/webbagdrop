@@ -58,6 +58,8 @@ h2.big em{font-style:italic;color:var(--label)}
 .nav-links .pill:hover{background:var(--gold);border-color:var(--gold);color:var(--forest)}
 .hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:40px}
 .hero-cta .hero-book{background:var(--sand);color:var(--forest-2)}
+.hero-cta .hero-book:hover{background:var(--sand-2);color:var(--forest-2)}
+.hero-cta .hero-mine:hover{background:rgba(244,238,228,.14);color:var(--on-dark)}
 .hero-cta .hero-mine{background:transparent;color:var(--on-dark);border:1px solid rgba(244,238,228,.55)}
 .book-fab{position:fixed;right:18px;bottom:18px;z-index:60;display:inline-flex;align-items:center;justify-content:center;padding:15px 24px;border-radius:999px;background:var(--sand);color:var(--forest-2);border:1px solid rgba(36,41,31,.25);font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none;box-shadow:0 10px 30px rgba(36,41,31,.35);transition:opacity .25s,transform .25s}
 .book-fab.off{opacity:0;transform:translateY(12px);pointer-events:none}
@@ -137,6 +139,9 @@ h2.big em{font-style:italic;color:var(--label)}
 
 /* Travel */
 .travel{background:var(--forest);color:var(--on-dark);padding-block:clamp(88px,12vw,148px);position:relative;overflow:hidden}
+.travel .eyebrow{color:var(--gold)}
+.travel h2.big em{color:var(--sand)}
+.travel .lede{color:rgba(244,238,228,.88)}
 .travel .ridge3{position:absolute;left:0;right:0;top:0;width:100%;height:220px;opacity:.1;pointer-events:none}
 .travel .photo{position:relative}
 .travel .frame{position:relative;width:100%;aspect-ratio:4/3;border-radius:22px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.28)}
