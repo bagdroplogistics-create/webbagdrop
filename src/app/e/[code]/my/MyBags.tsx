@@ -298,7 +298,7 @@ const CSS = `
 .mb-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
 .mb-input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;font:500 16px/1 var(--sans);background:var(--paper);color:var(--ink)}
 .mb-otp{font-family:var(--mono);letter-spacing:.3em}
-.mb-btn{display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;border-radius:999px;padding:15px 24px;background:var(--forest);color:var(--on-dark);font:600 12px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none}
+.mb-btn{display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;border-radius:var(--btn-r,999px);padding:15px 24px;background:var(--forest);color:var(--on-dark);font:600 12px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none}
 .mb-btn:disabled{opacity:.45;cursor:default}
 .mb-nav .mb-btn{background:var(--sand);color:var(--forest-2)}
 .mb-sm{padding:11px 18px}

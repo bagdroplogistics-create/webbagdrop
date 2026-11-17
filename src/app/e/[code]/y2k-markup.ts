@@ -16,7 +16,7 @@ export const Y2K_CSS = `
   --display:"Cormorant Garamond","Cormorant",Georgia,"Times New Roman",serif;
   --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
-  --r:14px; --gutter:clamp(16px,4vw,40px);
+  --r:14px; --btn-r:999px; --gutter:clamp(16px,4vw,40px);
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -54,14 +54,14 @@ h2.big em{font-style:italic;color:var(--label)}
 .nav-links a{text-decoration:none;transition:color .2s ease}
 .nav-links a:not(.pill):hover{color:var(--gold)}
 .nav.scrolled .nav-links a:not(.pill):hover{color:var(--gold-2)}
-.nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:999px;transition:background .2s,color .2s,border-color .2s}
+.nav-links .pill{border:1px solid currentColor;padding:9px 20px;border-radius:var(--btn-r);transition:background .2s,color .2s,border-color .2s}
 .nav-links .pill:hover{background:var(--gold);border-color:var(--gold);color:var(--forest)}
 .hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:40px}
 .hero-cta .hero-book{background:var(--sand);color:var(--forest-2)}
 .hero-cta .hero-book:hover{background:var(--sand-2);color:var(--forest-2)}
 .hero-cta .hero-mine:hover{background:rgba(244,238,228,.14);color:var(--on-dark)}
 .hero-cta .hero-mine{background:transparent;color:var(--on-dark);border:1px solid rgba(244,238,228,.55)}
-.book-fab{position:fixed;right:18px;bottom:18px;z-index:60;display:inline-flex;align-items:center;justify-content:center;padding:15px 24px;border-radius:999px;background:var(--sand);color:var(--forest-2);border:1px solid rgba(36,41,31,.25);font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none;box-shadow:0 10px 30px rgba(36,41,31,.35);transition:opacity .25s,transform .25s}
+.book-fab{position:fixed;right:18px;bottom:18px;z-index:60;display:inline-flex;align-items:center;justify-content:center;padding:15px 24px;border-radius:var(--btn-r);background:var(--sand);color:var(--forest-2);border:1px solid rgba(36,41,31,.25);font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;text-decoration:none;box-shadow:0 10px 30px rgba(36,41,31,.35);transition:opacity .25s,transform .25s}
 .book-fab.off{opacity:0;transform:translateY(12px);pointer-events:none}
 .hamburger{display:none;background:none;border:1px solid currentColor;border-radius:999px;color:inherit;cursor:pointer;padding:8px 16px;font:600 12px/1 var(--sans,Inter,sans-serif);letter-spacing:.14em;text-transform:uppercase;align-items:center;justify-content:center}
 @media (max-width:860px){.nav-links{display:none}.hamburger{display:flex}}
@@ -74,7 +74,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .navdrawer .close{background:rgba(255,255,255,.1);border:0;color:var(--on-dark);height:40px;padding:0 18px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;line-height:1}
 .navdrawer nav{display:flex;flex-direction:column;gap:4px;font-family:var(--display)}
 .navdrawer nav a{font-size:30px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none}
-.navdrawer .cta{margin-top:auto;text-align:center;background:var(--gold);color:var(--forest);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:18px;border-radius:999px;text-decoration:none}
+.navdrawer .cta{margin-top:auto;text-align:center;background:var(--gold);color:var(--forest);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:18px;border-radius:var(--btn-r);text-decoration:none}
 
 /* Hero — real photography instead of canvas art */
 .hero{position:relative;min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 20px 56px;overflow:hidden;color:var(--on-dark)}
@@ -94,12 +94,12 @@ h2.big em{font-style:italic;color:var(--label)}
 .count b{font-family:var(--display);font-weight:400;font-size:clamp(34px,7vw,56px);line-height:1;color:var(--sand);font-variant-numeric:tabular-nums}
 .count span{font-size:10px;letter-spacing:.24em;text-transform:uppercase;opacity:.8}
 
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;cursor:pointer;font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;border-radius:var(--r);padding:16px 26px;background:var(--forest);color:var(--on-dark);text-decoration:none;transition:transform .15s,background .15s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;cursor:pointer;font:600 13px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;border-radius:var(--btn-r);padding:16px 26px;background:var(--forest);color:var(--on-dark);text-decoration:none;transition:transform .15s,background .15s}
 .btn:hover{background:var(--forest-2);transform:translateY(-1px)}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn.ghost:hover{background:var(--paper)}
 .btn.gold{background:var(--sand);color:#3A2E1C}
-.btn.sm{padding:10px 14px;font-size:11px;border-radius:10px}
+.btn.sm{padding:10px 14px;font-size:11px;border-radius:var(--btn-r)}
 .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
 
 /* Banner — "travel light to the mountains" card right under the hero */
@@ -113,7 +113,7 @@ h2.big em{font-style:italic;color:var(--label)}
 .banner .bstats{display:flex;gap:22px}
 .banner .bstats b{font-family:var(--display);font-weight:400;font-size:30px;color:var(--sand);display:block;line-height:1}
 .banner .bstats span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
-.banner .cta{text-align:center;background:var(--sand);color:#3A2E1C;font-family:var(--sans);font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:16px 28px;border-radius:999px;text-decoration:none}
+.banner .cta{text-align:center;background:var(--sand);color:#3A2E1C;font-family:var(--sans);font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:16px 28px;border-radius:var(--btn-r);text-decoration:none}
 
 /* Celebration */
 .cel{padding-block:clamp(96px,14vw,168px) clamp(60px,9vw,110px)}
@@ -234,7 +234,7 @@ input[readonly]{background:var(--line-2);color:var(--label)}
 .x{background:none;border:0;color:var(--stone);cursor:pointer;font-size:13px;text-decoration:underline}
 .x:hover{color:var(--err)}
 .adders{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
-.adders button{border:1px dashed var(--gold-2);background:var(--paper);color:var(--label);border-radius:10px;padding:9px 12px;font:500 13px var(--sans);cursor:pointer}
+.adders button{border:1px dashed var(--gold-2);background:var(--paper);color:var(--label);border-radius:var(--btn-r);padding:9px 12px;font:500 13px var(--sans);cursor:pointer}
 .adders button:hover{background:var(--sand-2)}
 .swatches{display:flex;gap:6px;flex-wrap:wrap}
 .swatches label{cursor:pointer;position:relative}
