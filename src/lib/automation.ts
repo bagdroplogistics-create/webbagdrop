@@ -303,6 +303,14 @@ const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Re
   inquiry_ack: { name: "inquiry_acknowledgment", vars: (_d, firstName) => [firstName] },
 };
 
+/** Whether `template` has a real approved template behind it (Fast2SMS or
+ *  Meta direct) — i.e. whether notify()/sendCustomerWhatsApp can reach a
+ *  customer with it OUTSIDE the 24h customer-service window. Every other
+ *  template in TEMPLATES is free-form text, which Meta rejects outside that
+ *  window (see the long comment above). Used by waFollowUp.ts to decide
+ *  whether a scheduled follow-up is safe to send yet. */
+export const hasApprovedTemplate = (template: string): boolean => template in FAST2SMS_TEMPLATE_MAP;
+
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
  * Every major and minor platform event also fans out to ONE configured ops
  * contact — a WhatsApp number and/or email set in the Automation desk and

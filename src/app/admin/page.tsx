@@ -28,6 +28,7 @@ import Pricing from "./Pricing";
 import QuotesAndPayments from "./QuotesAndPayments";
 import RulesAndNotifications from "./RulesAndNotifications";
 import SecurityAndAudit from "./SecurityAndAudit";
+import WhatsAppAutomation from "./WhatsAppAutomation";
 
 /** Shipments hub — the Shipments inbox and the Quotes & payments desk,
  *  merged into ONE module as sub-tabs. Both render unchanged, so every
@@ -75,6 +76,7 @@ export default function AdminPage() {
       {tab === "wed" && <Weddings onOpenBooking={openBooking} />}
       {tab === "cli" && <Clients />}
       {tab === "ads" && <LeadImport />}
+      {tab === "wa" && <WhatsAppAutomation />}
       {tab === "rep" && <Reports />}
       {tab === "exc" && <Exceptions />}
       {tab === "evt" && <EventsAndBulk onOpenBooking={openBooking} />}

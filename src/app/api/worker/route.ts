@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { runSweep } from "@/lib/automation";
+import { serviceClient } from "@/lib/supabaseAdmin";
+import { waFollowUpPass } from "@/lib/waFollowUp";
 
 /** The automation worker. Triggered three ways, all equivalent (the sweep
  *  is idempotent): Vercel Cron (Authorization: Bearer CRON_SECRET, which
@@ -14,7 +16,9 @@ export async function GET(req: Request) {
   if (!fromCron && !(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   try {
     const stats = await runSweep();
-    return NextResponse.json({ ok: true, ...stats });
+    const sb = serviceClient();
+    const wa = sb ? await waFollowUpPass(sb).catch(() => ({ sent: 0, skipped: 0, pruned: false })) : { sent: 0, skipped: 0, pruned: false };
+    return NextResponse.json({ ok: true, ...stats, wa });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "SWEEP_FAILED" }, { status: 500 });
   }

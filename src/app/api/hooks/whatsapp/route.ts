@@ -1,20 +1,38 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { OutboxDoc } from "@/lib/automation";
+import { handleInboundMessage } from "@/lib/waBot";
+import { logEvent } from "@/lib/waStore";
 
-/** WhatsApp Cloud API delivery-status webhook — the only way to learn what
- *  actually happened after Meta accepts a send. The /messages endpoint's
- *  "accepted" response is not proof of delivery: a free-form text outside
- *  the 24h session window, or a template Meta later flags, both come back
- *  200 OK and then vanish with nothing in the API response to show for it.
- *  This records Meta's own sent/delivered/read/failed callback against the
- *  outbox row it belongs to, so the Automation desk shows the true state
- *  instead of just "we handed it to Meta".
+/** WhatsApp Cloud API webhook — TWO jobs on one URL/subscription, since Meta
+ *  only ever lets you register one webhook per app for the "messages" field
+ *  and delivers both kinds of event to it:
+ *
+ *  1. Delivery-status callbacks (sent/delivered/read/failed) for OUR sends —
+ *     the /messages endpoint's "accepted" response is not proof of
+ *     delivery: a free-form text outside the 24h session window, or a
+ *     template Meta later flags, both come back 200 OK and then vanish with
+ *     nothing in the API response to show for it. This records Meta's own
+ *     callback against the outbox row it belongs to, so the Automation desk
+ *     shows the true state instead of just "we handed it to Meta". (This
+ *     half of the file is unchanged from before the chatbot module.)
+ *  2. INCOMING customer messages (2026-11-19, WhatsApp Chatbot & Automation
+ *     module) — routed to src/lib/waBot.ts, which owns everything from
+ *     here: FAQ auto-replies, collecting travel/baggage details, lead
+ *     dedup + draft-quote creation, follow-up scheduling and human
+ *     handover. This route itself stays a thin, best-effort dispatcher.
  *
  *  Register this URL (https://<domain>/api/hooks/whatsapp) in Meta's App
  *  dashboard → WhatsApp → Configuration → Webhook, subscribed to the
  *  "messages" field, with WHATSAPP_WEBHOOK_VERIFY_TOKEN set to whatever
- *  verify token you type into that same dashboard field. */
+ *  verify token you type into that same dashboard field. Optionally also
+ *  set META_WHATSAPP_APP_SECRET (the Meta App's "App secret", not the
+ *  WhatsApp access token) to verify Meta's X-Hub-Signature-256 on every
+ *  POST — recommended once this route can create leads/bookings, not just
+ *  update an existing outbox row; without it the route still works
+ *  (signature check is skipped, same graceful-degradation convention as
+ *  automation.ts's providers), it's just unauthenticated. */
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -28,28 +46,58 @@ export async function GET(req: Request) {
 }
 
 type StatusEvent = { id?: string; status?: string; errors?: { title?: string; message?: string }[] };
-type Body = { entry?: { changes?: { value?: { statuses?: StatusEvent[] } }[] }[] };
+type IncomingMessage = { id?: string; from?: string; timestamp?: string; type?: string; text?: { body?: string } };
+type Contact = { wa_id?: string; profile?: { name?: string } };
+type Body = { entry?: { changes?: { value?: { statuses?: StatusEvent[]; messages?: IncomingMessage[]; contacts?: Contact[] } }[] }[] };
+
+function signatureValid(rawBody: string, header: string | null): boolean {
+  const secret = process.env.META_WHATSAPP_APP_SECRET;
+  if (!secret) return true; // not configured — skip the check rather than refuse every delivery
+  if (!header?.startsWith("sha256=")) return false;
+  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const a = Buffer.from(expected), b = Buffer.from(header.slice(7));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export async function POST(req: Request) {
   /* Meta always expects 200 quickly, or it retries the same event for hours —
    * acknowledge first, work is small and best-effort either way. */
+  const raw = await req.text();
+  if (!signatureValid(raw, req.headers.get("x-hub-signature-256"))) {
+    return NextResponse.json({ error: "BAD_SIGNATURE" }, { status: 401 });
+  }
   let body: Body;
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: true }); }
+  try { body = JSON.parse(raw); } catch { return NextResponse.json({ ok: true }); }
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ ok: true });
 
-  const statuses = (body.entry ?? []).flatMap((e) => (e.changes ?? []).flatMap((c) => c.value?.statuses ?? []));
-  for (const s of statuses) {
-    if (!s.id || !s.status) continue;
-    const { data: map } = await sb.from("settings").select("doc").eq("id", `wa:${s.id}`).maybeSingle();
-    const outboxId = (map?.doc as { outboxId?: string } | null)?.outboxId;
-    if (!outboxId) continue; // a status for a message we didn't send through the outbox (e.g. an OTP) — nothing to attach it to
-    const { data: row } = await sb.from("outbox").select("id, doc").eq("id", outboxId).maybeSingle();
-    if (!row) continue;
-    const doc = row.doc as OutboxDoc;
-    const waStatus = s.status as OutboxDoc["waStatus"];
-    const next: OutboxDoc = { ...doc, waStatus, waError: s.errors?.[0] ? `${s.errors[0].title ?? ""} ${s.errors[0].message ?? ""}`.trim() : doc.waError };
-    await sb.from("outbox").update({ doc: next }).eq("id", outboxId);
+  const values = (body.entry ?? []).flatMap((e) => e.changes ?? []).map((c) => c.value ?? {});
+
+  for (const value of values) {
+    for (const s of value.statuses ?? []) {
+      if (!s.id || !s.status) continue;
+      const { data: map } = await sb.from("settings").select("doc").eq("id", `wa:${s.id}`).maybeSingle();
+      const outboxId = (map?.doc as { outboxId?: string } | null)?.outboxId;
+      if (!outboxId) continue; // a status for a message we didn't send through the outbox (e.g. an OTP) — nothing to attach it to
+      const { data: row } = await sb.from("outbox").select("id, doc").eq("id", outboxId).maybeSingle();
+      if (!row) continue;
+      const doc = row.doc as OutboxDoc;
+      const waStatus = s.status as OutboxDoc["waStatus"];
+      const next: OutboxDoc = { ...doc, waStatus, waError: s.errors?.[0] ? `${s.errors[0].title ?? ""} ${s.errors[0].message ?? ""}`.trim() : doc.waError };
+      await sb.from("outbox").update({ doc: next }).eq("id", outboxId);
+    }
+
+    const contactByWaId = new Map((value.contacts ?? []).map((c) => [c.wa_id, c.profile?.name] as const));
+    for (const m of value.messages ?? []) {
+      if (!m.id || !m.from || m.type !== "text" || !m.text?.body) continue; // non-text (image/voice/location/…) — out of scope for the bot today, logged below
+      try {
+        await handleInboundMessage(sb, {
+          mobile: m.from, waId: m.from, profileName: contactByWaId.get(m.from), text: m.text.body, wamid: m.id, timestamp: m.timestamp,
+        });
+      } catch (e) {
+        await logEvent(sb, { type: "error", conversationId: m.from.replace(/\D/g, "").slice(-10), detail: "handleInboundMessage threw — see error field.", error: e instanceof Error ? e.message : String(e), at: new Date().toISOString() }, `waerr:${m.id}`);
+      }
+    }
   }
   return NextResponse.json({ ok: true });
 }

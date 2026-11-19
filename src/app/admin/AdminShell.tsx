@@ -137,7 +137,7 @@ export type ModuleKey =
   | "crm" | "price" | "id" | "fin" | "part"
   | "rules"
   | "integ" | "sec" | "data"
-  | "dash" | "opsx" | "live" | "wed" | "ads" | "rep" | "insp" | "cli";
+  | "dash" | "opsx" | "live" | "wed" | "ads" | "wa" | "rep" | "insp" | "cli";
 
 interface NavItem { key: ModuleKey; name: string; short?: string; badge?: string; badgeTone?: "live" | "count"; noHighlight?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
@@ -166,6 +166,7 @@ const GROUPS: NavGroup[] = [
       { key: "cli", short: "Clients", name: "Clients · master", badge: "live", badgeTone: "live" },
       { key: "crm", short: "CRM", name: "CRM & follow-ups", badge: "live", badgeTone: "live" },
       { key: "ads", short: "Leads", name: "Lead import · Ads", badge: "live", badgeTone: "live" },
+      { key: "wa", short: "WhatsApp", name: "WhatsApp Chatbot & Automation", badge: "live", badgeTone: "live" },
       { key: "price", short: "Pricing", name: "Pricing engine", badge: "live", badgeTone: "live" },
       { key: "id", short: "Identity", name: "Identity & compliance", badge: "live", badgeTone: "live" },
       { key: "fin", short: "Finance", name: "Finance", badge: "live", badgeTone: "live" },

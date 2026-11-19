@@ -21,6 +21,7 @@ export const MODULES = [
   { key: "cli", name: "Clients · master", group: "Commerce" },
   { key: "crm", name: "CRM & follow-ups", group: "Commerce" },
   { key: "ads", name: "Lead import · Ads", group: "Commerce" },
+  { key: "wa", name: "WhatsApp Chatbot & Automation", group: "Commerce" },
   { key: "price", name: "Pricing engine", group: "Commerce" },
   { key: "id", name: "Identity & compliance", group: "Commerce" },
   { key: "fin", name: "Finance", group: "Commerce" },
@@ -56,7 +57,7 @@ export const DEPARTMENTS: { key: string; name: string; perms: Perm[] }[] = ([
   { key: "management", name: "Management", perms: [...all("edit"), ...ACTIONS.map((a) => `act.${a.key}` as Perm)] },
   { key: "operations", name: "Operations", perms: [...mods("edit", "cmd", "ship", "lr", "opsx", "live", "insp", "exc", "wed", "evt", "drv", "flt", "apt", "cap", "id"), ...mods("view", "cli", "crm", "rep"), "act.approve_bookings"] },
   { key: "hub", name: "Hub staff", perms: [...mods("edit", "ship", "lr", "live", "exc", "apt"), ...mods("view", "cmd", "opsx", "insp")] },
-  { key: "sales", name: "Sales", perms: [...mods("edit", "ship", "cli", "crm", "ads", "wed", "evt", "part"), ...mods("view", "cmd", "price", "rep"), "act.approve_bookings", "act.export"] },
+  { key: "sales", name: "Sales", perms: [...mods("edit", "ship", "cli", "crm", "ads", "wa", "wed", "evt", "part"), ...mods("view", "cmd", "price", "rep"), "act.approve_bookings", "act.export"] },
   { key: "finance", name: "Finance", perms: [...mods("edit", "fin"), ...mods("view", "cmd", "ship", "price", "cli", "part", "rep", "dash"), "act.verify_payments", "act.export"] },
   { key: "auditor", name: "Auditor", perms: [...all("view")] },
   { key: "custom", name: "Custom", perms: [] },
@@ -90,7 +91,7 @@ const ROUTE_MODULE: Record<string, ModKey> = {
   agents: "part", airport: "apt", automation: "rules", "board-link": "dash", clients: "cli", crm: "crm", events: "wed", finance: "fin", payments: "fin",
   flights: "flt", identity: "id", inquiries: "ship", inquiry: "ship", inspector: "insp", leads: "ads", "production-leads": "ads", metrics: "dash", moves: "opsx",
   ops: "opsx", lifecycle: "ship", lr: "lr", "payment-link": "ship", pricing: "price", quotes: "ship", rules: "rules", tags: "lr", tracking: "live", trips: "lr",
-  "wedding-ops": "wed", "wedding-tags": "wed", audit: "sec",
+  "wedding-ops": "wed", "wedding-tags": "wed", audit: "sec", "whatsapp-automation": "wa",
 };
 
 export type Need = { ok: true } | { ok: false; need: string };
