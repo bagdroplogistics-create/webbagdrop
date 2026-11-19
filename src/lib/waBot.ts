@@ -25,10 +25,11 @@
  *    findOpenLeadByMobile below — so a WhatsApp-sourced lead and an
  *    ads-imported lead can never silently double-book the same customer. */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendWhatsApp, notify, kickSweep, opsNotify, looksLikeTestName } from "./automation";
+import { sendWhatsApp, sendWhatsAppButtons, fetchWhatsAppMedia, notify, kickSweep, opsNotify, looksLikeTestName } from "./automation";
 import { loadMasters } from "./pricingSettings";
 import { makeQuotedBooking } from "./quoteFactory";
-import { addMessage, getConversation, logEvent, normalizeMobile, saveConversation } from "./waStore";
+import { addMessage, attachMessageMedia, getConversation, logEvent, normalizeMobile, registerSentMessageMapping, saveConversation } from "./waStore";
+import { newToken } from "./supabaseAdmin";
 import { loadWaConfig } from "./waConfig";
 import type { CrmActivity } from "./types";
 import type { WaConversation, WaConfig } from "./waTypes";
@@ -50,6 +51,10 @@ export interface InboundInput {
    *  "location". The bot can't read any of these, so it hands over to a
    *  human immediately rather than guessing (see handleInboundMessage). */
   mediaType?: string;
+  /** Meta's media id (image/document/video/audio messages only) — used to
+   *  download the actual attachment for the admin UI's thumbnail/preview
+   *  (fetchWhatsAppMedia). Absent for location/sticker/text. */
+  mediaId?: string;
 }
 
 /* ================= dedup — mirrors leads/route.ts's open-lead-by-mobile rule ================= */
@@ -148,11 +153,21 @@ function promptFor(step: NonNullable<WaConversation["botContext"]>["step"]): str
   }
 }
 
-async function send(sb: SB, mobile: string, mobile10: string, text: string): Promise<void> {
+/** `buttons`, when given (max 3, WhatsApp's own limit), sends an
+ *  interactive quick-reply message instead of plain text — e.g. an FAQ
+ *  answer offering a one-tap "Talk to a human". The row id is generated
+ *  BEFORE sending specifically so a successful send's wamid can be mapped
+ *  back to it (registerSentMessageMapping), letting the delivery-status
+ *  webhook put a real sent/delivered/read tick on this exact bubble later. */
+async function send(sb: SB, mobile: string, mobile10: string, text: string, buttons?: { id: string; title: string }[]): Promise<void> {
+  const rowId = newToken("WAM", 8);
+  let waId: string | undefined;
   try {
-    await sendWhatsApp(mobile, text);
+    const res = buttons?.length ? await sendWhatsAppButtons(mobile, text, buttons) : await sendWhatsApp(mobile, text);
+    waId = res.waId;
   } finally {
-    await addMessage(sb, { conversationId: mobile10, direction: "out", text, from: "bot", at: nowIso() });
+    await addMessage(sb, { conversationId: mobile10, direction: "out", text, from: "bot", waId, buttons, at: nowIso() }, rowId);
+    if (waId) await registerSentMessageMapping(sb, waId, rowId);
   }
 }
 
@@ -204,6 +219,22 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
   const firstTimeSeen = await addMessage(sb, { conversationId: mobile10, direction: "in", text: input.text, from: "customer", waId: input.wamid, at: nowStr }, input.wamid);
   if (!firstTimeSeen) return;
   await logEvent(sb, { type: "message_in", conversationId: mobile10, leadId: conv.leadId, bookingId: conv.bookingId, detail: `Inbound: "${input.text.slice(0, 120)}"`, at: nowStr }, `wae:in:${input.wamid}`);
+
+  /* download the actual attachment for a real thumbnail in the admin UI —
+   * best-effort and never blocks/affects anything below: a failed/skipped
+   * download just leaves the row with its "[Photo]"-style placeholder
+   * text only, same as before this existed. Private Storage, same
+   * pattern as identity-docs/claim photos elsewhere in this app. */
+  if (input.mediaId) {
+    const file = await fetchWhatsAppMedia(input.mediaId);
+    if (file) {
+      const ext = file.contentType.split("/")[1]?.split(";")[0] || "bin";
+      const path = `${mobile10}/${input.wamid}.${ext}`;
+      await sb.storage.createBucket("wa-media", { public: false }).catch(() => null);
+      const up = await sb.storage.from("wa-media").upload(path, file.bytes, { contentType: file.contentType, upsert: false });
+      if (!up.error) await attachMessageMedia(sb, input.wamid, path, file.contentType);
+    }
+  }
 
   /* opt-out is permanent-until-they-message-again-and-an-admin-clears-it —
    * checked before anything else, and short-circuits the whole flow. */
@@ -284,7 +315,10 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
   const faqHit = matchFaq(input.text, cfg.faq);
   if (faqHit) {
     await saveConversation(sb, conv);
-    await send(sb, input.mobile, mobile10, faqHit.answer);
+    // a one-tap way out of the FAQ loop — clicking it lands back here as
+    // plain text ("Talk to a human"), which the keyword-handover check
+    // above already matches, so no special button-id handling is needed.
+    await send(sb, input.mobile, mobile10, faqHit.answer, [{ id: "talk_to_human", title: "Talk to a human" }]);
     await logEvent(sb, { type: "faq_answered", conversationId: mobile10, detail: `FAQ: "${faqHit.question}"`, at: nowIso() });
     return;
   }

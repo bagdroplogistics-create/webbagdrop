@@ -8,7 +8,17 @@ import {
   fetchConversation, fetchHistory, loadWaSettings, replyToConversation, resolveConversation, returnConversationToBot,
   saveWaSettings, takeOverConversation, watchConversations,
 } from "@/lib/waAdminApi";
-import type { WaConfig, WaConversation, WaEvent, WaFaqEntry } from "@/lib/waTypes";
+import type { WaConfig, WaConversation, WaEvent, WaFaqEntry, WaMessage } from "@/lib/waTypes";
+
+/** Plain Unicode check marks, same visual language as WhatsApp's own
+ *  ticks — not a custom icon font, just text. */
+function Ticks({ status }: { status?: WaMessage["waStatus"] }) {
+  if (!status) return null;
+  if (status === "failed") return <span className="text-red-200"> · failed</span>;
+  if (status === "read") return <span className="text-sky-200"> ✓✓</span>;
+  if (status === "delivered") return <span> ✓✓</span>;
+  return <span> ✓</span>;
+}
 
 const STATE_TONE: Record<string, "ok" | "warn" | "bad" | "info" | "muted"> = {
   bot: "info", human: "warn", resolved: "ok", opted_out: "muted",
@@ -77,7 +87,7 @@ function LiveConversations() {
 }
 
 function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () => void }) {
-  const [data, setData] = useState<{ conversation: WaConversation; messages: { direction: string; text: string; from: string; at: string }[] } | null>(null);
+  const [data, setData] = useState<{ conversation: WaConversation; messages: WaMessage[] } | null>(null);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -116,14 +126,32 @@ function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () =
               no scrolling needed anywhere, a long one scrolls ONLY inside this box —
               the reply bar right after it in normal flow is always right there. */}
           <div className="max-h-[50vh] min-h-[220px] overflow-y-auto rounded-xl border border-line bg-paper p-4">
-            {data.messages.map((m, i) => (
-              <div key={i} className={`mb-3 flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-[15px] shadow-sm ${m.direction === "out" ? "bg-brand text-white" : "bg-white border border-line text-ink"}`}>
-                  <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
-                  <div className={`mt-1.5 text-[11px] ${m.direction === "out" ? "text-white/70" : "text-faint"}`}>{m.from} · {istTime(m.at)}</div>
+            {data.messages.map((m, i) => {
+              const isTeam = m.from === "team"; // sent from the regular WhatsApp app/Web, not this dashboard
+              const out = m.direction === "out";
+              return (
+                <div key={i} className={`mb-3 flex ${out ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-[15px] shadow-sm ${out ? (isTeam ? "bg-slate-600 text-white" : "bg-brand text-white") : "bg-white border border-line text-ink"}`}>
+                    {m.mediaUrl && (
+                      <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="mb-2 block">
+                        {m.mediaContentType?.startsWith("image/")
+                          ? <img src={m.mediaUrl} alt="Attachment" className="max-h-56 rounded-lg border border-white/20 object-cover" />
+                          : <span className="underline">Open attachment</span>}
+                      </a>
+                    )}
+                    <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
+                    {!!m.buttons?.length && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {m.buttons.map((b) => <span key={b.id} className="rounded-full border border-white/30 px-2 py-0.5 text-[11px]">{b.title}</span>)}
+                      </div>
+                    )}
+                    <div className={`mt-1.5 text-[11px] ${out ? "text-white/70" : "text-faint"}`}>
+                      {isTeam ? "team · via WhatsApp" : m.from} · {istTime(m.at)}{out && <Ticks status={m.waStatus} />}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {!data.messages.length && <div className="py-10 text-center text-sm text-muted">No messages yet.</div>}
           </div>
           <div className="flex shrink-0 gap-2 border-t border-line pt-3">

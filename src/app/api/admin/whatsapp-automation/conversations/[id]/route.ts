@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { isAdminRequest, actorName } from "@/lib/adminAuth";
-import { serviceClient } from "@/lib/supabaseAdmin";
-import { sendWhatsApp } from "@/lib/automation";
-import { addMessage, getConversation, listMessages, logEvent, normalizeMobile, saveConversation } from "@/lib/waStore";
+import { serviceClient, newToken } from "@/lib/supabaseAdmin";
+import { sendWhatsApp, markWhatsAppRead } from "@/lib/automation";
+import { addMessage, getConversation, listMessages, logEvent, normalizeMobile, registerSentMessageMapping, resolveMediaUrls, saveConversation } from "@/lib/waStore";
 
 /** Live Conversations (section A) detail view — one conversation's full
  *  thread, plus the actions a human admin can take: manual reply,
@@ -16,7 +16,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const id = normalizeMobile((await params).id);
   const conversation = await getConversation(sb, id);
   if (!conversation) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  const messages = await listMessages(sb, id);
+  const messages = await resolveMediaUrls(sb, await listMessages(sb, id));
+  // tell Meta the customer's own messages were seen (blue ticks on their
+  // side) the moment an admin actually opens this thread — fire-and-forget,
+  // cosmetic, never worth delaying the response for.
+  const lastInboundWaId = [...messages].reverse().find((m) => m.direction === "in")?.waId;
+  if (lastInboundWaId) after(() => markWhatsAppRead(lastInboundWaId));
   return NextResponse.json({ ok: true, conversation, messages });
 }
 
@@ -65,12 +70,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!text) return NextResponse.json({ error: "EMPTY_REPLY" }, { status: 400 });
     // a manual reply only works within WhatsApp's 24h customer-service window (free-form text) —
     // same constraint every send in this project already has; surfaced here rather than silently failing.
+    const rowId = newToken("WAM", 8);
+    let waId: string | undefined;
     try {
-      await sendWhatsApp(conversation.waId ?? conversation.mobile, text);
+      waId = (await sendWhatsApp(conversation.waId ?? conversation.mobile, text)).waId;
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "SEND_FAILED" }, { status: 502 });
     }
-    await addMessage(sb, { conversationId: id, direction: "out", text, from: `admin:${who}`, at: now });
+    await addMessage(sb, { conversationId: id, direction: "out", text, from: `admin:${who}`, waId, at: now }, rowId);
+    if (waId) await registerSentMessageMapping(sb, waId, rowId);
     conversation.unread = false;
     conversation.lastOutboundAt = now;
     conversation.updatedAt = now;
@@ -79,6 +87,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "BAD_ACTION" }, { status: 400 });
   }
 
-  const messages = await listMessages(sb, id);
+  const messages = await resolveMediaUrls(sb, await listMessages(sb, id));
   return NextResponse.json({ ok: true, conversation, messages });
 }

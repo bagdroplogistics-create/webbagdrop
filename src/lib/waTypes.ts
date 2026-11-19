@@ -54,10 +54,32 @@ export interface WaMessage {
   conversationId: string;       // = WaConversation.mobile
   direction: WaMessageDirection;
   text: string;
-  /** set when this was a bot-authored reply vs. a human admin's manual reply vs. the raw customer text. */
-  from: "customer" | "bot" | `admin:${string}`;
+  /** set when this was a bot-authored reply vs. a human admin's manual reply
+   *  vs. the raw customer text vs. "team" — a message your own staff sent
+   *  from the regular WhatsApp app/Web on this number (Meta's Coexistence
+   *  "smb_message_echoes" signal) rather than from this dashboard. */
+  from: "customer" | "bot" | "team" | `admin:${string}`;
   template?: string;             // the automation.ts TEMPLATES key, if this went out through notify()/the outbox
   waId?: string;                 // Meta's wamid, when known
+  /** sent/delivered/read/failed for an OUTBOUND message, filled in later by
+   *  the delivery-status webhook (never set for "customer"/"team" rows). */
+  waStatus?: "sent" | "delivered" | "read" | "failed";
+  /** set on an inbound photo/document/video/voice note — the Supabase
+   *  Storage PATH (never a public/signed URL — see fetchWhatsAppMedia in
+   *  automation.ts) in the private "wa-media" bucket, if the download
+   *  succeeded; absent if it failed or was never attempted (the text
+   *  placeholder — "[Photo]" etc — still carries the event either way). */
+  mediaPath?: string;
+  /** NEVER stored — set only on the object the admin API returns, a
+   *  short-lived signed URL resolved from mediaPath at request time (same
+   *  120s-TTL-per-request convention as identity/payment-proof documents
+   *  elsewhere in this app), so the UI can show an actual image. */
+  mediaUrl?: string;
+  mediaContentType?: string;
+  /** the quick-reply buttons THIS message itself offered, when it was sent
+   *  via sendWhatsAppButtons rather than plain text (e.g. an FAQ answer's
+   *  "Talk to a human" button) — shown under the bubble in the UI. */
+  buttons?: { id: string; title: string }[];
   at: string;
 }
 

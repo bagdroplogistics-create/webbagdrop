@@ -49,17 +49,23 @@ export async function listConversations(sb: SB, opts: ListConversationsOpts = {}
 }
 
 /** Idempotent insert — Meta retries webhook delivery, so a message keyed by
- *  its own wamid (inbound) or a generated token (outbound/manual) can never
- *  be double-logged. Mirrors automation.ts's insertRows() pattern exactly,
- *  INCLUDING the count check: the caller (waBot.ts) uses the return value
- *  to tell "first time we've seen this wamid" (true) from "Meta retried the
- *  same webhook delivery" (false) — the latter must skip ALL side effects
- *  (auto-replies, lead creation), not just the message row, or a retried
- *  webhook would double-process a customer's message. */
-export async function addMessage(sb: SB, msg: WaMessage, id?: string): Promise<boolean> {
-  const rowId = id ?? newToken("WAM", 8);
+ *  its own wamid can never be double-logged, and the caller (waBot.ts)
+ *  uses the return value to tell "first time we've seen this wamid" (true)
+ *  from "Meta retried the same webhook delivery" (false) — the latter must
+ *  skip ALL side effects (auto-replies, lead creation), not just the
+ *  message row, or a retried webhook would double-process a customer's
+ *  message. Mirrors automation.ts's insertRows() pattern, including the
+ *  count check.
+ *
+ *  `id` is always the caller's choice (never auto-generated here): inbound
+ *  rows use the inbound wamid itself; outbound rows use a fresh newToken()
+ *  the caller generates BEFORE sending, specifically so it can register
+ *  that same id against Meta's returned wamid afterward
+ *  (registerSentMessageMapping) and attribute a later delivery-status
+ *  callback or media download back to this exact row. */
+export async function addMessage(sb: SB, msg: WaMessage, id: string): Promise<boolean> {
   const { error, count } = await sb.from("wa_messages").upsert(
-    { id: rowId, doc: msg, status: msg.direction, created: msg.at },
+    { id, doc: msg, status: msg.direction, created: msg.at },
     { onConflict: "id", ignoreDuplicates: true, count: "exact" },
   );
   if (error) throw new Error(error.message);
@@ -69,6 +75,52 @@ export async function addMessage(sb: SB, msg: WaMessage, id?: string): Promise<b
 export async function listMessages(sb: SB, conversationId: string, limit = 200): Promise<WaMessage[]> {
   const { data } = await sb.from("wa_messages").select("doc").eq("doc->>conversationId", conversationId).order("created", { ascending: true }).limit(limit);
   return (data ?? []).map((r) => r.doc as WaMessage);
+}
+
+/** Turns each message's stored mediaPath into a short-lived signed URL for
+ *  the API response — never persisted, resolved fresh on every request
+ *  (same pattern as the identity/payment-proof document routes). Messages
+ *  with no mediaPath pass through unchanged. */
+export async function resolveMediaUrls(sb: SB, messages: WaMessage[]): Promise<WaMessage[]> {
+  return Promise.all(messages.map(async (m) => {
+    if (!m.mediaPath) return m;
+    const { data } = await sb.storage.from("wa-media").createSignedUrl(m.mediaPath, 300);
+    return data?.signedUrl ? { ...m, mediaUrl: data.signedUrl } : m;
+  }));
+}
+
+/** Attach a downloaded attachment's Storage path to an already-logged
+ *  inbound message row (the row is created with just the "[Photo]"-style
+ *  placeholder text first, since the download itself is best-effort and
+ *  shouldn't delay logging the event — see handleInboundMessage). */
+export async function attachMessageMedia(sb: SB, id: string, mediaPath: string, mediaContentType: string): Promise<void> {
+  const { data } = await sb.from("wa_messages").select("doc").eq("id", id).maybeSingle();
+  if (!data) return;
+  const doc = { ...(data.doc as WaMessage), mediaPath, mediaContentType };
+  await sb.from("wa_messages").update({ doc }).eq("id", id);
+}
+
+/** Maps Meta's wamid (only known once a send is accepted) back to the
+ *  wa_messages row id the caller already chose — same "settings" keyed-row
+ *  pattern automation.ts's drainPass uses for its own outbox rows (prefix
+ *  "wam:" instead of "wa:" so the two can never collide), consumed by the
+ *  delivery-status webhook to put a sent/delivered/read tick on the right
+ *  conversational message. */
+export async function registerSentMessageMapping(sb: SB, wamid: string, messageId: string): Promise<void> {
+  await sb.from("settings").upsert({ id: `wam:${wamid}`, doc: { messageId }, status: null, created: new Date().toISOString() });
+}
+
+/** Called from the delivery-status webhook loop. Returns true if a row was
+ *  actually found/updated, so the caller can fall back to checking the
+ *  outbox mapping too (a status event might belong to either). */
+export async function updateMessageStatusByWamid(sb: SB, wamid: string, waStatus: WaMessage["waStatus"]): Promise<boolean> {
+  const { data: map } = await sb.from("settings").select("doc").eq("id", `wam:${wamid}`).maybeSingle();
+  const messageId = (map?.doc as { messageId?: string } | null)?.messageId;
+  if (!messageId) return false;
+  const { data: row } = await sb.from("wa_messages").select("doc").eq("id", messageId).maybeSingle();
+  if (!row) return false;
+  await sb.from("wa_messages").update({ doc: { ...(row.doc as WaMessage), waStatus } }).eq("id", messageId);
+  return true;
 }
 
 /** Idempotent append to the Automation History log (section C). `key`, when

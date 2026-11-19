@@ -458,6 +458,71 @@ export async function sendWhatsApp(mobile: string, text: string): Promise<{ stub
   return { stub: false, waId: await waMessageId(r) };
 }
 
+/** Same free-text 24h-window send as sendWhatsApp, but with up to 3 quick-
+ *  reply buttons (WhatsApp's own "interactive" message type) instead of a
+ *  plain bubble — e.g. the WhatsApp Chatbot & Automation module's FAQ
+ *  answers offering a one-tap "Talk to a human". Button titles are
+ *  truncated to WhatsApp's own 20-character limit rather than rejected —
+ *  a cut-off label beats a failed send. No-ops to the same wa.me stub as
+ *  sendWhatsApp when no provider is configured (a plain-text fallback,
+ *  since a wa.me link can't carry buttons). */
+export async function sendWhatsAppButtons(mobile: string, text: string, buttons: { id: string; title: string }[]): Promise<{ stub: boolean; link?: string; waId?: string }> {
+  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  if (!token || !phoneId) return sendWhatsApp(mobile, text);
+  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp", to: msisdn, type: "interactive",
+      interactive: {
+        type: "button", body: { text },
+        action: { buttons: buttons.slice(0, 3).map((b) => ({ type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) } })) },
+      },
+    }),
+  });
+  if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
+  return { stub: false, waId: await waMessageId(r) };
+}
+
+/** Tells Meta the customer's message was read (blue ticks on their side) —
+ *  called when an admin opens a conversation in Live Conversations. Never
+ *  throws: a failed read receipt is cosmetic, not worth surfacing as an
+ *  error to the admin screen. No-ops without provider keys (nothing to
+ *  mark as read on a stub send). */
+export async function markWhatsAppRead(wamid: string): Promise<void> {
+  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
+  if (!token || !phoneId) return;
+  try {
+    await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: wamid }),
+    });
+  } catch { /* cosmetic — see comment above */ }
+}
+
+/** Downloads one inbound media attachment (a customer's photo/document/
+ *  voice note) from Meta's Media API, for the admin module to show a real
+ *  thumbnail/preview instead of just a "[Photo]" placeholder. Meta's media
+ *  URLs require the SAME bearer token and expire in minutes, so this both
+ *  resolves the URL and fetches the bytes in one call — callers store the
+ *  result themselves (Supabase Storage, same private-bucket convention as
+ *  identity-docs/claim photos elsewhere in this app), never Meta's own
+ *  URL. Returns null on any failure (missing keys, expired id, network) —
+ *  best-effort, the placeholder text still carries the event either way. */
+export async function fetchWhatsAppMedia(mediaId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const token = process.env.META_WHATSAPP_TOKEN;
+  if (!token) return null;
+  try {
+    const meta = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!meta.ok) return null;
+    const { url, mime_type } = (await meta.json()) as { url?: string; mime_type?: string };
+    if (!url) return null;
+    const file = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!file.ok) return null;
+    return { bytes: Buffer.from(await file.arrayBuffer()), contentType: mime_type || "application/octet-stream" };
+  } catch { return null; }
+}
+
 /** Fast2SMS's Meta-format WhatsApp API for an approved, non-OTP template —
  *  used only for entries in FAST2SMS_TEMPLATE_MAP above. Same endpoint/auth
  *  as sendWhatsAppOtpFast2SMS below, generalised to any template name +
