@@ -92,7 +92,7 @@ function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () =
   return (
     <Drawer open onClose={onClose} title={conv ? `${conv.name ?? "Unknown"} · ${conv.mobile}` : mobile} wide>
       {!data ? <div className="text-sm text-muted">Loading…</div> : (
-        <div className="flex h-[78vh] min-h-[480px] flex-col gap-3">
+        <div className="grid gap-3">
           <div className="flex flex-wrap items-center gap-3 border-b border-line pb-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand/10 font-display text-base font-bold text-brand">{initial}</div>
             <div className="min-w-0 flex-1">
@@ -112,7 +112,10 @@ function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () =
             )}
           </div>
           {err && <div className="text-sm text-red-600">{err}</div>}
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-line bg-paper p-4">
+          {/* Capped (not a fixed total-card height): a short thread stays compact with
+              no scrolling needed anywhere, a long one scrolls ONLY inside this box —
+              the reply bar right after it in normal flow is always right there. */}
+          <div className="max-h-[50vh] min-h-[220px] overflow-y-auto rounded-xl border border-line bg-paper p-4">
             {data.messages.map((m, i) => (
               <div key={i} className={`mb-3 flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-[15px] shadow-sm ${m.direction === "out" ? "bg-brand text-white" : "bg-white border border-line text-ink"}`}>
