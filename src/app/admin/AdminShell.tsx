@@ -156,7 +156,6 @@ const GROUPS: NavGroup[] = [
       { key: "evt", short: "Bulk", name: "Bulk & manifest tools", badge: "live", badgeTone: "live" },
       { key: "drv", short: "Drivers", name: "Drivers", badge: "live", badgeTone: "live" },
       { key: "flt", short: "Flights", name: "Flights", badge: "live", badgeTone: "live" },
-      { key: "apt", short: "Airport", name: "Airport desk · T2 POC", badge: "POC" },
       { key: "cap", short: "Roster", name: "Capacity & roster", badge: "live", badgeTone: "live" },
     ],
   },
