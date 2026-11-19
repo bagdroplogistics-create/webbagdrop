@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { serviceClient } from "@/lib/supabaseAdmin";
 import type { OutboxDoc } from "@/lib/automation";
 import { handleInboundMessage } from "@/lib/waBot";
@@ -22,6 +22,13 @@ import { logEvent } from "@/lib/waStore";
  *     here: FAQ auto-replies, collecting travel/baggage details, lead
  *     dedup + draft-quote creation, follow-up scheduling and human
  *     handover. This route itself stays a thin, best-effort dispatcher.
+ *  3. Forwarding every status payload on to bagdrop-web's own
+ *     /api/whatsapp/webhook (see forwardStatusToBagdropWeb below) — this
+ *     webhook replaced that one as Meta's single registered callback, so
+ *     without this, bagdrop-web's own delivery-status lookup
+ *     (app/api/admin/bookings/[id]/send-whatsapp's GET) would go stale.
+ *     Zero code changes on bagdrop-web's side; it just keeps receiving the
+ *     exact same payloads it always did, one hop later.
  *
  *  Register this URL (https://<domain>/api/hooks/whatsapp) in Meta's App
  *  dashboard → WhatsApp → Configuration → Webhook, subscribed to the
@@ -59,6 +66,32 @@ function signatureValid(rawBody: string, header: string | null): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** 2026-11-19: now that Meta's one webhook subscription points here instead
+ *  of bagdrop-web's own /api/whatsapp/webhook, bagdrop-web's delivery-status
+ *  lookup (app/api/admin/bookings/[id]/send-whatsapp's GET — "did this
+ *  actually deliver") would otherwise go stale, since it reads a table only
+ *  THAT webhook used to fill. Forward every raw status-bearing payload over
+ *  so bagdrop-web's own route (unchanged, zero code touched there) keeps
+ *  populating it exactly as before. Fire-and-forget via after(), same
+ *  convention as automation.ts's kickSweep() — this can never fail the
+ *  response Meta is waiting on, and a missing/misconfigured PROD_SITE_URL
+ *  (or bagdrop-web rejecting it, e.g. its own WHATSAPP_APP_SECRET check) is
+ *  silently swallowed, not retried — Meta's own retry-on-non-200 already
+ *  covers this URL; retrying a side forward too would just double it. */
+function forwardStatusToBagdropWeb(raw: string, header: string | null): void {
+  const site = process.env.PROD_SITE_URL;
+  if (!site) return;
+  after(async () => {
+    try {
+      await fetch(`${site.replace(/\/$/, "")}/api/whatsapp/webhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(header ? { "x-hub-signature-256": header } : {}) },
+        body: raw,
+      });
+    } catch { /* best-effort — see comment above */ }
+  });
+}
+
 export async function POST(req: Request) {
   /* Meta always expects 200 quickly, or it retries the same event for hours —
    * acknowledge first, work is small and best-effort either way. */
@@ -68,6 +101,7 @@ export async function POST(req: Request) {
   }
   let body: Body;
   try { body = JSON.parse(raw); } catch { return NextResponse.json({ ok: true }); }
+  forwardStatusToBagdropWeb(raw, req.headers.get("x-hub-signature-256"));
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ ok: true });
 
