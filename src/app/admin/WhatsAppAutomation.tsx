@@ -88,30 +88,47 @@ function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () =
   const act = async (fn: () => Promise<unknown>) => { setBusy(true); setErr(null); try { await fn(); await load(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
 
   const conv = data?.conversation;
+  const initial = (conv?.name ?? mobile).trim().charAt(0).toUpperCase() || "#";
   return (
-    <Drawer open onClose={onClose} title={conv ? `${conv.name ?? conv.mobile} · ${conv.mobile}` : mobile} wide>
+    <Drawer open onClose={onClose} title={conv ? `${conv.name ?? "Unknown"} · ${conv.mobile}` : mobile} wide>
       {!data ? <div className="text-sm text-muted">Loading…</div> : (
-        <div className="grid gap-4">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex h-[78vh] min-h-[480px] flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3 border-b border-line pb-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand/10 font-display text-base font-bold text-brand">{initial}</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-display text-sm font-bold">{conv!.name ?? "Unknown customer"}</div>
+              <div className="text-xs text-muted">{conv!.mobile}</div>
+            </div>
+            <Badge tone={STATE_TONE[conv!.optedOut ? "opted_out" : conv!.state]}>{STATE_LABEL[conv!.optedOut ? "opted_out" : conv!.state]}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             {conv!.state !== "human" && <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => takeOverConversation(mobile))}>Take over</Button>}
             {conv!.state === "human" && <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => returnConversationToBot(mobile))}>Return to bot</Button>}
             {conv!.state !== "resolved" && <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => resolveConversation(mobile))}>Mark resolved</Button>}
-            {(conv!.leadId || conv!.bookingId) && <span className="self-center text-xs text-muted">Lead {conv!.leadId ?? "—"} · Booking {conv!.bookingId ?? "—"}</span>}
+            {(conv!.leadId || conv!.bookingId) && (
+              <span className="self-center rounded-full bg-paper px-2.5 py-1 text-xs text-muted">
+                Lead {conv!.leadId ?? "—"} · Booking {conv!.bookingId ?? "—"}
+              </span>
+            )}
           </div>
           {err && <div className="text-sm text-red-600">{err}</div>}
-          <div className="max-h-96 overflow-y-auto rounded-xl border border-line bg-paper p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-line bg-paper p-4">
             {data.messages.map((m, i) => (
-              <div key={i} className={`mb-2 flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.direction === "out" ? "bg-brand text-white" : "bg-white border border-line"}`}>
-                  <div className="whitespace-pre-wrap">{m.text}</div>
-                  <div className="mt-1 text-[10px] opacity-70">{m.from} · {istTime(m.at)}</div>
+              <div key={i} className={`mb-3 flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-[15px] shadow-sm ${m.direction === "out" ? "bg-brand text-white" : "bg-white border border-line text-ink"}`}>
+                  <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
+                  <div className={`mt-1.5 text-[11px] ${m.direction === "out" ? "text-white/70" : "text-faint"}`}>{m.from} · {istTime(m.at)}</div>
                 </div>
               </div>
             ))}
-            {!data.messages.length && <div className="py-4 text-center text-sm text-muted">No messages yet.</div>}
+            {!data.messages.length && <div className="py-10 text-center text-sm text-muted">No messages yet.</div>}
           </div>
-          <div className="flex gap-2">
-            <Input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply manually (only reaches the customer within 24h of their last message)" />
+          <div className="flex shrink-0 gap-2 border-t border-line pt-3">
+            <Input
+              value={reply} onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && reply.trim() && !busy) { e.preventDefault(); act(async () => { await replyToConversation(mobile, reply); setReply(""); }); } }}
+              placeholder="Reply manually (only reaches the customer within 24h of their last message)"
+            />
             <Button disabled={busy || !reply.trim()} onClick={() => act(async () => { await replyToConversation(mobile, reply); setReply(""); })}>Send</Button>
           </div>
         </div>
