@@ -358,6 +358,15 @@ function Shell({
           {children}
         </main>
       </div>
+      {/* Drawer (src/components/ui.tsx) portals here — a direct child of
+       * .admin-os, never inside a tab's own .anim-in wrapper. .anim-in's
+       * tab-switch animation leaves a resolved (if identity) transform
+       * behind once it finishes in some browsers, which creates a new
+       * containing block for any position:fixed descendant — trapping a
+       * Drawer rendered inside a module's own JSX inside that tab's small,
+       * content-sized box instead of covering the screen. This div is a
+       * sibling of every tab's content, so it's never affected. */}
+      <div id="bd-drawer-portal" />
     </div>
   );
 }

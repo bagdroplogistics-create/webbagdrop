@@ -2,6 +2,7 @@
 /** shadcn-style primitives, hand-rolled and dependency-free. When the team
  *  adopts the shadcn CLI these swap out one-for-one (same names and props). */
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -112,7 +113,25 @@ export function Tile({
 /* ================= admin-only layout primitives (styles in globals.css, .admin-os scope) ================= */
 
 /** A record's detail in a panel that slides in from the right, so the list
- *  behind it keeps the whole screen. Esc or the backdrop closes it. */
+ *  behind it keeps the whole screen. Esc or the backdrop closes it.
+ *
+ *  Portaled (2026-11-19): `.a-drawer`'s `position: fixed` only actually
+ *  pins to the viewport when NOTHING between it and the page root has a
+ *  transform/filter/perspective/will-change/contain — any of those creates
+ *  a new containing block, so "top:0;bottom:0" resolves against that
+ *  ancestor's (often content-sized, not viewport-sized) box instead. This
+ *  project's own `.anim-in` tab-switch animation leaves a resolved
+ *  `transform: matrix(1,0,0,1,0,0)` after it finishes in some browsers —
+ *  mathematically a no-op, but still "a transform" — so a Drawer rendered
+ *  inside an `.anim-in` wrapper (as WhatsAppAutomation.tsx's and Inbox.tsx's
+ *  both are) could get trapped inside that content-sized box instead of
+ *  covering the screen. Portaling sidesteps that, but ONLY into
+ *  #bd-drawer-portal (AdminShell.tsx — a direct child of .admin-os, never
+ *  inside a tab's own wrapper): the CSS here is scoped ".admin-os .a-drawer
+ *  {...}", so portaling straight to document.body would drop out of that
+ *  scope and lose the styling entirely. Falls back to document.body (self-
+ *  wrapped in .admin-os) only if that target isn't mounted for some reason,
+ *  so this never silently renders nothing. */
 export function Drawer({ open, onClose, title, children, wide = false }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     if (!open) return;
@@ -120,8 +139,9 @@ export function Drawer({ open, onClose, title, children, wide = false }: { open:
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
-  if (!open) return null;
-  return (
+  if (!open || typeof document === "undefined") return null;
+  const target = document.getElementById("bd-drawer-portal");
+  const content = (
     <>
       <div className="a-drawer-backdrop" onClick={onClose} aria-hidden />
       <aside className="a-drawer" style={wide ? { width: "min(880px, 100vw)" } : undefined} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Detail"}>
@@ -133,6 +153,11 @@ export function Drawer({ open, onClose, title, children, wide = false }: { open:
       </aside>
     </>
   );
+  if (target) return createPortal(content, target);
+  // fallback: #bd-drawer-portal wasn't found (Drawer used outside AdminShell) —
+  // self-wrap in .admin-os so the drawer's own CSS still applies, rather than
+  // silently rendering unstyled or not at all.
+  return createPortal(<div className="admin-os">{content}</div>, document.body);
 }
 
 /** Scrolling table frame: sticky header, hairlines, full width. */
