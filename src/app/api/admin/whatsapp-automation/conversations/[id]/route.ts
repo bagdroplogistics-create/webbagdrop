@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { isAdminRequest, actorName } from "@/lib/adminAuth";
 import { serviceClient, newToken } from "@/lib/supabaseAdmin";
-import { sendWhatsApp, markWhatsAppRead } from "@/lib/automation";
+import { sendWhatsApp, sendWhatsAppFile, markWhatsAppRead } from "@/lib/automation";
 import { addMessage, getConversation, listMessages, logEvent, normalizeMobile, registerSentMessageMapping, resolveMediaUrls, saveConversation } from "@/lib/waStore";
 
 /** Live Conversations (section A) detail view — one conversation's full
@@ -29,7 +29,7 @@ type Action =
   | { action: "take_over" }
   | { action: "return_to_bot" }
   | { action: "resolve" }
-  | { action: "reply"; text: string };
+  | { action: "reply"; text: string; attachment?: { path: string; filename: string; contentType: string } };
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -67,17 +67,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await logEvent(sb, { type: "resolved", conversationId: id, leadId: conversation.leadId, bookingId: conversation.bookingId, detail: `${who} marked this conversation resolved.`, at: now });
   } else if (body.action === "reply") {
     const text = (body.text ?? "").trim();
-    if (!text) return NextResponse.json({ error: "EMPTY_REPLY" }, { status: 400 });
-    // a manual reply only works within WhatsApp's 24h customer-service window (free-form text) —
+    const attachment = body.attachment;
+    if (!text && !attachment) return NextResponse.json({ error: "EMPTY_REPLY" }, { status: 400 });
+    // a manual reply only works within WhatsApp's 24h customer-service window (free-form text/file) —
     // same constraint every send in this project already has; surfaced here rather than silently failing.
     const rowId = newToken("WAM", 8);
     let waId: string | undefined;
+    const to = conversation.waId ?? conversation.mobile;
     try {
-      waId = (await sendWhatsApp(conversation.waId ?? conversation.mobile, text)).waId;
+      if (attachment) {
+        const { data } = await sb.storage.from("wa-media").createSignedUrl(attachment.path, 300);
+        if (!data?.signedUrl) return NextResponse.json({ error: "ATTACHMENT_URL_FAILED" }, { status: 500 });
+        const kind = attachment.contentType.startsWith("image/") ? "image" : "document";
+        waId = (await sendWhatsAppFile(to, data.signedUrl, attachment.filename, kind, text || undefined)).waId;
+      } else {
+        waId = (await sendWhatsApp(to, text)).waId;
+      }
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "SEND_FAILED" }, { status: 502 });
     }
-    await addMessage(sb, { conversationId: id, direction: "out", text, from: `admin:${who}`, waId, at: now }, rowId);
+    const messageText = text || (attachment ? `[${attachment.contentType.startsWith("image/") ? "Photo" : `Document: ${attachment.filename}`}]` : "");
+    await addMessage(sb, {
+      conversationId: id, direction: "out", text: messageText, from: `admin:${who}`, waId, at: now,
+      ...(attachment ? { mediaPath: attachment.path, mediaContentType: attachment.contentType } : {}),
+    }, rowId);
     if (waId) await registerSentMessageMapping(sb, waId, rowId);
     conversation.unread = false;
     conversation.lastOutboundAt = now;

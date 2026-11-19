@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Field, Input, Select, Drawer, TableFrame } from "@/components/ui";
 import {
   fetchConversation, fetchHistory, loadWaSettings, replyToConversation, resolveConversation, returnConversationToBot,
-  saveWaSettings, takeOverConversation, watchConversations,
+  saveWaSettings, takeOverConversation, uploadAttachment, watchConversations, type StagedAttachment,
 } from "@/lib/waAdminApi";
 import type { WaConfig, WaConversation, WaEvent, WaFaqEntry, WaMessage } from "@/lib/waTypes";
 
@@ -89,6 +89,8 @@ function LiveConversations() {
 function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () => void }) {
   const [data, setData] = useState<{ conversation: WaConversation; messages: WaMessage[] } | null>(null);
   const [reply, setReply] = useState("");
+  const [attachment, setAttachment] = useState<StagedAttachment | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -154,13 +156,36 @@ function ConversationDrawer({ mobile, onClose }: { mobile: string; onClose: () =
             })}
             {!data.messages.length && <div className="py-10 text-center text-sm text-muted">No messages yet.</div>}
           </div>
-          <div className="flex shrink-0 gap-2 border-t border-line pt-3">
-            <Input
-              value={reply} onChange={(e) => setReply(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && reply.trim() && !busy) { e.preventDefault(); act(async () => { await replyToConversation(mobile, reply); setReply(""); }); } }}
-              placeholder="Reply manually (only reaches the customer within 24h of their last message)"
-            />
-            <Button disabled={busy || !reply.trim()} onClick={() => act(async () => { await replyToConversation(mobile, reply); setReply(""); })}>Send</Button>
+          <div className="shrink-0 border-t border-line pt-3">
+            {attachment && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 text-xs">
+                <span className="truncate">{attachment.filename}</span>
+                <button type="button" onClick={() => setAttachment(null)} className="cursor-pointer text-muted hover:text-ink" aria-label="Remove attachment">✕</button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <label className={`flex cursor-pointer items-center rounded-xl border border-line px-3 text-xs font-semibold text-muted hover:text-ink ${uploading ? "pointer-events-none opacity-50" : ""}`}>
+                {uploading ? "Uploading…" : "Attach"}
+                <input
+                  type="file" className="hidden" disabled={uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    setUploading(true); setErr(null);
+                    try { setAttachment(await uploadAttachment(mobile, file)); }
+                    catch (err2) { setErr(err2 instanceof Error ? err2.message : String(err2)); }
+                    finally { setUploading(false); }
+                  }}
+                />
+              </label>
+              <Input
+                value={reply} onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && (reply.trim() || attachment) && !busy) { e.preventDefault(); act(async () => { await replyToConversation(mobile, reply, attachment ?? undefined); setReply(""); setAttachment(null); }); } }}
+                placeholder={attachment ? "Optional caption…" : "Reply manually (only reaches the customer within 24h of their last message)"}
+              />
+              <Button disabled={busy || uploading || (!reply.trim() && !attachment)} onClick={() => act(async () => { await replyToConversation(mobile, reply, attachment ?? undefined); setReply(""); setAttachment(null); })}>Send</Button>
+            </div>
           </div>
         </div>
       )}

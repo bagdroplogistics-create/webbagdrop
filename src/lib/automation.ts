@@ -484,6 +484,32 @@ export async function sendWhatsAppButtons(mobile: string, text: string, buttons:
   return { stub: false, waId: await waMessageId(r) };
 }
 
+/** Sends a file (a quotation PDF for an international client, a photo,
+ *  anything) by reference: `link` must be a URL Meta's own servers can
+ *  fetch RIGHT NOW over plain HTTPS — a short-lived Supabase Storage
+ *  signed URL works fine, since Meta fetches it within seconds of this
+ *  call, not later. `kind` picks the right WhatsApp message type
+ *  ("document" for a PDF/quotation, "image" for a photo); `caption` is
+ *  optional free text shown with it (WhatsApp ignores a caption on some
+ *  file types, e.g. plain documents without a viewer preview — harmless
+ *  either way). Same 24h-window rule as every other free-form send here;
+ *  stubs to a plain wa.me text link (can't carry a file) without provider
+ *  keys, same graceful-degradation convention as sendWhatsApp. */
+export async function sendWhatsAppFile(mobile: string, link: string, filename: string, kind: "document" | "image", caption?: string): Promise<{ stub: boolean; link?: string; waId?: string }> {
+  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_ID;
+  const msisdn = mobile.replace(/\D/g, "").replace(/^(?!91)/, "91");
+  if (!token || !phoneId) return sendWhatsApp(mobile, `${caption ? `${caption}\n` : ""}${filename}: ${link}`);
+  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp", to: msisdn, type: kind,
+      [kind]: kind === "document" ? { link, filename, caption } : { link, caption },
+    }),
+  });
+  if (!r.ok) throw new Error(`WA_${r.status}:${(await r.text()).slice(0, 200)}`);
+  return { stub: false, waId: await waMessageId(r) };
+}
+
 /** Tells Meta the customer's message was read (blue ticks on their side) —
  *  called when an admin opens a conversation in Live Conversations. Never
  *  throws: a failed read receipt is cosmetic, not worth surfacing as an

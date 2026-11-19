@@ -43,7 +43,18 @@ async function patchConversation(mobile: string, body: unknown): Promise<{ conve
 export const takeOverConversation = (mobile: string) => patchConversation(mobile, { action: "take_over" });
 export const returnConversationToBot = (mobile: string) => patchConversation(mobile, { action: "return_to_bot" });
 export const resolveConversation = (mobile: string) => patchConversation(mobile, { action: "resolve" });
-export const replyToConversation = (mobile: string, text: string) => patchConversation(mobile, { action: "reply", text });
+export interface StagedAttachment { path: string; filename: string; contentType: string }
+export const replyToConversation = (mobile: string, text: string, attachment?: StagedAttachment) => patchConversation(mobile, { action: "reply", text, attachment });
+
+/** Uploads a file (a quotation PDF, a photo) to this conversation's own
+ *  staging area — nothing is sent to the customer yet. Returns what
+ *  replyToConversation's `attachment` needs to actually send it. */
+export async function uploadAttachment(mobile: string, file: File): Promise<StagedAttachment> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`/api/admin/whatsapp-automation/conversations/${mobile}/upload`, { method: "POST", body: form });
+  return j(r);
+}
 
 export async function loadWaSettings(): Promise<WaConfig> {
   const r = await fetch("/api/admin/whatsapp-automation/settings");
