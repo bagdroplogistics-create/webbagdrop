@@ -42,9 +42,14 @@ export interface InboundInput {
   mobile: string;        // raw, any format Meta sends (wa_id digits, country code included)
   waId?: string;
   profileName?: string;
-  text: string;
+  text: string;          // for mediaType messages, a human-readable placeholder (e.g. "[Photo]") built by the webhook route, not Meta's own payload
   wamid: string;
   timestamp?: string;    // Meta's unix seconds string, if present
+  /** set when this message is a photo/document/voice note/location/etc
+   *  instead of text — e.g. "photo", "document", "voice message",
+   *  "location". The bot can't read any of these, so it hands over to a
+   *  human immediately rather than guessing (see handleInboundMessage). */
+  mediaType?: string;
 }
 
 /* ================= dedup — mirrors leads/route.ts's open-lead-by-mobile rule ================= */
@@ -224,6 +229,13 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
   }
 
   if (!cfg.chatbotEnabled) { await saveConversation(sb, conv); return; }
+
+  /* a photo/document/voice note/location — the bot can't read any of these
+   * (a payment-screenshot amount, a packed-bag photo, a voice note) and
+   * guessing would be worse than asking a human to look. Routing, not an
+   * auto-reply, so this runs even if autoRepliesEnabled is off — same as
+   * the keyword/dissatisfaction handover just below. */
+  if (input.mediaType) { await handover(sb, conv, cfg, `customer sent a ${input.mediaType} — the bot can't read attachments, this needs a human to look at it in WhatsApp directly`, input.mobile); return; }
 
   /* explicit "talk to a human" / dissatisfaction keywords — routing, not an
    * auto-reply, so this runs even if autoRepliesEnabled is off. */

@@ -53,9 +53,29 @@ export async function GET(req: Request) {
 }
 
 type StatusEvent = { id?: string; status?: string; errors?: { title?: string; message?: string }[] };
-type IncomingMessage = { id?: string; from?: string; timestamp?: string; type?: string; text?: { body?: string } };
+type MediaPayload = { caption?: string; filename?: string };
+type IncomingMessage = {
+  id?: string; from?: string; timestamp?: string; type?: string; text?: { body?: string };
+  image?: MediaPayload; document?: MediaPayload; video?: MediaPayload; audio?: MediaPayload; sticker?: MediaPayload;
+  location?: { name?: string; address?: string };
+};
 type Contact = { wa_id?: string; profile?: { name?: string } };
 type Body = { entry?: { changes?: { value?: { statuses?: StatusEvent[]; messages?: IncomingMessage[]; contacts?: Contact[] } }[] }[] };
+
+/** Meta's message `type` field → a short label for the handover reason +
+ *  a placeholder preview string for the conversation thread/history (the
+ *  bot never tries to read the actual attachment — see waBot.ts). */
+function describeMedia(m: IncomingMessage): { label: string; text: string } | null {
+  switch (m.type) {
+    case "image": return { label: "photo", text: `[Photo]${m.image?.caption ? ` ${m.image.caption}` : ""}` };
+    case "document": return { label: "document", text: `[Document${m.document?.filename ? `: ${m.document.filename}` : ""}]${m.document?.caption ? ` ${m.document.caption}` : ""}` };
+    case "video": return { label: "video", text: `[Video]${m.video?.caption ? ` ${m.video.caption}` : ""}` };
+    case "audio": return { label: "voice message", text: "[Voice message]" };
+    case "sticker": return { label: "sticker", text: "[Sticker]" };
+    case "location": return { label: "location", text: `[Location shared]${m.location?.name ? ` ${m.location.name}` : ""}` };
+    default: return null; // contacts, unsupported/unknown types — genuinely out of scope today, same as before
+  }
+}
 
 function signatureValid(rawBody: string, header: string | null): boolean {
   const secret = process.env.META_WHATSAPP_APP_SECRET;
@@ -123,10 +143,13 @@ export async function POST(req: Request) {
 
     const contactByWaId = new Map((value.contacts ?? []).map((c) => [c.wa_id, c.profile?.name] as const));
     for (const m of value.messages ?? []) {
-      if (!m.id || !m.from || m.type !== "text" || !m.text?.body) continue; // non-text (image/voice/location/…) — out of scope for the bot today, logged below
+      if (!m.id || !m.from) continue;
+      const media = m.type !== "text" ? describeMedia(m) : null;
+      const text = m.type === "text" ? m.text?.body : media?.text;
+      if (!text) continue; // an unsupported/unknown type (contacts, system messages, …) or a malformed text payload — genuinely nothing to show
       try {
         await handleInboundMessage(sb, {
-          mobile: m.from, waId: m.from, profileName: contactByWaId.get(m.from), text: m.text.body, wamid: m.id, timestamp: m.timestamp,
+          mobile: m.from, waId: m.from, profileName: contactByWaId.get(m.from), text, wamid: m.id, timestamp: m.timestamp, mediaType: media?.label,
         });
       } catch (e) {
         await logEvent(sb, { type: "error", conversationId: m.from.replace(/\D/g, "").slice(-10), detail: "handleInboundMessage threw — see error field.", error: e instanceof Error ? e.message : String(e), at: new Date().toISOString() }, `waerr:${m.id}`);
