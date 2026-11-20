@@ -142,6 +142,8 @@ export function extractFields(text: string, cityNames: string[]): { fromName?: s
   return out;
 }
 
+const GUIDED_PROMPTS = false;
+
 function promptFor(step: NonNullable<WaConversation["botContext"]>["step"]): string {
   switch (step) {
     case "await_from": return "Which city should we pick your bags up from?";
@@ -171,7 +173,20 @@ async function send(sb: SB, mobile: string, mobile10: string, text: string, butt
   }
 }
 
-async function handover(sb: SB, conv: WaConversation, cfg: WaConfig, reason: string, customerMobile: string): Promise<void> {
+/** The automatic acknowledgement (welcome / thank-you) goes out ONCE per customer thread.
+ *  Customers who send several messages in a row ("hi", "how are you", "2 bags") must not get
+ *  the same canned reply again and again — after the first one, the team replies by hand. */
+function alreadyAcknowledged(conv: WaConversation): boolean {
+  return !!(conv.autoAckSentAt || conv.botContext);
+}
+async function sendThankYouOnce(sb: SB, conv: WaConversation, cfg: WaConfig, mobile: string, mobile10: string): Promise<void> {
+  if (alreadyAcknowledged(conv)) { await saveConversation(sb, conv); return; }
+  conv.autoAckSentAt = nowIso();
+  await saveConversation(sb, conv);
+  await send(sb, mobile, mobile10, cfg.thankYouMessage);
+}
+
+async function handover(sb: SB, conv: WaConversation, cfg: WaConfig, reason: string, customerMobile: string, tellCustomer = true): Promise<void> {
   conv.state = "human";
   conv.handoverReason = reason;
   conv.updatedAt = nowIso();
@@ -186,7 +201,7 @@ async function handover(sb: SB, conv: WaConversation, cfg: WaConfig, reason: str
   } else {
     await opsNotify(text, "WhatsApp handover", `wahandover:${conv.mobile}`);
   }
-  if (cfg.autoRepliesEnabled) await send(sb, customerMobile, conv.mobile, "Got it — I'm connecting you with our team, they'll reply here shortly. For anything urgent, call +91 63 5711 5711.");
+  if (tellCustomer && cfg.autoRepliesEnabled) await send(sb, customerMobile, conv.mobile, "Got it — I'm connecting you with our team, they'll reply here shortly. For anything urgent, call +91 63 5711 5711.");
 }
 
 /** Entry point — called once per inbound Meta "messages[]" entry, from the
@@ -282,8 +297,7 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
    * rule: follow-ups stop on reply). */
   if (conv.leadId || conv.bookingId) {
     conv.followUp = null;
-    await saveConversation(sb, conv);
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
     return;
   }
 
@@ -297,7 +311,7 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     conv.bookingId = existingOpenLead.refId;
     await saveConversation(sb, conv);
     await logEvent(sb, { type: "lead_linked", conversationId: mobile10, leadId: existingOpenLead.id, bookingId: existingOpenLead.refId, detail: "An open lead already exists for this mobile (another channel) — linked instead of asking again.", at: nowIso() });
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
     return;
   }
 
@@ -306,6 +320,7 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
    * matches the welcome text's own instruction ("share your details here"). */
   if (isNew) {
     conv.botContext = { step: "await_from" };
+    conv.autoAckSentAt = nowIso();
     await saveConversation(sb, conv);
     await send(sb, input.mobile, mobile10, cfg.welcomeMessage);
     await logEvent(sb, { type: "welcome_sent", conversationId: mobile10, detail: "Sent the welcome message.", at: nowIso() });
@@ -314,6 +329,9 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
 
   const faqHit = matchFaq(input.text, cfg.faq);
   if (faqHit) {
+    // never repeat the same FAQ answer on a thread
+    if ((conv.faqSent ?? []).includes(faqHit.question)) { await saveConversation(sb, conv); return; }
+    conv.faqSent = [...(conv.faqSent ?? []), faqHit.question];
     await saveConversation(sb, conv);
     // a one-tap way out of the FAQ loop — clicking it lands back here as
     // plain text ("Talk to a human"), which the keyword-handover check
@@ -339,7 +357,8 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
   conv.botContext = ctx;
 
   if (!gotSomethingNew && ctx.attempts > cfg.handoverRules.maxUnparsedTurns) {
-    await handover(sb, conv, cfg, "couldn't understand the customer's replies after a few tries", input.mobile);
+    // silent handover: alert the team, but send the customer no further automatic message
+    await handover(sb, conv, cfg, "couldn't understand the customer's replies after a few tries", input.mobile, false);
     return;
   }
 
@@ -352,8 +371,22 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     ctx.step = missing[0];
     conv.botContext = ctx;
     await saveConversation(sb, conv);
-    await send(sb, input.mobile, mobile10, promptFor(missing[0]));
-    await logEvent(sb, { type: "auto_reply", conversationId: mobile10, detail: `Asked for: ${missing[0].replace("await_", "")}`, at: nowIso() });
+    /* One automatic reply only: the welcome message already asked for the details, so the bot
+     * does NOT fire a follow-up question on every message ("Which city…?" over and over). It
+     * keeps parsing silently; once details are complete it creates the lead, and if the
+     * customer keeps writing without usable details the existing maxUnparsedTurns rule hands
+     * the thread to the team. Flip to true to bring back one-question-at-a-time prompting
+     * (each prompt is still sent at most once). */
+    if (GUIDED_PROMPTS) {
+      const asked = ctx.asked ?? [];
+      if (!asked.includes(missing[0])) {
+        ctx.asked = [...asked, missing[0]];
+        conv.botContext = ctx;
+        await saveConversation(sb, conv);
+        await send(sb, input.mobile, mobile10, promptFor(missing[0]));
+        await logEvent(sb, { type: "auto_reply", conversationId: mobile10, detail: `Asked for: ${missing[0].replace("await_", "")}`, at: nowIso() });
+      }
+    }
     return;
   }
 
@@ -367,13 +400,12 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     conv.bookingId = openLead.refId;
     await saveConversation(sb, conv);
     await logEvent(sb, { type: "lead_linked", conversationId: mobile10, leadId: openLead.id, bookingId: openLead.refId, detail: "An open lead already exists for this mobile — linked instead of creating a new one.", at: nowIso() });
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
     return;
   }
 
   if (!cfg.autoLeadCreationEnabled) {
-    await saveConversation(sb, conv);
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
     return;
   }
 
@@ -424,7 +456,7 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
 
   if (ror) {
     if (cfg.handoverRules.onRateOnRequest) { await handover(sb, conv, cfg, "this route isn't on the rate chart — pricing needs a human", input.mobile); return; }
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
     return;
   }
 
@@ -435,6 +467,6 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     kickSweep();
     await logEvent(sb, { type: "quote_sent", conversationId: mobile10, leadId: lead.id, bookingId: doc.id, detail: `Quote sent automatically (admin has auto-send ON) · ${inr(total)}`, at: nowIso() });
   } else {
-    await send(sb, input.mobile, mobile10, cfg.thankYouMessage);
+    await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
   }
 }

@@ -24,6 +24,10 @@ export interface WaConversation {
   lastInboundAt?: string;
   lastOutboundAt?: string;
   lastMessagePreview?: string;
+  /** ISO time the one-and-only automatic acknowledgement (welcome / thank-you) went out. Once set, the bot never sends another automatic acknowledgement on this thread. */
+  autoAckSentAt?: string;
+  /** FAQ answers already sent (by question) so the same answer is never repeated. */
+  faqSent?: string[];
   unread?: boolean;             // true from the moment of an inbound message until an admin opens the thread
   /** Slot-filling progress for the guided "collect travel/baggage details"
    *  flow — see waBot.ts. Only ever holds fields the customer hasn't
@@ -37,6 +41,7 @@ export interface WaConversation {
     bags?: number;
     date?: string;
     name?: string;
+    asked?: string[];            // guided prompts already sent (each at most once)
     attempts?: number;          // consecutive turns the bot couldn't parse a reply — a handover trigger past a threshold
   };
   followUp?: {
