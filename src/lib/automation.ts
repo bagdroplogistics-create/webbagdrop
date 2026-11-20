@@ -77,27 +77,84 @@ type T = { wa: (d: Record<string, string>) => string; subject: (d: Record<string
  *  every URL in it turned into a proper button instead of a pasted link.
  *  Keeps one message per event (notify()) instead of a second HTML-only
  *  copy of every template to maintain. */
-function emailHtml(text: string): string {
+function emailHtml(text: string, subject = "", template = ""): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const urlRe = /(https?:\/\/\S+)/g;
-  const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : "Open link";
-  const body = text.split("\n").filter((l) => l.trim()).map((line) => {
-    const parts = line.split(urlRe);
-    const html = parts.map((part, i) => i % 2 === 1
-      ? `<a href="${esc(part)}" style="display:inline-block;margin:8px 0;padding:11px 22px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${buttonLabel(part)}</a>`
-      : esc(part)
-    ).join("");
-    return `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.6">${html}</p>`;
-  }).join("");
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+  const internal = template === "ops_alert" || template === "captain_pickup_brief" || template === "driver_link";
+  const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : /\/verify\//.test(url) ? "Verify now" : /\/admin/.test(url) ? "Open BAGDROP OS" : "Open link";
+  const btn = (url: string) => `<a href="${esc(url)}" style="display:inline-block;padding:12px 24px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">${buttonLabel(url)}</a>`;
+  const P = (h: string) => `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.65">${h}</p>`;
+  const table = (rows: [string, string][]) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border:1px solid #E7E2DC;border-radius:10px;border-collapse:separate;overflow:hidden">${rows.map(([k, v], i) => `<tr><td valign="top" style="padding:10px 14px;width:32%;background:#FAF8F5;color:#78716C;font-size:12px;${i ? "border-top:1px solid #F0ECE7;" : ""}">${esc(k)}</td><td style="padding:10px 14px;color:#292524;font-size:14px;font-weight:600;${i ? "border-top:1px solid #F0ECE7;" : ""}">${esc(v)}</td></tr>`).join("")}</table>`;
+  const callout = (h: string) => `<div style="margin:4px 0 18px;padding:13px 16px;background:#FFF7ED;border-left:4px solid #EA580C;border-radius:6px;color:#7C2D12;font-size:14px;line-height:1.6;font-weight:600">${h}</div>`;
+  const labelFor = (seg: string, i: number): string =>
+    /^[A-Z][A-Z0-9]{1,4}-[A-Z0-9-]{3,}$/.test(seg) ? "Booking" : /→/.test(seg) ? "Route" : /₹/.test(seg) ? "Amount" : /payment|accepted|paid|verified|received|confirmed/i.test(seg) ? "Status" : i === 0 ? "Customer" : "Detail";
+
+  const buttons: string[] = [];
+  const blocks: string[] = [];
+  let kvRun: [string, string][] = [];
+  const flushKv = () => { if (kvRun.length) { blocks.push(table(kvRun)); kvRun = []; } };
+  const sentences = (s: string) => s.length > 190 ? s.split(/(?<=[.!?])\s+(?=[A-Z"])/) : [s];
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  lines.forEach((line, idx) => {
+    // 1) a line carrying a link → text + a proper button
+    if (urlRe.test(line)) {
+      urlRe.lastIndex = 0;
+      flushKv();
+      const parts = line.split(urlRe);
+      const lead = parts.filter((_, i) => i % 2 === 0).join(" ").replace(/\s*[:—-]\s*$/, "").trim();
+      const urls = parts.filter((_, i) => i % 2 === 1);
+      if (lead && !/^(track live|your bookings|payment page with qr|pay securely here)\b/i.test(lead)) sentences(lead).forEach((s) => blocks.push(P(esc(s))));
+      urls.forEach((u) => buttons.push(btn(u)));
+      return;
+    }
+    urlRe.lastIndex = 0;
+    // 2) "Label: value" run → details table (pickup brief, etc.)
+    const kv = /^([A-Za-z][A-Za-z /]{1,22}):\s+(\S.*)$/.exec(line);
+    if (kv && !/^(hi|note|reason)\b/i.test(kv[1])) { kvRun.push([kv[1], kv[2]]); return; }
+    flushKv();
+    // 3) internal alert line "headline · fact · fact — action" → headline, facts table, action callout
+    if (internal && (line.match(/ · /g) ?? []).length >= 2) {
+      const segs = line.split(" · ").map((s) => s.trim());
+      let action = "";
+      const last = segs[segs.length - 1];
+      const dash = last.indexOf(" — ");
+      if (dash > -1) { action = last.slice(dash + 3).trim(); segs[segs.length - 1] = last.slice(0, dash).trim(); }
+      const head = segs.shift()!;
+      blocks.push(`<p style="margin:0 0 14px;color:#1C1917;font-size:17px;line-height:1.5;font-weight:800">${esc(head)}</p>`);
+      let ci = 0;
+      const rows: [string, string][] = segs.filter(Boolean).map((s) => { const l = labelFor(s, ci); if (l === "Customer") ci++; return [l, s]; });
+      if (rows.length) blocks.push(table(rows));
+      if (action) blocks.push(callout(`Next step: ${esc(action.charAt(0).toUpperCase() + action.slice(1))}`));
+      return;
+    }
+    // 4) OTP / verification codes get a big code box
+    const code = /otp|code/.test(template) ? /\b(\d{4,8})\b/.exec(line)?.[1] : "";
+    if (code && idx < 3) {
+      blocks.push(P(esc(line.replace(code, "the code below"))));
+      blocks.push(`<div style="margin:4px 0 18px;text-align:center;padding:16px;background:#FAF8F5;border:1px dashed #D6CFC7;border-radius:10px;font-family:Consolas,Menlo,monospace;font-size:30px;font-weight:800;letter-spacing:.3em;color:#1C1917">${code}</div>`);
+      return;
+    }
+    // 5) ordinary paragraph(s); greeting gets its own line
+    const g = /^(Hi [^,]{1,40},)\s+(.+)$/.exec(line);
+    if (g) { blocks.push(`<p style="margin:0 0 12px;color:#1C1917;font-size:16px;font-weight:700">${esc(g[1])}</p>`); sentences(g[2]).forEach((s) => blocks.push(P(esc(s.charAt(0).toUpperCase() + s.slice(1))))); }
+    else sentences(line).forEach((s) => blocks.push(P(esc(s))));
+  });
+  flushKv();
+  if (internal && !buttons.length) buttons.push(btn(`${(process.env.SITE_URL || "https://www.bagdrop.co").replace(/\/$/, "")}/admin-1/admin`));
+
+  const title = subject ? `<div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:#78716C;text-transform:uppercase">${internal ? "Bagdrop team alert" : "Booking update"}</div><div style="font-size:22px;font-weight:800;color:#1C1917;line-height:1.3;margin:6px 0 0">${esc(subject)}</div>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3F0;padding:24px 0">
 <tr><td align="center">
-<table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
 <tr><td style="background:#EA580C;padding:22px 28px">
 <div style="color:#ffffff;font-size:21px;font-weight:800;letter-spacing:.01em;font-family:Georgia,serif">BAGDROP</div>
 <div style="color:#ffffff;opacity:.9;font-size:10px;font-weight:600;letter-spacing:.15em;margin-top:3px">INDIA'S FIRST DIGITAL BAGGAGE INFRASTRUCTURE</div>
 </td></tr>
-<tr><td style="padding:28px 28px 8px">${body}</td></tr>
+${title ? `<tr><td style="padding:24px 28px 4px">${title}<div style="height:1px;background:#E7E2DC;margin-top:16px"></div></td></tr>` : ""}
+<tr><td style="padding:20px 28px 6px">${blocks.join("")}</td></tr>
+${buttons.length ? `<tr><td style="padding:0 28px 22px">${buttons.join("&nbsp;&nbsp;")}</td></tr>` : ""}
 <tr><td style="padding:16px 28px 24px;border-top:1px solid #E7E2DC;color:#78716C;font-size:11px;line-height:1.6">
 ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot; ${esc(COMPANY.email)} &middot; ${esc(COMPANY.web)}
 </td></tr>
@@ -360,6 +417,20 @@ export async function notifyInquiryDesk(text: string, subject: string, key: stri
   return n;
 }
 
+/** Same inquiry-desk email, but with a fully designed HTML body supplied by
+ *  the caller (used for new Y2K wedding bookings). Same recipients, same
+ *  idempotent outbox keys as notifyInquiryDesk — only the email body differs. */
+export async function notifyInquiryDeskRich(text: string, subject: string, key: string, html: string): Promise<number> {
+  const cfg = await loadAlerts();
+  const emails = cfg.inquiryEmails?.length ? cfg.inquiryEmails : DEFAULT_INQUIRY_EMAILS;
+  const now = new Date().toISOString();
+  const rows: OutboxDoc[] = emails.map((email) => ({
+    kind: "send.email", key: `${key}:${email}:em`, to: email, name: "Bagdrop Inquiry Desk", template: "ops_alert",
+    text, html, subject, status: "queued", attempts: 0, createdAt: now,
+  }));
+  return insertRows(rows);
+}
+
 /** Atomic "first time only" guard — returns true exactly once per key
  *  (e.g. an OTP proof can create one booking or one login, never two). */
 export async function claimOnce(key: string): Promise<boolean> {
@@ -424,7 +495,7 @@ export async function notify(template: string, to: { name: string; mobile?: stri
   const now = new Date().toISOString();
   const rows: OutboxDoc[] = [];
   if (to.mobile) rows.push({ kind: "send.wa", key: `${key}:wa`, to: to.mobile, name: to.name, template, templateVars, text, status: "queued", attempts: 0, createdAt: now });
-  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
+  if (to.email) rows.push({ kind: "send.email", key: `${key}:em`, to: to.email, name: to.name, template, text, html: emailHtml(text, t.subject(data), template), subject: t.subject(data), status: "queued", attempts: 0, createdAt: now });
   return insertRows(rows);
 }
 
@@ -661,7 +732,7 @@ async function capturePass(stats: SweepStats) {
       : await notify("inquiry_ack", { name: b.traveller.name, mobile: b.traveller.mobile, email: b.traveller.email },
           { lane: `${b.from} → ${b.to}`, ref: b.id }, `ack:${b.id}`);
     stats.opsQueued += await opsNotify(
-      `${inst ? "INSTANT " : "New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} ${b.id} · ${b.traveller.name} · ${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · ${b.date || "date TBC"} · via ${b.source ?? "website"}${paid ? ` · PAID ${inr(b.pay!.amount)}` : " · rate to confirm"}`,
+      `${inst ? "INSTANT " : "New "}${paid ? "booking" : inst ? "booking — auto-approved, awaiting payment" : "booking request"} · ${b.id}\n${b.traveller.name}${b.traveller.mobile ? ` · +${b.traveller.mobile}` : ""}\n${b.from} → ${b.to} · ${b.bags + b.oversize} pcs · pickup ${b.date || "date TBC"}\nVia ${b.source ?? "website"}${paid ? ` · Paid ${inr(b.pay!.amount)}` : " · Rate to confirm"}`,
       `New ${paid ? "booking" : "request"} · ${b.id} · ${b.from} → ${b.to}`,
       `ops:new:${b.id}`);
   }
@@ -703,10 +774,14 @@ async function eventPass(stats: SweepStats) {
     const d = { ref: b.id, lane: `${b.from} → ${b.to}`, from: b.from, to: b.to, date: b.date, slot: b.slot || "as planned", pieces: pcsLabel(b.bags, b.oversize, "bags"), amount: inr(b.pay?.amount ?? 0) };
     if (isPaid(b)) {
       stats.paidQueued += await notify("payment_received", to, d, `paid:${b.id}`);
-      stats.opsQueued += await opsNotify(
-        `Payment verified · ${b.id} · ${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway} · ${b.from} → ${b.to}${!AADHAAR_REQUIRED || b.identity?.ok ? "" : " · Aadhaar pending (pickup locked)"}`,
-        `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`,
-        `ops:paid:${b.id}`);
+      const paidSummary = `Payment verified · ${b.id}\n${b.traveller.name} · ${inr(b.pay!.amount)} via ${b.pay!.gateway}\n${b.from} → ${b.to}${!AADHAAR_REQUIRED || b.identity?.ok ? "" : "\nAadhaar pending — pickup locked"}`;
+      const paidSubject = `Payment verified · ${inr(b.pay!.amount)} · ${b.id}`;
+      stats.opsQueued += await opsNotify(paidSummary, paidSubject, `ops:paid:${b.id}`);
+      // Founder request (2026-11-09): payment confirmations must always reach
+      // the inquiry desk (info@/aditya@), same as a new booking — unlike the
+      // single configurable ops-alert address above, which the team may point
+      // elsewhere without silently losing this one.
+      stats.opsQueued += await notifyInquiryDesk(paidSummary, paidSubject, `inqdesk:paid:${b.id}`);
     }
     /* hosted wedding family confirmed (from Shipments "Confirm booking" or an approval) → one confirmation */
     if (isHostBilled(b) && ["accepted", "assigned"].includes(b.status)) {

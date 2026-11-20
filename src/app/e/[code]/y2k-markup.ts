@@ -196,12 +196,12 @@ h2.big em{font-style:italic;color:var(--label)}
 .stepper button[disabled]{cursor:default}
 .ph{font-family:var(--display);font-size:clamp(28px,4vw,36px);font-weight:400;margin:0 0 4px;line-height:1.1}
 .psub{color:var(--body);margin:0 0 24px;font-size:15px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px;align-items:start}
 .grid.three{grid-template-columns:repeat(3,1fr)}
 .grid>*{min-width:0}
 .full{grid-column:1/-1}
 @media (max-width:620px){.grid,.grid.three{grid-template-columns:1fr}}
-label.f{display:grid;gap:7px}
+label.f{display:grid;gap:7px;align-content:start}
 label.f>span,.lab{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--label)}
 label.f>span.hint,label.f>span.msg{text-transform:none;letter-spacing:0;font-weight:400}
 label.f>span em,.lab em{font-style:normal;text-transform:none;letter-spacing:0;font-weight:400;color:var(--stone)}
