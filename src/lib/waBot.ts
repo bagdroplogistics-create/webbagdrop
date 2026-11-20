@@ -319,6 +319,32 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
 
   if (!cfg.autoRepliesEnabled) { await saveConversation(sb, conv); return; }
 
+  /* brand-new conversation: the welcome message is the one-and-only
+   * automatic acknowledgement for THIS customer's first WhatsApp message —
+   * always, even if a lead already exists for this mobile from another
+   * channel (ads/website/a phone call). 2026-11-20 real report: a customer
+   * whose mobile already had an open lead got the thank-you message
+   * straight off their first "hi", never the welcome text, because the
+   * dedup-to-existing-lead check used to run BEFORE this one. Still link
+   * the existing lead silently here (hard rule: never double-quote/
+   * double-book a mobile, never re-ask for details already on file) — it
+   * just no longer changes which message goes out on message #1. */
+  if (isNew) {
+    const existingOpenLead = await findOpenLeadByMobile(sb, mobile10);
+    if (existingOpenLead) {
+      conv.leadId = existingOpenLead.id;
+      conv.bookingId = existingOpenLead.refId;
+      await logEvent(sb, { type: "lead_linked", conversationId: mobile10, leadId: existingOpenLead.id, bookingId: existingOpenLead.refId, detail: "An open lead already exists for this mobile (another channel) — linked, but the welcome message still goes out once as normal.", at: nowIso() });
+    } else {
+      conv.botContext = { step: "await_from" };
+    }
+    conv.autoAckSentAt = nowIso();
+    await saveConversation(sb, conv);
+    await send(sb, input.mobile, mobile10, cfg.welcomeMessage);
+    await logEvent(sb, { type: "welcome_sent", conversationId: mobile10, detail: "Sent the welcome message.", at: nowIso() });
+    return;
+  }
+
   /* already has a lead/booking linked — don't re-run collection, don't ask
    * again for anything we already have (hard rule). A reply here also
    * stops any pending automated follow-up for this conversation (hard
@@ -329,10 +355,9 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     return;
   }
 
-  /* an open lead for this mobile already exists from another channel
-   * (website, ads import, a phone call logged in CRM) — link to it
-   * immediately rather than asking the customer to repeat details we
-   * already have (hard rule: never double-quote/double-book a mobile). */
+  /* not this conversation's first message, and no lead linked yet — check
+   * again in case one appeared on another channel since (e.g. the
+   * customer called in between WhatsApp messages). */
   const existingOpenLead = await findOpenLeadByMobile(sb, mobile10);
   if (existingOpenLead) {
     conv.leadId = existingOpenLead.id;
@@ -340,18 +365,6 @@ export async function handleInboundMessage(sb: SB, input: InboundInput): Promise
     await saveConversation(sb, conv);
     await logEvent(sb, { type: "lead_linked", conversationId: mobile10, leadId: existingOpenLead.id, bookingId: existingOpenLead.refId, detail: "An open lead already exists for this mobile (another channel) — linked instead of asking again.", at: nowIso() });
     await sendThankYouOnce(sb, conv, cfg, input.mobile, mobile10);
-    return;
-  }
-
-  /* brand-new conversation: send the (admin-editable) welcome message once,
-   * then wait for their next reply before trying to parse anything — this
-   * matches the welcome text's own instruction ("share your details here"). */
-  if (isNew) {
-    conv.botContext = { step: "await_from" };
-    conv.autoAckSentAt = nowIso();
-    await saveConversation(sb, conv);
-    await send(sb, input.mobile, mobile10, cfg.welcomeMessage);
-    await logEvent(sb, { type: "welcome_sent", conversationId: mobile10, detail: "Sent the welcome message.", at: nowIso() });
     return;
   }
 
