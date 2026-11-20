@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","include":["next-env.d.ts","src/lib/waBot.ts","src/lib/waTypes.ts","src/app/api/hooks/whatsapp/route.ts"]}
