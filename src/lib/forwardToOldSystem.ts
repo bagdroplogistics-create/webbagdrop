@@ -11,7 +11,13 @@ export async function forwardToOldSystem(doc: Booking, details: string): Promise
   const secret = process.env.Y2K_FORWARD_SECRET;
   if (!secret) return;
   const base = (process.env.OLD_SYSTEM_URL || "https://www.bagdrop.co").replace(/\/$/, "");
-  const st = ((doc.wedding as { state?: { members?: unknown[]; pickups?: { address?: string; pincode?: string; city?: string }[]; family?: { side?: string } } } | undefined)?.state) ?? {};
+  const st = ((doc.wedding as { state?: { members?: unknown[]; pickups?: { address?: string; pincode?: string; city?: string }[]; family?: { side?: string }; bags?: { ret?: boolean; retDate?: string; retSlot?: string }[]; ret?: { date?: string; slot?: string; dest?: string; address?: string } } } | undefined)?.state) ?? {};
+  // Return journey — same fields the inquiry-desk email shows.
+  const slotLabel = (v: string) => ({ morning: "Morning · 10 AM–1 PM", midday: "Midday · 1–3 PM", afternoon: "Afternoon · 1–3 PM", evening: "Evening · 3–6 PM" } as Record<string, string>)[v.toLowerCase()] ?? v;
+  const retBagList = (st.bags ?? []).filter((b) => b.ret);
+  const retDate = String(st.ret?.date ?? retBagList[0]?.retDate ?? "").trim();
+  const retSlotRaw = String(st.ret?.slot ?? retBagList[0]?.retSlot ?? "").trim();
+  const retTo = String(st.ret?.address ?? st.ret?.dest ?? "").trim();
   const p1 = st.pickups?.[0];
   const pickupAddress = [p1?.address, p1?.city, p1?.pincode].filter(Boolean).join(", ") || doc.pickAddr || "";
   const controller = new AbortController();
@@ -37,6 +43,11 @@ export async function forwardToOldSystem(doc: Booking, details: string): Promise
         date: doc.date ?? "",
         slot: doc.slot ?? "",
         note: doc.note ?? "",
+        eventName: (doc as { eventName?: string; ucName?: string }).eventName ?? (doc as { ucName?: string }).ucName ?? "",
+        retBags: retBagList.length,
+        retDate,
+        retSlot: retSlotRaw ? slotLabel(retSlotRaw) : "",
+        retTo,
         details,
       }),
     });
