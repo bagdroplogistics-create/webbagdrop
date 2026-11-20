@@ -105,26 +105,54 @@ const BAG_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, f
 export function extractFields(text: string, cityNames: string[]): { fromName?: string; toName?: string; bags?: number; date?: string } {
   const out: { fromName?: string; toName?: string; bags?: number; date?: string } = {};
   const lower = text.toLowerCase();
+  const norm = (c: string) => c.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").trim();
 
-  const findCity = (hay: string): string | undefined =>
-    cityNames.find((c) => hay.includes(c.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").trim()));
-
-  const arrowMatch = text.match(/([A-Za-z\s]+?)\s*(?:to|->|→)\s*([A-Za-z\s]+)/i);
-  if (arrowMatch) {
-    const f = findCity(arrowMatch[1].toLowerCase());
-    const t = findCity(arrowMatch[2].toLowerCase());
-    if (f) out.fromName = f;
-    if (t) out.toName = t;
+  /* 2026-11-20 rewrite — the previous version matched on the bare word "to"
+   * as a from/to separator ("...pickup from mumbai airport AND DELIVER TO
+   * ahmedabad" is fine, but ordinary English has "to" everywhere that has
+   * nothing to do with a route — "I want TO book", "how many days TO
+   * deliver" — and the old regex would seize on THAT "to" instead,
+   * scrambling or dropping the real cities entirely. Real customer report:
+   * "pickup from mumbai airport and deliver to ahmedabad" never set
+   * fromName at all because of this.
+   *
+   * New approach: find every known city actually mentioned, in the order
+   * it appears, and look at the word(s) immediately adjacent to each one
+   * ("from"/"pickup" vs "to"/"deliver"/"drop"/"destination") to decide
+   * which side of the trip it is — far more robust than trying to parse
+   * one connector word out of a free-form sentence.
+   *
+   * Deliberately the EXACT adjacent word(s), not a loose character window:
+   * in "Mumbai to Delhi" the word "to" sits between both cities, so a wide
+   * window sees it next to EITHER one and misattributes — checking only
+   * the word immediately before (for from/to) and immediately after (for
+   * drop/destination/deliver, which in practice only ever follows a city,
+   * "to" excluded there on purpose) resolves that ambiguity correctly. */
+  const hits: { city: string; idx: number; dir: "from" | "to" | null }[] = [];
+  for (const c of cityNames) {
+    const needle = norm(c);
+    const idx = lower.indexOf(needle);
+    if (idx < 0) continue;
+    const beforeWord = /(\w+(?:\s+\w+)?)\s*$/.exec(lower.slice(Math.max(0, idx - 20), idx))?.[1] ?? "";
+    const afterWord = /^\s*(\w+)/.exec(lower.slice(idx + needle.length, idx + needle.length + 15))?.[1] ?? "";
+    const fromHit = /\b(from|pick\s*up|pickup)\b/.test(beforeWord);
+    const toHit = /\b(to|deliver|drop)\b/.test(beforeWord) || /\b(drop(?:ing|off)?|destination|delivery)\b/.test(afterWord);
+    hits.push({ city: c, idx, dir: fromHit && !toHit ? "from" : toHit && !fromHit ? "to" : null });
   }
+  hits.sort((a, b) => a.idx - b.idx);
+  const distinct = hits.filter((h, i) => hits.findIndex((x) => x.city === h.city) === i);
+
+  out.fromName = distinct.find((h) => h.dir === "from")?.city;
+  out.toName = distinct.find((h) => h.dir === "to" && h.city !== out.fromName)?.city;
+  const leftover = distinct.filter((h) => h.city !== out.fromName && h.city !== out.toName);
   if (!out.fromName && !out.toName) {
-    // fall back to "any two known cities appear somewhere in this message, in order"
-    const found: string[] = [];
-    for (const c of cityNames) {
-      const idx = lower.indexOf(c.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").trim());
-      if (idx >= 0) found.push(c);
-    }
-    if (found.length >= 2) { out.fromName = found[0]; out.toName = found[1]; }
-    else if (found.length === 1 && !out.fromName) out.fromName = found[0];
+    // no direction keywords anywhere — fall back to plain order of mention
+    if (leftover.length >= 2) { out.fromName = leftover[0].city; out.toName = leftover[1].city; }
+    else if (leftover.length === 1) out.fromName = leftover[0].city;
+  } else if (!out.toName && leftover.length) {
+    out.toName = leftover[0].city;
+  } else if (!out.fromName && leftover.length) {
+    out.fromName = leftover[0].city;
   }
 
   const numMatch = text.match(/\b(\d{1,2})\s*(bags?|pieces?|suitcases?|luggage)?\b/i);

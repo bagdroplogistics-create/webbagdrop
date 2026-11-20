@@ -25,6 +25,14 @@ check("only one city, nothing else", extractFields("I'm in Jaipur right now", CI
 check("no recognizable city at all", extractFields("hello there, need help", CITY_NAMES), {});
 check("unknown city name never half-matched", extractFields("from Mumba to Delhi", CITY_NAMES), { toName: "Delhi" });
 
+console.log("\nreal-world cases that previously broke (2026-11-20) —");
+check("'pickup from X ... deliver to Y' despite an unrelated earlier 'to'", extractFields("i want to book bags pickup from mumbai airport and deliver to ahmedabad", CITY_NAMES), { fromName: "Mumbai", toName: "Ahmedabad" });
+check("'to deliver to' — the SECOND 'to' is the real one, no 'from' present", extractFields("And how many days take to deliver to Ahmedabad my home", CITY_NAMES), { toName: "Ahmedabad" });
+check("direction keyword AFTER the city, not before", extractFields("Ahmedabad drop location", CITY_NAMES), { toName: "Ahmedabad" });
+check("'pickup from' with no destination mentioned yet", extractFields("pickup from Goa please", CITY_NAMES), { fromName: "Goa" });
+check("weight, not a bag count — must not be read as bags", extractFields("There is one bag 23kg", CITY_NAMES), { bags: 1 });
+check("reversed order — destination named first, keyword-driven", extractFields("drop at Goa, picking up from Mumbai", CITY_NAMES), { fromName: "Mumbai", toName: "Goa" });
+
 console.log("\nisOptOut —");
 check("STOP alone", isOptOut("STOP"), true);
 check("stop with punctuation", isOptOut("stop."), true);
