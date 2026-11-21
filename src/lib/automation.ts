@@ -165,10 +165,7 @@ ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot
 
 export const TEMPLATES: Record<string, T> = {
   inquiry_ack: {
-    // Founder-reported 2026-11-07: "a specialist reaches you within 15
-    // minutes with the rate and pickup plan" overpromised a response time
-    // the team doesn't actually run — simplified to what's actually true.
-    wa: (d) => `Hi ${d.name}, Bagdrop here — we've received your request for ${d.lane}. We'll send you a quotation as per your request as soon as possible. Your reference: ${d.ref}.`,
+    wa: (d) => `Dear ${d.name},\n\nThank you for contacting Bagdrop.\n\nWe have successfully received your inquiry with the following details:\nReference: ${d.ref}\nRoute: ${d.lane}\n\nOur team will review the details and get in touch with you shortly.\n\nIf you have any additional information or questions, feel free to reply to this message.\n\nThank you for choosing Bagdrop. We look forward to assisting you.\n\nRegards,\nBagdrop Team`,
     subject: () => "Bagdrop — we have your request",
   },
   instant_ack: {
@@ -183,21 +180,21 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, payment of ${d.amount} received for ${d.ref} (${d.lane}). Your tax invoice follows. Your bags are on the plan — live tracking on your booking page.`,
     subject: (d) => `Payment received · ${d.ref}`,
   },
-  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}, coming on ${d.date}, window ${d.slot}. Please keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
+  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain has been assigned.\nCaptain: ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}\nPickup date: ${d.date}\nTime window: ${d.slot}\n\nPlease keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
   /* to the CAPTAIN themselves, not the customer — everything needed on
    * site, the moment they're assigned to a pickup. */
   captain_pickup_brief: {
     wa: (d) => `BAGDROP PICKUP BRIEF\nLR/Ref: ${d.lr}\nLane: ${d.lane}\nPieces: ${d.pieces}\nDate: ${d.date} · window ${d.slot}\nPickup: ${d.pickAddr}\nDeliver: ${d.dropAddr}\nContact: ${d.custName} ${d.custMobile}\nAt pickup: tag and seal every bag, weigh it, photograph it, get the customer's signature — then go to the desk; the desk records the pickup.`,
     subject: (d) => `New pickup assigned to you · ${d.lr}`,
   },
-  ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}. Your delivery captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}. They hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
-  ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags. ${d.kind}: ${d.note}${d.eta ? `\nNew expected time: ${d.eta}` : ""}\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
-  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
-  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags have reached our ${d.hub || d.from} hub — all pieces scanned and accounted for. They leave for ${d.to} next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Reached our hub · ${d.ref}` },
-  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}${d.mode ? ` by ${d.mode.toLowerCase()}` : ""}.${d.eta ? ` Expected at ${d.to}: ${d.eta}.` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
+  ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}.\nDelivery captain: ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}\n\nThey hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
+  ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags.\n${d.kind}: ${d.note}${d.eta ? `\nNew expected time: ${d.eta}` : ""}\n\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
+  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\nMove Pass: ${d.pass}` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
+  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags have reached our hub — all pieces scanned and accounted for.\nCurrent hub: ${d.hub || d.from}\nNext stop: ${d.to}${d.track ? `\n\nTrack live: ${d.track}` : ""}`, subject: (d) => `Reached our hub · ${d.ref}` },
+  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move.\nFrom: ${d.from}\nTo: ${d.to}${d.mode ? `\nMode: ${d.mode}` : ""}${d.eta ? `\nETA at ${d.to}: ${d.eta}` : ""}${d.track ? `\n\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
   ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
-  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}${d.eta ? `, expected by ${d.eta}` : ""}. The captain hands your bags over to you or the person you name at the door.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
-  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered${d.receiver ? ` to ${d.receiver}` : ""}. ${d.pieces}, every tag scanned end to end. Thank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
+  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}.${d.eta ? `\nExpected by: ${d.eta}` : ""}\n\nThe captain hands your bags over to you or the person you name at the door.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
+  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered${d.receiver ? ` to ${d.receiver}` : ""}. ${d.pieces}, every tag scanned end to end.\n\nThank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
   quote_ready: {
     wa: (d) => `Hi ${d.name}, your Bagdrop quote for ${d.lane} is ready: ${d.amount}, locked for 24 hours.\nPay securely here: ${d.link}\nRef: ${d.ref}.`,
     subject: (d) => `Your Bagdrop quote · ${d.amount} · ${d.lane}`,
