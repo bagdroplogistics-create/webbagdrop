@@ -26,7 +26,7 @@ import type { Booking } from "@/lib/types";
 import { getEvent } from "@/lib/eventDb";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
 import { withBase } from "@/lib/basePath";
-import { Y2K_CANCEL_POLICY, Y2K_INSURANCE_PER_BAG_INR, Y2K_MIN_BAGS_MESSAGE, Y2K_MIN_BAGS_PER_ADDRESS, Y2K_PER_BAG_INR, y2kQuote } from "@/lib/y2kPricing";
+import { Y2K_CANCEL_POLICY, Y2K_MIN_BAGS_MESSAGE, Y2K_MIN_BAGS_PER_ADDRESS, y2kQuote } from "@/lib/y2kPricing";
 
 export function initY2k(): () => void {
   const ac = new AbortController();
@@ -304,17 +304,7 @@ export function initY2k(): () => void {
   </dl>
   ${st.bags.length ? `<hr><dl>${Object.entries(types).map(([t, n]) => `<dt>${esc(t)}</dt><dd>${n}</dd>`).join("")}</dl>` : ""}
   ${fl.length ? `<hr><div class="flags">${fl.map(([c, t]) => `<div class="flag ${c}"><i></i>${esc(t)}</div>`).join("")}</div>` : `<hr><div class="flags"><div class="flag g"><i></i>Nothing needs attention</div></div>`}
-  ${renderPricing(st.bags.length)}
   <hr><div class="mini" style="color:rgba(244,238,228,.6)">Hosts are billed directly for this wedding — there is nothing for guests to pay on this page.</div>`;
-  }
-  function money(n: number) { return "Rs. " + Math.round(n).toLocaleString("en-IN"); }
-  function renderPricing(bagCount: number) {
-    const q = y2kQuote(bagCount);
-    return `<hr><dl>
-    <dt>Bag charges</dt><dd>${money(q.bagTotal)} <span class="hint">(${bagCount} &times; ${money(Y2K_PER_BAG_INR)}, GST-inclusive)</span></dd>
-    <dt>Insurance</dt><dd>${Y2K_INSURANCE_PER_BAG_INR > 0 ? money(q.insuranceTotal) : "To be confirmed"}</dd>
-    <dt>Total</dt><dd><b>${money(q.total)}</b></dd>
-  </dl>`;
   }
 
   /* ---------- Tags ---------- */
