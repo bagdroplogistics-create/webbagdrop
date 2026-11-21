@@ -15,6 +15,7 @@ import { HEAVY_KG, spaced, stickersOf, type UserSticker } from "@/lib/bagTags";
 import { opsOf, pcsLabel } from "@/lib/opsModel";
 import type { Booking } from "@/lib/types";
 import { Badge, Button } from "@/components/ui";
+import { withBase } from "@/lib/basePath";
 
 const USER_STICKERS: { k: UserSticker; label: string }[] = [{ k: "FRAGILE", label: "Fragile" }, { k: "PRIORITY", label: "Priority" }, { k: "UP", label: "This way up" }];
 const PRINTS: { label: string; kind: string; media: string; zpl?: boolean; hint: string }[] = [
@@ -59,7 +60,7 @@ export default function BagTagsPanel({ b }: { b: Booking }) {
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) }); }
     finally { setBusy(false); }
   }
-  const printUrl = (p: (typeof PRINTS)[number]) => `/api/admin/tags?id=${encodeURIComponent(b.id)}&kind=${p.kind}&media=${p.media}${p.zpl ? "&format=zpl" : "&print=1"}`;
+  const printUrl = (p: (typeof PRINTS)[number]) => withBase(`/api/admin/tags?id=${encodeURIComponent(b.id)}&kind=${p.kind}&media=${p.media}${p.zpl ? "&format=zpl" : "&print=1"}`);
   const passAbs = info?.passUrl && typeof window !== "undefined" ? window.location.origin + info.passUrl : null;
 
   return (
