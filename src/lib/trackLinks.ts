@@ -11,6 +11,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GpsPoint, TrackLeg } from "./tracking";
 import { requiredSecret } from "./secrets";
+import { withBase } from "./basePath";
 
 const SECRET = requiredSecret("QUOTE_SIGNING_SECRET", "dev-secret-change-me");
 const mac = (payload: string) => createHmac("sha256", SECRET).update(payload).digest("base64url").slice(0, 22);
@@ -19,7 +20,7 @@ const ID = /^[A-Z0-9-]{6,40}$/;
 const LEGS: TrackLeg[] = ["pickup", "linehaul", "lastmile"];
 
 export const trackToken = (id: string) => `${id}.${mac(`track|${id}`)}`;
-export const trackPath = (id: string) => `/t/${trackToken(id)}`;
+export const trackPath = (id: string) => withBase(`/t/${trackToken(id)}`);
 export function readTrackToken(t: string): string | null {
   const [id, sig, extra] = (t ?? "").split(".");
   if (extra !== undefined || !ID.test(id ?? "") || !sig) return null;
@@ -28,7 +29,7 @@ export function readTrackToken(t: string): string | null {
 
 /** /p/<id>.<sig> — the customer's Move Pass (boarding-pass style). */
 export const passToken = (id: string) => `${id}.${mac(`pass|${id}`)}`;
-export const passPath = (id: string) => `/p/${passToken(id)}`;
+export const passPath = (id: string) => withBase(`/p/${passToken(id)}`);
 export function readPassToken(t: string): string | null {
   const [id, sig, extra] = (t ?? "").split(".");
   if (extra !== undefined || !ID.test(id ?? "") || !sig) return null;
@@ -36,7 +37,7 @@ export function readPassToken(t: string): string | null {
 }
 
 export const driverToken = (id: string, leg: TrackLeg) => `${id}.${leg}.${mac(`drv|${id}|${leg}`)}`;
-export const driverPath = (id: string, leg: TrackLeg) => `/d/${driverToken(id, leg)}`;
+export const driverPath = (id: string, leg: TrackLeg) => withBase(`/d/${driverToken(id, leg)}`);
 export function readDriverToken(t: string): { id: string; leg: TrackLeg } | null {
   const [id, leg, sig, extra] = (t ?? "").split(".");
   if (extra !== undefined || !ID.test(id ?? "") || !LEGS.includes(leg as TrackLeg) || !sig) return null;
