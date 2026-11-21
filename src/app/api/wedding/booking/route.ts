@@ -4,6 +4,7 @@ import type { BagdropEvent, Booking } from "@/lib/types";
 import { kickSweep, looksLikeTestName, notifyInquiryDesk } from "@/lib/automation";
 import { retryOnConflict } from "@/lib/bookingStore";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
+import { Y2K_MIN_BAGS_MESSAGE, y2kQuote, y2kShortPickups } from "@/lib/y2kPricing";
 
 /** Mirrors every new Y2K booking into a Google Sheet, alongside the Admin OS,
  *  via a Google Apps Script "Web App" (see the setup doc for the script and
@@ -69,6 +70,21 @@ async function handlePOST(req: Request) {
   }
   const mobile = String(doc.traveller?.mobile ?? "").replace(/\D/g, "");
   if (mobile.length < 10) return NextResponse.json({ error: "MOBILE_REQUIRED" }, { status: 400 });
+
+  /* Wedding Y2K (#Y2K-WED) only: minimum-2-bags-per-address and pricing are
+   * recomputed here from the raw wizard state (doc.wedding.state), never
+   * trusted from the browser's own doc.bags/doc.quote — a modified request
+   * cannot bypass the minimum or forge a different price. Scoped to this
+   * one eventCode so no other wedding/event booking is affected. */
+  if (doc.eventCode === "Y2K-WED") {
+    const state = (doc.wedding as unknown as { state?: { pickups?: { id: string; members?: string[] }[]; bags?: { pickup?: string }[] } })?.state;
+    const pickups = state?.pickups ?? [];
+    const bags = state?.bags ?? [];
+    if (y2kShortPickups(pickups, bags).length) {
+      return NextResponse.json({ error: "MIN_BAGS_PER_ADDRESS", detail: Y2K_MIN_BAGS_MESSAGE }, { status: 400 });
+    }
+    doc.quote = { qid: null, total: y2kQuote(bags.length).total, breakdown: { internal: true, hostBilled: true } } as Booking["quote"];
+  }
 
   const sb = serviceClient();
   if (!sb) return NextResponse.json({ error: "SUPABASE_NOT_CONFIGURED" }, { status: 503 });
