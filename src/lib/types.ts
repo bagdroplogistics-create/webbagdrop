@@ -104,8 +104,11 @@ export interface Payment {
   /** pending: QR shown, nothing claimed yet. submitted: customer clicked
    *  "I Have Completed Payment" (+ optional UTR) — awaiting admin review.
    *  captured: admin verified. rejected: admin rejected — customer may
-   *  resubmit (goes back to "pending"). */
-  status: "pending" | "submitted" | "captured" | "rejected";
+   *  resubmit (goes back to "pending"). refunded: a captured payment was
+   *  later refunded (cancellation, goodwill, etc.) — the money itself moves
+   *  outside this app (Razorpay dashboard or a manual bank transfer); this
+   *  only records that it happened, same pattern as payment verification. */
+  status: "pending" | "submitted" | "captured" | "rejected" | "refunded";
   gateway: string;
   at: string;
   utr?: string;
@@ -114,6 +117,11 @@ export interface Payment {
   verifiedBy?: string;
   rejectedAt?: string | null;
   rejectedNote?: string;
+  refundedAt?: string | null;
+  refundedBy?: string;
+  refundedAmount?: number;
+  refundedRef?: string;
+  refundedNote?: string;
   /** payment proof the customer uploaded (private storage path) */
   proof?: { path: string; name?: string; at: string } | null;
   /** extra amount due after bags were ADDED post-payment */
