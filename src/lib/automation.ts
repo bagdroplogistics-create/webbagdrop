@@ -81,14 +81,31 @@ function emailHtml(text: string): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const urlRe = /(https?:\/\/\S+)/g;
   const buttonLabel = (url: string) => /rzp\.io|razorpay/i.test(url) ? "Pay now" : /\/account\b/.test(url) ? "View your bookings" : /\/q\//.test(url) ? "View your quote" : /\/t\//.test(url) ? "Track your bags" : /\/p\//.test(url) ? "View Move Pass" : "Open link";
-  const body = text.split("\n").filter((l) => l.trim()).map((line) => {
-    const parts = line.split(urlRe);
-    const html = parts.map((part, i) => i % 2 === 1
-      ? `<a href="${esc(part)}" style="display:inline-block;margin:8px 0;padding:11px 22px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${buttonLabel(part)}</a>`
-      : esc(part)
-    ).join("");
-    return `<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.6">${html}</p>`;
-  }).join("");
+  const renderLine = (line: string) => line.split(urlRe).map((part, i) => i % 2 === 1
+    ? `<a href="${esc(part)}" style="display:inline-block;margin:8px 0;padding:11px 22px;background:#EA580C;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${buttonLabel(part)}</a>`
+    : esc(part)
+  ).join("");
+  // A line starting "• " is a detail bullet (every template that lists
+  // discrete facts — captain, date, window, reference, route — uses this
+  // marker so the SAME source text renders as a real <ul> here and as
+  // plain bulleted lines in WhatsApp, instead of one dense paragraph.
+  const lines = text.split("\n").filter((l) => l.trim());
+  const blocks: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trimStart().startsWith("• ")) {
+      const items: string[] = [];
+      while (i < lines.length && lines[i].trimStart().startsWith("• ")) {
+        items.push(`<li style="margin-bottom:4px">${renderLine(lines[i].trimStart().slice(2))}</li>`);
+        i++;
+      }
+      blocks.push(`<ul style="margin:0 0 14px;padding-left:20px;color:#292524;font-size:15px;line-height:1.6">${items.join("")}</ul>`);
+    } else {
+      blocks.push(`<p style="margin:0 0 14px;color:#292524;font-size:15px;line-height:1.6">${renderLine(lines[i])}</p>`);
+      i++;
+    }
+  }
+  const body = blocks.join("");
   return `<!doctype html><html><body style="margin:0;padding:0;background:#F5F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3F0;padding:24px 0">
 <tr><td align="center">
@@ -109,10 +126,7 @@ ${esc(COMPANY.name)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} &middot
 
 export const TEMPLATES: Record<string, T> = {
   inquiry_ack: {
-    // Founder-reported 2026-11-07: "a specialist reaches you within 15
-    // minutes with the rate and pickup plan" overpromised a response time
-    // the team doesn't actually run — simplified to what's actually true.
-    wa: (d) => `Hi ${d.name}, Bagdrop here — we've received your request for ${d.lane}. We'll send you a quotation as per your request as soon as possible. Your reference: ${d.ref}.`,
+    wa: (d) => `Dear ${d.name},\n\nThank you for contacting Bagdrop.\n\nWe have successfully received your inquiry with the following details:\n• Reference: ${d.ref}\n• Route: ${d.lane}\n\nOur team will review the details and get in touch with you shortly.\n\nIf you have any additional information or questions, feel free to reply to this message.\n\nThank you for choosing Bagdrop. We look forward to assisting you.\n\nRegards,\nBagdrop Team`,
     subject: () => "Bagdrop — we have your request",
   },
   instant_ack: {
@@ -127,21 +141,21 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, payment of ${d.amount} received for ${d.ref} (${d.lane}). Your tax invoice follows. Your bags are on the plan — live tracking on your booking page.`,
     subject: (d) => `Payment received · ${d.ref}`,
   },
-  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}, coming on ${d.date}, window ${d.slot}. Please keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
+  ms_assign: { wa: (d) => `Bagdrop ${d.ref}: your pickup captain has been assigned.\n• Captain: ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}\n• Pickup date: ${d.date}\n• Time window: ${d.slot}\n\nPlease keep your bags packed and ready.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Pickup captain assigned · ${d.ref}` },
   /* to the CAPTAIN themselves, not the customer — everything needed on
    * site, the moment they're assigned to a pickup. */
   captain_pickup_brief: {
     wa: (d) => `BAGDROP PICKUP BRIEF\nLR/Ref: ${d.lr}\nLane: ${d.lane}\nPieces: ${d.pieces}\nDate: ${d.date} · window ${d.slot}\nPickup: ${d.pickAddr}\nDeliver: ${d.dropAddr}\nContact: ${d.custName} ${d.custMobile}\nAt pickup: tag and seal every bag, weigh it, photograph it, get the customer's signature — then go to the desk; the desk records the pickup.`,
     subject: (d) => `New pickup assigned to you · ${d.lr}`,
   },
-  ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}. Your delivery captain is ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}. They hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
-  ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags. ${d.kind}: ${d.note}${d.eta ? `\nNew expected time: ${d.eta}` : ""}\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
-  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\nYour Move Pass now lists every tag number: ${d.pass}` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
-  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags have reached our ${d.hub || d.from} hub — all pieces scanned and accounted for. They leave for ${d.to} next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Reached our hub · ${d.ref}` },
-  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move — your bags departed ${d.from} towards ${d.to}${d.mode ? ` by ${d.mode.toLowerCase()}` : ""}.${d.eta ? ` Expected at ${d.to}: ${d.eta}.` : ""}${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
-  ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
-  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}${d.eta ? `, expected by ${d.eta}` : ""}. The captain hands your bags over to you or the person you name at the door.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
-  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered${d.receiver ? ` to ${d.receiver}` : ""}. ${d.pieces}, every tag scanned end to end. Thank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
+  ms_dcaptain: { wa: (d) => `Bagdrop ${d.ref}: your bags are with us in ${d.to}.\n• Delivery captain: ${d.captain}${d.captainPhone ? ` (${d.captainPhone})` : ""}\n\nThey hand the bags over against a delivery OTP sent to your phone.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Delivery captain assigned · ${d.ref}` },
+  ms_problem: { wa: (d) => `Bagdrop ${d.ref}: an update on your bags.\n• ${d.kind}: ${d.note}${d.eta ? `\n• New expected time: ${d.eta}` : ""}\n\nOur team is on it and will keep you posted. Reply here with any question.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Update on your bags · ${d.ref}` },
+  ms_picked: { wa: (d) => `Bagdrop ${d.ref}: ${d.pieces} picked up and sealed with you. Every bag is tagged and scan-tracked from here.${d.pass ? `\n• Move Pass (every tag number): ${d.pass}` : ""}${d.track ? `\n• Track live: ${d.track}` : ""}`, subject: (d) => `Picked up & sealed · ${d.ref}` },
+  ms_inscan: { wa: (d) => `Bagdrop ${d.ref}: your bags have reached our hub — all pieces scanned and accounted for.\n• Current hub: ${d.hub || d.from}\n• Next stop: ${d.to}${d.track ? `\n\nTrack live: ${d.track}` : ""}`, subject: (d) => `Reached our hub · ${d.ref}` },
+  ms_depart: { wa: (d) => `Bagdrop ${d.ref}: on the move.\n• From: ${d.from}\n• To: ${d.to}${d.mode ? `\n• Mode: ${d.mode}` : ""}${d.eta ? `\n• Expected at ${d.to}: ${d.eta}` : ""}${d.track ? `\n\nTrack live: ${d.track}` : ""}`, subject: (d) => `In transit · ${d.ref}` },
+  ms_arrive: { wa: (d) => `Bagdrop ${d.ref}: arrived at ${d.to} — all pieces scanned in. Delivery is next.${d.track ? `\n• Track live: ${d.track}` : ""}`, subject: (d) => `Arrived ${d.to} · ${d.ref}` },
+  ms_ofd: { wa: (d) => `Bagdrop ${d.ref}: out for delivery in ${d.to}.${d.eta ? `\n• Expected by: ${d.eta}` : ""}\n\nThe captain hands your bags over to you or the person you name at the door.${d.track ? `\nTrack live: ${d.track}` : ""}`, subject: (d) => `Out for delivery · ${d.ref}` },
+  ms_pod: { wa: (d) => `Bagdrop ${d.ref}: delivered${d.receiver ? ` to ${d.receiver}` : ""}.\n• ${d.pieces}, every tag scanned end to end.\n\nThank you for travelling light — we'd love your feedback.`, subject: (d) => `Delivered · ${d.ref}` },
   quote_ready: {
     wa: (d) => `Hi ${d.name}, your Bagdrop quote for ${d.lane} is ready: ${d.amount}, locked for 24 hours.\nPay securely here: ${d.link}\nRef: ${d.ref}.`,
     subject: (d) => `Your Bagdrop quote · ${d.amount} · ${d.lane}`,
