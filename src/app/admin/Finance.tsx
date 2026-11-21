@@ -5,7 +5,7 @@
  *  Delivery dates), GST5/IGST5 treatment, credit notes WITH EXPIRY, and the
  *  bank-reconciliation loop that clears "uncategorized transactions".
  *  Invoices are AUTO-ISSUED by the sweep the moment a payment is captured. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useLoad } from "@/lib/useLoad";
 import { inr } from "@/lib/pricing";
 import { gstSplit } from "@/lib/docs";
@@ -31,7 +31,7 @@ interface StatementRow {
 }
 interface LedgerEntry { id: string; kind: string; amount: number; date: string; label: string }
 
-type Tab = "overview" | "payments" | "invoices" | "credit" | "bank" | "gateway";
+type Tab = "overview" | "register" | "payments" | "invoices" | "credit" | "bank" | "gateway";
 
 export default function Finance() {
   const [all, setAll] = useState<Booking[]>([]);
@@ -49,7 +49,7 @@ export default function Finance() {
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap gap-1.5">
-        {([["overview", "CFO overview"], ["payments", `Payments to verify${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"], ["gateway", "Gateway (Razorpay)"]] as [Tab, string][]).map(([k, n]) => (
+        {([["overview", "CFO overview"], ["register", "Payments"], ["payments", `Payments to verify${pendingVerification ? ` · ${pendingVerification}` : ""}`], ["invoices", "Invoices"], ["credit", "Credit notes"], ["bank", "Banking & reconciliation"], ["gateway", "Gateway (Razorpay)"]] as [Tab, string][]).map(([k, n]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "text-white" : "hover:opacity-80"}`}
             style={tab === k ? { background: "var(--a-navy)" } : { background: "var(--a-surface-2)", color: "var(--a-muted)" }}>{n}</button>
@@ -57,12 +57,224 @@ export default function Finance() {
       </div>
       <div key={tab} className="anim-in">
         {tab === "overview" && <Overview all={all} prodCapturedAll={prodCapturedAll} />}
+        {tab === "register" && <PaymentsRegister all={all} />}
         {tab === "payments" && <PaymentVerification all={all} />}
         {tab === "invoices" && <Invoices all={all} onChanged={(b) => setAll((p) => p.map((x) => (x.id === b.id ? b : x)))} />}
         {tab === "credit" && <CreditNotes bookings={all} />}
         {tab === "bank" && <BankRecon />}
         {tab === "gateway" && <GatewayRecon />}
       </div>
+    </div>
+  );
+}
+
+/* ================= payments register — every transaction, one flat list =================
+ * The old /admin/payments page's replacement: search by name/phone/payment
+ * ID, a monthly breakdown, CSV export and a refund action, built from the
+ * same live booking data every other Finance tab already reads (no
+ * separate payments table exists — each transaction lives at booking.pay /
+ * booking.pay.topup). A captured payment's own Refund button posts to
+ * /api/admin/payments (action "refund"), which only ever records that
+ * money was sent back outside this app (Razorpay dashboard or bank
+ * transfer) and tells the client — it never calls a gateway refund API
+ * itself, same pattern as payment verification. */
+type RegRow = {
+  key: string; b: Booking; kind: "full" | "topup"; date: string; paymentNo: string;
+  amount: number; status: string; gateway: string; balance: number; invoiceNo: string | null;
+};
+function rowsFromBooking(b: Booking): RegRow[] {
+  const out: RegRow[] = [];
+  const p = b.pay;
+  if (!p) return out;
+  const invs = (b.docs ?? []).filter((d) => d.type === "INV");
+  const invoiceNo = invs.length ? invs[invs.length - 1].no : null;
+  const date = p.status === "refunded" ? p.refundedAt ?? p.at
+    : p.status === "captured" ? p.verifiedAt ?? p.at
+    : p.status === "rejected" ? p.rejectedAt ?? p.at
+    : p.status === "submitted" ? p.submittedAt ?? p.at
+    : p.at;
+  out.push({
+    key: `${b.id}:full`, b, kind: "full", date: date ?? p.at, paymentNo: p.utr || b.id,
+    amount: p.status === "refunded" ? (p.refundedAmount ?? p.amount) : p.amount, status: p.status,
+    gateway: p.gateway, balance: Math.max(0, b.quote.total - p.amount), invoiceNo,
+  });
+  if (p.topup && p.topup.status !== "due") {
+    out.push({
+      key: `${b.id}:topup`, b, kind: "topup", date: p.topup.submittedAt ?? p.at, paymentNo: p.topup.utr || b.id,
+      amount: p.topup.amount, status: p.topup.status, gateway: p.gateway, balance: 0, invoiceNo,
+    });
+  }
+  return out;
+}
+const REG_STATUS: { key: string; name: string }[] = [
+  { key: "all", name: "All" }, { key: "pending", name: "Pending" }, { key: "submitted", name: "Submitted" },
+  { key: "captured", name: "Paid" }, { key: "rejected", name: "Rejected" }, { key: "refunded", name: "Refunded" },
+];
+const regTone = (s: string) => (s === "captured" ? "ok" : s === "rejected" ? "bad" : s === "refunded" ? "info" : s === "submitted" ? "warn" : "muted") as "ok" | "bad" | "info" | "warn" | "muted";
+const monthName = (k: string) => new Date(`${k}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+function PaymentsRegister({ all }: { all: Booking[] }) {
+  const rows = useMemo(() => all.flatMap(rowsFromBooking).sort((a, b) => (b.date || "").localeCompare(a.date || "")), [all]);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("all");
+  const [month, setMonth] = useState("all");
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [refundOpen, setRefundOpen] = useState<string | null>(null);
+  const [refundNote, setRefundNote] = useState("");
+  const [refundRef, setRefundRef] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const months = useMemo(() => Array.from(new Set(rows.map((r) => dayKey(r.date).slice(0, 7)).filter(Boolean))).sort().reverse(), [rows]);
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return rows.filter((r) =>
+      (status === "all" || r.status === status) &&
+      (month === "all" || dayKey(r.date).slice(0, 7) === month) &&
+      (!term || r.b.traveller.name.toLowerCase().includes(term) || r.b.traveller.mobile.includes(term) || r.paymentNo.toLowerCase().includes(term) || r.b.id.toLowerCase().includes(term)));
+  }, [rows, q, status, month]);
+
+  const totals = useMemo(() => ({
+    count: rows.length,
+    collected: rows.filter((r) => r.status === "captured" || r.status === "refunded").reduce((s, r) => s + r.amount, 0),
+    pending: rows.filter((r) => r.status === "pending" || r.status === "submitted").reduce((s, r) => s + r.amount, 0),
+    refunded: rows.filter((r) => r.status === "refunded").length,
+  }), [rows]);
+
+  const monthly = useMemo(() => {
+    const m = new Map<string, { count: number; collected: number; pending: number }>();
+    for (const r of rows) {
+      const k = dayKey(r.date).slice(0, 7);
+      if (!k) continue;
+      const e = m.get(k) ?? { count: 0, collected: 0, pending: 0 };
+      e.count++;
+      if (r.status === "captured" || r.status === "refunded") e.collected += r.amount;
+      if (r.status === "pending" || r.status === "submitted") e.pending += r.amount;
+      m.set(k, e);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [rows]);
+
+  async function refund(r: RegRow) {
+    if (refundNote.trim().length < 3) { setMsg("Say why this is being refunded — the client sees it."); return; }
+    setBusyKey(r.key); setMsg(null);
+    try {
+      const res = await fetch("/api/admin/payments", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: r.b.id, kind: r.kind, action: "refund", note: refundNote.trim(), ref: refundRef.trim() }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.detail ?? j?.error ?? `HTTP_${res.status}`);
+      refreshBookings();
+      setMsg(`Refunded ${r.b.id} — the client is notified.`);
+      setRefundOpen(null); setRefundNote(""); setRefundRef("");
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
+    setBusyKey(null);
+  }
+
+  function exportCsv() {
+    const header = ["Date", "Payment#", "Pickup date", "Customer", "Mobile", "Invoice#", "Mode", "Amount", "Unused amount", "Status"];
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [header.map(esc).join(",")].concat(filtered.map((r) => [
+      dayKey(r.date), r.paymentNo, r.b.pickupDate || r.b.date || "", r.b.traveller.name, r.b.traveller.mobile,
+      r.invoiceNo ?? "", r.gateway, r.amount, r.balance, r.status,
+    ].map(esc).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `bagdrop-payments-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Total transactions" value={String(totals.count)} />
+        <Kpi label="Collected" value={inr(totals.collected)} />
+        <Kpi label="Pending" value={inr(totals.pending)} warn={totals.pending > 0} />
+        <Kpi label="Refunded" value={String(totals.refunded)} />
+      </div>
+
+      {monthly.length > 0 && (
+        <Card>
+          <h3 className="mb-2 font-display text-sm font-bold">Monthly breakdown</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-xs">
+              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-muted"><th className="py-1.5 pr-2">Month</th><th className="pr-2 text-right">Transactions</th><th className="pr-2 text-right">Collected</th><th className="text-right">Pending</th></tr></thead>
+              <tbody>
+                {monthly.map(([k, e]) => (
+                  <tr key={k} className="border-t border-line">
+                    <td className="py-1.5 pr-2 font-semibold">{monthName(k)}</td>
+                    <td className="pr-2 text-right">{e.count}</td>
+                    <td className="pr-2 text-right tabular-nums text-green-700">{inr(e.collected)}</td>
+                    <td className="text-right tabular-nums text-amber-600">{e.pending ? inr(e.pending) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-display text-sm font-bold">Payments <span className="font-normal text-faint">{filtered.length} of {rows.length}</span></h3>
+          <Button size="sm" variant="outline" onClick={exportCsv}>Export CSV</Button>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Input className="w-64" placeholder="Search by name, phone or payment ID…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Select className="w-auto py-1.5 text-xs" value={status} onChange={(e) => setStatus(e.target.value)}>
+            {REG_STATUS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+          </Select>
+          <Select className="w-auto py-1.5 text-xs" value={month} onChange={(e) => setMonth(e.target.value)}>
+            <option value="all">All months</option>
+            {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+          </Select>
+          <Button size="sm" variant="ghost" onClick={() => refreshBookings()}>Refresh</Button>
+        </div>
+        {msg && <p className="mb-2 rounded-xl bg-paper p-2.5 text-xs">{msg}</p>}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] text-xs">
+            <thead><tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+              <th className="py-1.5 pr-2">Date</th><th className="pr-2">Payment#</th><th className="pr-2">Pickup date</th><th className="pr-2">Customer</th>
+              <th className="pr-2">Invoice#</th><th className="pr-2">Mode</th><th className="pr-2 text-right">Amount</th><th className="pr-2 text-right">Unused amount</th><th className="pr-2">Status</th><th />
+            </tr></thead>
+            <tbody>
+              {filtered.length === 0 && <tr><td colSpan={10} className="py-6 text-center text-muted">No transactions match.</td></tr>}
+              {filtered.map((r) => (
+                <Fragment key={r.key}>
+                  <tr className="border-t border-line">
+                    <td className="py-1.5 pr-2">{dayKey(r.date) || "—"}</td>
+                    <td className="pr-2 font-mono text-[11px]">{r.paymentNo}{r.kind === "topup" ? " (top-up)" : ""}</td>
+                    <td className="pr-2">{r.b.pickupDate || r.b.date || "—"}</td>
+                    <td className="pr-2">{r.b.traveller.name}<br /><span className="text-faint">{r.b.traveller.mobile}</span></td>
+                    <td className="pr-2 font-mono text-[11px]">{r.invoiceNo ?? "—"}</td>
+                    <td className="pr-2">{r.gateway}</td>
+                    <td className="pr-2 text-right tabular-nums">{inr(r.amount)}</td>
+                    <td className="pr-2 text-right tabular-nums">{r.balance > 0 ? inr(r.balance) : "—"}</td>
+                    <td className="pr-2"><Badge tone={regTone(r.status)}>{r.status}</Badge></td>
+                    <td className="text-right">
+                      {r.status === "captured" && r.kind === "full" && (
+                        <Button size="sm" variant="ghost" onClick={() => setRefundOpen(refundOpen === r.key ? null : r.key)}>Refund</Button>
+                      )}
+                    </td>
+                  </tr>
+                  {refundOpen === r.key && (
+                    <tr className="border-t border-dashed border-line bg-paper">
+                      <td colSpan={10} className="p-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input className="w-44" placeholder="Refund ref (optional)" value={refundRef} onChange={(e) => setRefundRef(e.target.value)} />
+                          <Input className="flex-1" placeholder="Reason (required, the client sees it)" value={refundNote} onChange={(e) => setRefundNote(e.target.value)} />
+                          <Button size="sm" disabled={busyKey === r.key} onClick={() => void refund(r)}>{busyKey === r.key ? "Refunding…" : `Refund ${inr(r.amount)}`}</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setRefundOpen(null); setRefundNote(""); setRefundRef(""); }}>Cancel</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import type { Booking } from "@/lib/types";
 
 const BUCKET = "payment-proofs";
 
-type Body = { id?: string; action?: "verify" | "reject" | "proofUrl"; kind?: "full" | "topup"; note?: string; ref?: string };
+type Body = { id?: string; action?: "verify" | "reject" | "proofUrl" | "refund"; kind?: "full" | "topup"; note?: string; ref?: string; amount?: number };
 
 async function handlePOST(req: Request) {
   if (!(await isAdminRequest())) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -38,13 +38,32 @@ async function handlePOST(req: Request) {
 
   if (!(await actorCan("act.verify_payments"))) return NextResponse.json({ error: "FORBIDDEN", detail: "Your login doesn't have “Verify payments and refunds”." }, { status: 403 });
   const who = await actorName();
-  if (target.status !== "submitted") return NextResponse.json({ error: "NOT_SUBMITTED", detail: "Only a submitted payment can be verified or rejected." }, { status: 409 });
+  if ((b.action === "verify" || b.action === "reject") && target.status !== "submitted") {
+    return NextResponse.json({ error: "NOT_SUBMITTED", detail: "Only a submitted payment can be verified or rejected." }, { status: 409 });
+  }
   const note = (b.note ?? "").trim().slice(0, 200);
   const ref = (b.ref ?? "").trim().slice(0, 60);
   const now = new Date().toISOString();
   const to = { name: doc.traveller.name, mobile: doc.traveller.mobile, email: doc.traveller.email };
   const origin = publicOrigin(req);
   let next: Booking;
+
+  if (b.action === "refund") {
+    if (kind !== "full") return NextResponse.json({ error: "BAD_ACTION", detail: "An extra-bags top-up can't be refunded here — handle it as a credit note in Finance." }, { status: 400 });
+    if (doc.pay.status !== "captured") return NextResponse.json({ error: "NOT_CAPTURED", detail: "Only a captured (verified) payment can be refunded." }, { status: 409 });
+    if (!note) return NextResponse.json({ error: "NEEDS_NOTE", detail: "Say why this is being refunded — the client sees it." }, { status: 400 });
+    const amount = b.amount != null && Number.isFinite(b.amount) && b.amount > 0 ? Math.min(Math.round(b.amount), doc.pay.amount) : doc.pay.amount;
+    next = {
+      ...doc,
+      pay: { ...doc.pay, status: "refunded", refundedAt: now, refundedBy: who, refundedAmount: amount, refundedRef: ref || undefined, refundedNote: note },
+      events: [...doc.events, { at: now, by: "admin", text: `Payment ${inr(amount)} REFUNDED by ${who}${ref ? ` · ref ${ref}` : ""} · ${note}` }],
+    };
+    await notify("payment_refunded", to, { ref: doc.id, amount: inr(amount), note }, `refund:${doc.id}:${now}`);
+    const up = await saveOrThrow(sb, next);
+    if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
+    kickSweep();
+    return NextResponse.json({ ok: true, booking: next });
+  }
 
   if (b.action === "verify") {
     if (kind === "full") {
