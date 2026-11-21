@@ -316,6 +316,10 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Hi ${d.name}, we couldn't match your payment for ${d.ref} to our bank receipt${d.note ? ` (${d.note})` : ""}. Please check and re-upload the payment proof in your dashboard: ${d.dashboard}`,
     subject: (d) => `Payment not verified · ${d.ref}`,
   },
+  payment_refunded: {
+    wa: (d) => `Hi ${d.name}, ${d.amount} for your booking ${d.ref} has been refunded${d.note ? ` (${d.note})` : ""}. It should reflect in your original payment method within a few business days.`,
+    subject: (d) => `Refund processed · ${d.amount} · ${d.ref}`,
+  },
   /* ---- B2B: the booking agent hears every step of their client's booking ---- */
   agent_update: {
     wa: (d) => `Hi ${d.name}, Bagdrop partner update · ${d.ref} · ${d.client} (${d.lane}): ${d.update}\nAll your bookings, live: ${d.portal}`,
