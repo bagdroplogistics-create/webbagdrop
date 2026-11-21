@@ -26,6 +26,7 @@ import type { Booking } from "@/lib/types";
 import { getEvent } from "@/lib/eventDb";
 import { bookingOpen, closesText } from "@/lib/weddingStatus";
 import { withBase } from "@/lib/basePath";
+import { Y2K_CANCEL_POLICY, Y2K_INSURANCE_PER_BAG_INR, Y2K_MIN_BAGS_MESSAGE, Y2K_MIN_BAGS_PER_ADDRESS, Y2K_PER_BAG_INR, y2kQuote } from "@/lib/y2kPricing";
 
 export function initY2k(): () => void {
   const ac = new AbortController();
@@ -121,6 +122,10 @@ export function initY2k(): () => void {
         if (b.colourPick === OTHER && !b.colour.trim()) e[`bags.${i}.colour`] = "Type the colour.";
         if (b.value && !(+b.value >= 0)) e[`bags.${i}.value`] = "Amount in rupees.";
       });
+      S.pickups.forEach((p: any, i: number) => {
+        if (!p.members.length) return; // an address nobody is collected from is skipped, same as above
+        if (S.bags.filter((b: any) => b.pickup === p.id).length < Y2K_MIN_BAGS_PER_ADDRESS) e[`pickups.${i}.minBags`] = Y2K_MIN_BAGS_MESSAGE;
+      });
     }
     if (t === 1 && S.bags.some((b: any) => b.ret)) {
       if (!S.ret.date) e["ret.date"] = "Choose 18 or 19 December.";
@@ -170,7 +175,7 @@ export function initY2k(): () => void {
       ${inp(`pickups.${pi}.landmark`, "Landmark", { opt: true, ph: "Near…" })}
       ${sel(`pickups.${pi}.date`, "Pickup date", PICK_DATES, { ph: "Choose a date" })}
       ${sel(`pickups.${pi}.slot`, "Pickup time", SLOTS, { ph: "Choose a time" })}
-    </div>`;
+    </div>${err(`pickups.${pi}.minBags`)}`;
   }
   function bagCard(b: any, i: number) {
     const sizes = BAG_TYPES.slice(0, 2);
@@ -251,7 +256,8 @@ export function initY2k(): () => void {
     <label class="tick${bad("decl.value")}"><input type="checkbox" data-b="decl.value"${S.decl.value ? " checked" : ""}> The declared values, where given, are accurate.</label>
     <label class="tick${bad("decl.terms")}"><input type="checkbox" data-b="decl.terms"${S.decl.terms ? " checked" : ""}> I agree to Bagdrop's terms of carriage.</label>
     <label class="tick${bad("decl.consent")}"><input type="checkbox" data-b="decl.consent"${S.decl.consent ? " checked" : ""}> Bagdrop may use these addresses and details only to handle these bags, and delete them after the return delivery.</label>
-  </div>${showErrors && Object.keys(E).some((k) => k.startsWith("decl.")) ? `<p class="msg" style="margin-top:10px">Please tick all four to confirm.</p>` : ""}`;
+  </div>${showErrors && Object.keys(E).some((k) => k.startsWith("decl.")) ? `<p class="msg" style="margin-top:10px">Please tick all four to confirm.</p>` : ""}
+  <div class="callout warn" style="margin-top:20px"><b>Cancellation policy.</b> ${esc(Y2K_CANCEL_POLICY)}</div>`;
   }
   /* ---------- Render ---------- */
   function renderPanel() {
@@ -298,7 +304,17 @@ export function initY2k(): () => void {
   </dl>
   ${st.bags.length ? `<hr><dl>${Object.entries(types).map(([t, n]) => `<dt>${esc(t)}</dt><dd>${n}</dd>`).join("")}</dl>` : ""}
   ${fl.length ? `<hr><div class="flags">${fl.map(([c, t]) => `<div class="flag ${c}"><i></i>${esc(t)}</div>`).join("")}</div>` : `<hr><div class="flags"><div class="flag g"><i></i>Nothing needs attention</div></div>`}
-  <hr><div class="mini" style="color:rgba(244,238,228,.6)">Charges are confirmed on WhatsApp before pickup. <span class="proto" style="color:var(--sand);border-color:var(--sand)">Pricing TBC</span></div>`;
+  ${renderPricing(st.bags.length)}
+  <hr><div class="mini" style="color:rgba(244,238,228,.6)">Hosts are billed directly for this wedding — there is nothing for guests to pay on this page.</div>`;
+  }
+  function money(n: number) { return "Rs. " + Math.round(n).toLocaleString("en-IN"); }
+  function renderPricing(bagCount: number) {
+    const q = y2kQuote(bagCount);
+    return `<hr><dl>
+    <dt>Bag charges</dt><dd>${money(q.bagTotal)} <span class="hint">(${bagCount} &times; ${money(Y2K_PER_BAG_INR)}, GST-inclusive)</span></dd>
+    <dt>Insurance</dt><dd>${Y2K_INSURANCE_PER_BAG_INR > 0 ? money(q.insuranceTotal) : "To be confirmed"}</dd>
+    <dt>Total</dt><dd><b>${money(q.total)}</b></dd>
+  </dl>`;
   }
 
   /* ---------- Tags ---------- */
@@ -351,6 +367,7 @@ export function initY2k(): () => void {
   <div style="display:flex;gap:10px;flex-wrap:wrap">${closed ? "" : `<button class="btn ghost sm" type="button" data-act="newBooking">New booking</button>`}<a class="btn sm" href="#track">Track bags</a><a class="btn ghost sm" href="${withBase("/e/y2k/my")}">My bags</a></div></div>
   ${teamNote()}
   ${booking.saved === false ? `<div class="callout warn" style="margin-bottom:16px">Saved in this browser only — the back end could not be reached. The booking syncs to Bagdrop ops when the connection returns.</div>` : ""}
+  <div class="callout warn" style="margin-bottom:16px"><b>Cancellation policy.</b> ${esc(Y2K_CANCEL_POLICY)}</div>
   <div class="lab" style="margin-bottom:10px">Your ${st.bags.length} bag tag${st.bags.length > 1 ? "s" : ""} <em>· our agent brings these printed to your door</em></div>
   <div class="tags">${st.bags.map((b: any) => tagHTML(b, st, code)).join("")}</div>
   <div class="lab" style="margin:26px 0 10px">WhatsApp confirmation <em>· what the guest receives</em></div>
@@ -365,6 +382,7 @@ export function initY2k(): () => void {
     st.members.forEach((m: any) => { const n = st.bags.filter((b: any) => b.owner === m.id).length; if (n) lines.push(`${m.name}: ${n} bag${n > 1 ? "s" : ""} → ${m.room ? "Room " + m.room : "bell desk until room is assigned"}`); });
     const r = st.bags.filter((b: any) => b.ret).length; lines.push("", `Return: ${r} bag${r !== 1 ? "s" : ""} from Taj Aravali${+st.extraReturn ? ` (+${st.extraReturn} extra expected)` : ""}.`);
     lines.push("", "Our agent brings printed tags and seals each bag at your door. Returning bags keep the same tag.");
+    lines.push("", Y2K_CANCEL_POLICY);
     return lines.join("\n");
   }
 
@@ -537,7 +555,7 @@ export function initY2k(): () => void {
       family: { name: st.family.familyName, side: st.family.side, guests: st.members.length },
       payer: { name: "Host account · #Y2K", contact: "" },
       note: st.notes || "", source: "wedding desk · #Y2K",
-      quote: { qid: null, total: 0, breakdown: { internal: true, hostBilled: true } },
+      quote: { qid: null, total: y2kQuote(st.bags.length).total, breakdown: { internal: true, hostBilled: true } },
       identity: { ok: true, at: doc.updatedAt, method: "Declarations signed on the wedding desk", score: 0.9 },
       pay: null, admin: prev.admin || {},
       events: (prev.events || []).concat([{ at: doc.updatedAt, by: "customer",

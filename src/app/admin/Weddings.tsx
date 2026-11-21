@@ -16,13 +16,14 @@ import { approvalCounts, bookingOpen, closesText, statusForStage, weddingStatus 
 import { teamView } from "@/lib/weddingTeamView";
 import TeamDesk, { type TeamApi } from "@/components/wedding/TeamDesk";
 import { inr } from "@/lib/pricing";
+import { Y2K_INSURANCE_PER_BAG_INR, Y2K_MIN_BAGS_PER_ADDRESS, Y2K_PER_BAG_INR, y2kQuote } from "@/lib/y2kPricing";
 import JourneyPanel from "./JourneyPanel";
 import { HostInvoiceDoc } from "./DocumentView";
 
 type WeddingState = {
   members?: { id: string; name?: string; room?: string }[];
-  bags?: { id: string; owner?: string; type?: string; colour?: string; ret?: boolean; hang?: boolean; value?: string }[];
-  pickups?: { id: string; date?: string }[];
+  bags?: { id: string; owner?: string; pickup?: string; type?: string; colour?: string; ret?: boolean; hang?: boolean; value?: string }[];
+  pickups?: { id: string; label?: string; date?: string; members?: string[] }[];
   extraReturn?: string;
   family?: { phone?: string };
 };
@@ -274,6 +275,23 @@ function EventDetail({
                   {" · "}
                   <a className="font-semibold text-brand hover:underline" href={withBase(`/api/admin/wedding-tags?event=${encodeURIComponent(event.id)}&id=${encodeURIComponent(b.id)}&media=4x6&mark=1`)} target="_blank" rel="noreferrer">Print this family&apos;s tags</a>
                 </p>
+                {b.eventCode === "Y2K-WED" && (
+                  <p className="text-xs text-muted">
+                    Pricing: {st?.bags?.length ?? 0} bag(s) &times; {inr(Y2K_PER_BAG_INR)} (GST-inclusive) = {inr(y2kQuote(st?.bags?.length ?? 0).bagTotal)}
+                    {" + insurance "}{Y2K_INSURANCE_PER_BAG_INR > 0 ? inr(y2kQuote(st?.bags?.length ?? 0).insuranceTotal) : "to be confirmed"}
+                    {" = "}<b>{inr(b.quote.total)}</b>
+                    {st?.pickups?.length ? (
+                      <>
+                        {" · "}
+                        {st.pickups.filter((p) => (p.members?.length ?? 0) > 0).map((p) => {
+                          const n = st.bags?.filter((bg) => bg.pickup === p.id).length ?? 0;
+                          return `${p.label || p.id}: ${n} bag${n === 1 ? "" : "s"}${n < Y2K_MIN_BAGS_PER_ADDRESS ? " (below min)" : ""}`;
+                        }).join(" · ")}
+                      </>
+                    ) : null}
+                    {" · cancellation: by phone (6357115711) only — see JourneyPanel above to cancel from the team side"}
+                  </p>
+                )}
                 {st?.bags?.length ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
