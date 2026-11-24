@@ -9,8 +9,17 @@ import { failures, recordFailure } from "@/lib/throttle";
  *   {login, password}  a team member: email or mobile + password. 5 wrong
  *                      tries lock the account for 15 minutes.
  *   {key}              the owner's emergency admin key — every use is
- *                      written to the audit trail and alerts the team. */
+ *                      written to the audit trail and alerts the team.
+ *
+ *  The token is also echoed in the JSON body, but ONLY when the request
+ *  sends `x-bagdrop-client: mobile` — the mobile app has no browser cookie
+ *  jar, so it stores this itself (expo-secure-store) and sends it back as
+ *  `Authorization: Bearer <token>` (see src/proxy.ts). The ordinary web
+ *  login never sends that header, so its httpOnly cookie stays the only
+ *  place the token exists for a browser session — unchanged, same as
+ *  before this file was touched. */
 const cookie = (res: NextResponse, token: string) => res.cookies.set(ADMIN_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: ADMIN_COOKIE_MAX_AGE });
+const isMobile = (req: Request) => req.headers.get("x-bagdrop-client") === "mobile";
 
 export async function POST(req: Request) {
   let body: { key?: string; login?: string; password?: string };
@@ -30,8 +39,9 @@ export async function POST(req: Request) {
       await audit(sb, { id: "owner", name: "Owner (emergency key)" }, `Signed in with the owner emergency key (${ip})`).catch(() => undefined);
       await opsNotify(`BAGDROP OS: someone signed in with the owner emergency key at ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (${ip}). If this wasn't you, change ADMIN_SECRET_KEY.`, "Owner emergency key used", `ownerkey:${Date.now()}`).catch(() => 0);
     }
-    const res = NextResponse.json({ ok: true, owner: true });
-    cookie(res, makeSessionToken());
+    const token = makeSessionToken();
+    const res = NextResponse.json({ ok: true, owner: true, ...(isMobile(req) ? { token } : {}) });
+    cookie(res, token);
     return res;
   }
 
@@ -55,8 +65,9 @@ export async function POST(req: Request) {
   const now = new Date().toISOString();
   await saveUser(sb, { ...u, failed: 0, lockedUntil: null, lastLogin: now });
   await audit(sb, u, "Signed in").catch(() => undefined);
-  const res = NextResponse.json({ ok: true, mustChange: u.mustChange });
-  cookie(res, makeUserToken(u.id, u.ver));
+  const token = makeUserToken(u.id, u.ver);
+  const res = NextResponse.json({ ok: true, mustChange: u.mustChange, ...(isMobile(req) ? { token } : {}) });
+  cookie(res, token);
   return res;
 }
 

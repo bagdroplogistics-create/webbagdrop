@@ -37,7 +37,13 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  const s = parseSessionToken(req.cookies.get(ADMIN_COOKIE)?.value);
+  /* The web admin carries its session as the httpOnly bagdrop_admin cookie.
+   * A native app has no browser cookie jar, so /api/admin/* also accepts the
+   * exact same signed token as "Authorization: Bearer <token>" — same
+   * parseSessionToken() verification, same 12h expiry, nothing about the
+   * cookie path changes. Cookie wins if both are somehow present. */
+  const bearer = req.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  const s = parseSessionToken(req.cookies.get(ADMIN_COOKIE)?.value ?? bearer);
   if (!s) return unauthorized();
 
   let actor: Actor;
