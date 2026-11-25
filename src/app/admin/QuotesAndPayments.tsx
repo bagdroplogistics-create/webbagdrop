@@ -228,7 +228,7 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
   const [err, setErr] = useState<{ text: string; stale?: boolean } | null>(null);
   const [done, setDone] = useState("");
   const [saved, setSaved] = useState<Booking | null>(null);
-  const [viewingDoc, setViewingDoc] = useState<DocRecord | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<{ booking: Booking; doc: DocRecord } | null>(null);
 
   const booking = editing.kind === "booking" ? all.find((b) => b.id === editing.id) ?? null : null;
   const estimateDoc = booking?.docs?.filter((d) => d.type === "PI").slice(-1)[0] ?? null;
@@ -486,7 +486,7 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
               <div className="mb-4 rounded-xl border border-[#EA580C]/30 bg-orange-50 p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>Estimate <b className="font-mono">{estimateDisplayNo(estimateDoc.no)}</b> — ready to send to the customer.</span>
-                  <Button size="sm" variant="outline" onClick={() => setViewingDoc(estimateDoc)}>View / print</Button>
+                  <Button size="sm" variant="outline" onClick={() => booking && estimateDoc && setViewingDoc({ booking, doc: estimateDoc })}>View / print</Button>
                 </div>
                 {!amendable && (
                   <p className="mt-2 text-xs text-stone-600">
@@ -554,6 +554,7 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
               <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(link)}>Copy payment link</Button>
               <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(waText)}>Copy WhatsApp message</Button>
               <Button size="sm" variant="outline" onClick={() => window.open(link, "_blank")}>Open as the customer</Button>
+              {(() => { const d = saved.docs?.filter((x) => x.type === "PI").slice(-1)[0]; return d ? <Button size="sm" onClick={() => setViewingDoc({ booking: saved, doc: d })}>View / download quotation PDF</Button> : null; })()}
             </div>
           </Card>
         )}
@@ -605,7 +606,7 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
             </div>
           )}
       </Card>
-      {viewingDoc && booking && <DocumentView booking={booking} doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
+      {viewingDoc && <DocumentView booking={viewingDoc.booking} doc={viewingDoc.doc} onClose={() => setViewingDoc(null)} />}
     </div>
   );
 }

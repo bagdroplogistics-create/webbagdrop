@@ -6,7 +6,7 @@ import { quotePayload, sign } from "@/lib/sign";
 import { inr, isChartPriced, quote } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";
 import { loadPayConfig, decisionOf } from "@/lib/clientView";
-import { nextDocNo } from "@/lib/docs";
+import { issueEstimate } from "@/lib/docs";
 import { isHostBilled, isPaid } from "@/lib/payState";
 import { notify, kickSweep } from "@/lib/automation";
 import { dropPaymentLink, ensurePaymentLink } from "@/lib/paymentLinks";
@@ -152,32 +152,19 @@ async function handlePOST(req: Request) {
   /* a priced, non-hosted approval gets its customer-ready Estimate (the "PI"
    * doc type, displayed as "Estimate"/"QT-…") the moment the price is final
    * — no separate "generate quote" click, matching how LR auto-issues on
-   * payment. Hosted families aren't billed, so there's nothing to quote
-   * them. Idempotent: if this booking already has one, the SAME number is
-   * kept (never a second estimate for one booking) — but if staff corrected
-   * a mistake since it was issued (a revise → re-approve cycle, or a price-
-   * changing edit from the quote desk) and the amount actually moved, the
-   * existing document is updated in place and the correction is logged —
-   * same principle as an LR amendment: number stays, every change is on the
-   * record. Never blocks the approval itself — a numbering hiccup here
-   * shouldn't stop the customer from being told they're approved. */
-  if (b.decision === "approve" && !hosted && next.quote.total > 0) {
+   * payment. issueEstimate() (src/lib/docs.ts) is idempotent and shared
+   * with quotes/route.ts, which already issues one when the quote is first
+   * created — this call mainly covers a revise → re-approve cycle, or a
+   * price-changing edit from the quote desk, where the amount moved since;
+   * the correction is logged here, same principle as an LR amendment:
+   * number stays, every change is on the record. */
+  if (b.decision === "approve") {
     const existing = (next.docs ?? []).find((d) => d.type === "PI");
-    try {
-      if (!existing) {
-        const estimateNo = await nextDocNo(sb, "PI");
-        next = { ...next, docs: [...(next.docs ?? []), { type: "PI", no: estimateNo, at: now, amount: next.quote.total, by: await actorName() }] };
-      } else if (existing.amount !== next.quote.total) {
-        const prevAmount = existing.amount;
-        const who = await actorName();
-        next = {
-          ...next,
-          docs: next.docs!.map((d) => (d === existing ? { ...d, amount: next.quote.total, at: now, by: who } : d)),
-          events: [...next.events, { at: now, by: "admin", text: `Estimate ${existing.no} corrected by ${who} — ${inr(prevAmount)} → ${inr(next.quote.total)}` }],
-        };
-      }
-    } catch (e) {
-      console.error("Auto-estimate generation failed:", e instanceof Error ? e.message : e);
+    const who = await actorName();
+    next = await issueEstimate(sb, next, who);
+    const updated = (next.docs ?? []).find((d) => d.type === "PI");
+    if (existing && updated && existing.amount !== updated.amount) {
+      next = { ...next, events: [...next.events, { at: now, by: "admin", text: `Estimate ${existing.no} corrected by ${who} — ${inr(existing.amount)} → ${inr(updated.amount)}` }] };
     }
   }
 
