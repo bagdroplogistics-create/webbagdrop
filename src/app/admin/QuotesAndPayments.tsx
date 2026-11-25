@@ -22,7 +22,7 @@ import AirportPicker from "@/components/booking/AirportPicker";
 import { computeTravelPlan, isSlotFeasible, SLOTS } from "@/lib/travelPlan";
 import { refreshBookings, watchAdminBookings } from "@/lib/adminApi";
 import { deskLock } from "@/lib/deskRules";
-import { isPaid } from "@/lib/payState";
+import { isHostBilled, isPaid } from "@/lib/payState";
 import { pcsLabel } from "@/lib/opsModel";
 import { estimateDisplayNo } from "@/lib/docs";
 import DocumentView from "./DocumentView";
@@ -293,6 +293,12 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
   const holds = !!booking && !priceInputsMoved && !booking.quote.breakdown?.ror && booking.quote.total > 0
     && (booking.quote.breakdown?.rule === "team price (manual)" || !booking.quote.validUntil || (!!now && Date.parse(booking.quote.validUntil) >= now));
   const acceptPrice = team > 0 ? team : holds ? booking!.quote.total : chartTotal ?? null;
+  /* hosted wedding families are never shown a price here — the host pays,
+   * not the guest (see api/admin/decision's own "hosted" branch, which
+   * already ignores any price for "approve"). "Send revised price" has no
+   * such guard server-side, so disable it in the UI and block it at the
+   * API too — nothing with a ₹ amount should ever reach a hosted family. */
+  const hosted = !!booking && isHostBilled(booking);
 
   async function call(url: string, method: "POST" | "PATCH", body: unknown) {
     setBusy(true); setErr(null); setDone("");
@@ -507,11 +513,12 @@ export default function QuotesAndPayments({ openId }: { openId?: string }) {
                 <Field label="Message to the customer (needed to ask, hold or reject; optional otherwise)">
                   <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Pickup window confirmed for 10 am to 12 noon" />
                 </Field>
+                {hosted && <p className="mb-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Billed to the hosts, not this family — Accept confirms with no price shown, and Send revised price is disabled.</p>}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button disabled={acceptPrice == null || acceptPrice <= 0} onClick={() => void decide("approve")}>
-                    {acceptPrice ? `Accept at ${inr(acceptPrice)} and send payment link` : "Accept and send payment link"}
+                  <Button disabled={!hosted && (acceptPrice == null || acceptPrice <= 0)} onClick={() => void decide("approve")}>
+                    {hosted ? "Confirm · billed to hosts, no price sent" : acceptPrice ? `Accept at ${inr(acceptPrice)} and send payment link` : "Accept and send payment link"}
                   </Button>
-                  <Button variant="outline" disabled={!(team > 0 || (chartTotal ?? 0) > 0)} onClick={() => void decide("revise")}>
+                  <Button variant="outline" disabled={hosted || !(team > 0 || (chartTotal ?? 0) > 0)} onClick={() => void decide("revise")}>
                     Send revised price{team > 0 ? ` ${inr(team)}` : chartTotal ? ` ${inr(chartTotal)}` : ""}
                   </Button>
                   <Button variant="outline" disabled={needsMsg} onClick={() => void decide("info")}>Ask the customer</Button>
