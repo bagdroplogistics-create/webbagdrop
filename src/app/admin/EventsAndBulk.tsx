@@ -282,7 +282,7 @@ function EventDetail({
                 <td className="pr-2">{b.traveller.name}</td>
                 <td className="pr-2">{b.from} → {b.to}</td>
                 <td className="pr-2"><Badge tone={weddingStatus(b).tone}>{weddingStatus(b).label}</Badge></td>
-                <td className="text-right">{isHostBilled(b) && !b.quote.total ? "Hosts" : inr(b.quote.total)}</td>
+                <td className="text-right">{isHostBilled(b) ? "Hosts" : inr(b.quote.total)}</td>
               </tr>
             ))}
           </tbody>
