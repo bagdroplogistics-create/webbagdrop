@@ -71,7 +71,7 @@ function bookingRow(b: Booking): Row {
     ref: b.id, name: b.traveller.name || "—", mobile: b.traveller.mobile,
     route: `${b.from} → ${b.to}`, sub: `${b.ucName} · ${b.date}`,
     pcs: pcsLabel(b.bags, b.oversize),
-    total: b.quote.breakdown.ror ? "ROR" : isHostBilled(b) && !b.quote.total ? "Hosts" : inr(b.quote.total),
+    total: b.quote.breakdown.ror ? "ROR" : isHostBilled(b) ? "Hosts" : inr(b.quote.total),
     statusLabel: (b.admin as { instant?: { expired?: boolean } }).instant && !(b.admin as { instant?: { expired?: boolean } }).instant!.expired ? `Instant lapsed · ${LABEL[b.status]}` : LABEL[b.status],
     statusTone: TONE[b.status], sortAt: b.created,
   };
@@ -379,7 +379,7 @@ export default function Inbox({ search = "", openId, onOpenQuote, onOpenOps }: {
               ["Traveller", `${booking.traveller.name} · ${booking.traveller.mobile}`],
               ["Route", `${booking.from} → ${booking.to} · ${booking.date} · ${booking.slot || "no slot"}`],
               ["Pieces", pcsLabel(booking.bags, booking.oversize)],
-              ["Quote", booking.quote.breakdown.ror ? "Rate on request" : isHostBilled(booking) && !booking.quote.total ? "Billed to the hosts · nothing to pay" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
+              ["Quote", booking.quote.breakdown.ror ? "Rate on request" : isHostBilled(booking) ? "Billed to the hosts · nothing to pay" : `${inr(booking.quote.total)}${booking.quote.qid ? ` · ${booking.quote.qid}` : ""}${booking.quote.signature ? " · signed" : ""}`],
               ["Payment", booking.pay ? `${booking.pay.status === "captured" ? "verified" : booking.pay.status === "submitted" ? "proof sent — verify in Finance" : booking.pay.status} · ${booking.pay.gateway} · ${inr(booking.pay.amount)}${booking.pay.gatewayFee ? ` + ${inr(booking.pay.gatewayFee)} Razorpay fee` : ""}` : "none"],
               ["Identity", booking.identity?.ok ? `verified · ${booking.identity.method}` : AADHAAR_REQUIRED ? "Aadhaar pending — pickup locked" : "not required in phase 1"],
             ] as const).map(([k, v]) => (
