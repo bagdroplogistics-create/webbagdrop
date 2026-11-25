@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { isAdminRequest } from "@/lib/adminAuth";
+import { isAdminRequest, actorName } from "@/lib/adminAuth";
 import { serviceClient, newToken } from "@/lib/supabaseAdmin";
 import { quote, cityByName } from "@/lib/pricing";
 import { loadMasters } from "@/lib/pricingSettings";
 import { quotePayload, sign } from "@/lib/sign";
+import { issueEstimate } from "@/lib/docs";
 import type { Booking, Mode, UseCase } from "@/lib/types";
 import { withAirportAddress } from "@/lib/airports";
 
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
   }
 
   const fromCity = cityByName(b.fromName, masters.cities), toCity = cityByName(b.toName, masters.cities);
-  const doc: Booking = {
+  let doc: Booking = {
     id, created: nowIso, status: "quoted",
     uc: b.uc ?? "", ucName: b.ucName ?? b.uc ?? "", mode,
     from: b.fromName, to: b.toName, ...withAirportAddress(b.uc, b.fromName, b.toName, b.pickAddr ?? "", b.dropAddr ?? "", masters.cities),
@@ -71,6 +72,11 @@ export async function POST(req: Request) {
     admin: typeof b.prodLeadId === "string" && /^[\w-]{1,64}$/.test(b.prodLeadId) ? { prodLeadId: b.prodLeadId } : {},
     events: [{ at: nowIso, by: "admin", text: `Quote created by the team · ${ror ? "rate on request" : `₹${q.total.toLocaleString("en-IN")} locked ${validHours}h`}` }],
   };
+  /* a priced quote gets its downloadable Estimate (the "PI" doc,
+   * displayed as "Estimate"/"QT-…") the moment it's created — the admin
+   * doesn't have to separately "approve" it first just to get a PDF to
+   * send the customer. No-op for rate-on-request (nothing priced yet). */
+  doc = await issueEstimate(sb, doc, await actorName());
 
   const { error } = await sb.from("bookings").upsert({ id, doc, status: doc.status, created: doc.created });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
