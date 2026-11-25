@@ -358,6 +358,13 @@ function Commercials({ event, onError }: { event: BagdropEvent; onError: (e: str
     } catch (e) { onError(e instanceof Error ? e.message : String(e)); }
   }
   const money = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
+  /** The #Y2K wedding desk only opens guest pickups on 9-11 Dec and returns
+   *  on 18-19 Dec (see PICK_DATES/RET_DATES in e/[code]/y2k-logic.ts) —
+   *  constrain the admin's own day pickers to that same window so a sector
+   *  rate can't be saved against a day the desk never actually offers.
+   *  Scoped to this one event id; any other wedding keeps a free date. */
+  const y2kPickBounds = event.id === "Y2K-WED" ? { min: "2026-12-09", max: "2026-12-11" } : undefined;
+  const y2kRetBounds = event.id === "Y2K-WED" ? { min: "2026-12-18", max: "2026-12-19" } : undefined;
   return (
     <div className="mb-4 rounded-xl border border-line bg-paper p-3 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -387,15 +394,15 @@ function Commercials({ event, onError }: { event: BagdropEvent; onError: (e: str
             <Field label="Expected bags"><Input value={x.bags} onChange={(e) => setX((p) => ({ ...p, bags: e.target.value }))} inputMode="numeric" placeholder="e.g. 120" /></Field>
           </div>
           <div>
-            <div className="mb-1 flex items-center justify-between"><span className="font-semibold">Rate per bag by pickup city <span className="font-normal text-muted">· before GST (5% added on invoices)</span></span><Button size="sm" variant="outline" onClick={() => setRows((list) => [...list, { city: "", rate: "", pickDay: event.dates?.in ?? "", retDay: event.dates?.out ?? "" }])}>Add a city</Button></div>
+            <div className="mb-1 flex items-center justify-between"><span className="font-semibold">Rate per bag by pickup city <span className="font-normal text-muted">· before GST (5% added on invoices)</span></span><Button size="sm" variant="outline" onClick={() => setRows((list) => [...list, { city: "", rate: "", pickDay: y2kPickBounds?.min ?? event.dates?.in ?? "", retDay: y2kRetBounds?.min ?? event.dates?.out ?? "" }])}>Add a city</Button></div>
             {rows.length === 0 && <p className="text-muted">No pickup city yet. Add each city guests travel from, with its rate.</p>}
             <div className="grid gap-2">
               {rows.map((row, i) => (
                 <div key={i} className="grid items-end gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
                   <Field label="Pickup city"><Input value={row.city} onChange={(e) => edit(i, { city: e.target.value })} placeholder="Mumbai" /></Field>
                   <Field label="Rate per bag (₹)"><Input value={row.rate} onChange={(e) => edit(i, { rate: e.target.value })} inputMode="numeric" /></Field>
-                  <Field label="Pickup day"><Input type="date" value={row.pickDay} onChange={(e) => edit(i, { pickDay: e.target.value })} /></Field>
-                  <Field label="Return day"><Input type="date" value={row.retDay} onChange={(e) => edit(i, { retDay: e.target.value })} /></Field>
+                  <Field label="Pickup day"><Input type="date" value={row.pickDay} onChange={(e) => edit(i, { pickDay: e.target.value })} min={y2kPickBounds?.min} max={y2kPickBounds?.max} /></Field>
+                  <Field label="Return day"><Input type="date" value={row.retDay} onChange={(e) => edit(i, { retDay: e.target.value })} min={y2kRetBounds?.min} max={y2kRetBounds?.max} /></Field>
                   <button type="button" className="mb-3 text-red-700 hover:underline" onClick={() => setRows((list) => list.filter((_, k) => k !== i))}>Remove</button>
                 </div>
               ))}
