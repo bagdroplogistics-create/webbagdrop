@@ -102,6 +102,10 @@ async function handlePOST(req: Request) {
       break;
     }
     case "revise": {
+      // hosts pay: never send this family a price, revised or otherwise —
+      // unlike "approve" above, nothing here would ignore `total` on its
+      // own, so refuse outright rather than risk a ₹ amount reaching them.
+      if (hosted) return NextResponse.json({ error: "HOST_BILLED", detail: "This family is billed through the host — there's no price to revise or send them." }, { status: 400 });
       if (total <= 0) return NextResponse.json({ error: "NEEDS_PRICE" }, { status: 400 });
       next.quote = signedManual(total); next.status = "revised"; state = "pending"; template = "quote_revised";
       text = `Price revised by the team to ${inr(total)}${note ? ` · ${note}` : ""} — awaiting approval`;
