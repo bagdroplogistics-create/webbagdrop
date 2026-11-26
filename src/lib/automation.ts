@@ -348,13 +348,14 @@ export const TEMPLATES: Record<string, T> = {
  *  from the live Fast2SMS dashboard to use the same `driver_details_shared_v2`
  *  template despite its body reading "delivery is on the way"), ms_picked
  *  (→ `bags_picked_up`), ms_depart (→ `bags_in_transit`), ms_ofd
- *  (→ `out_for_delivery`), ms_pod (→ `bags_delivered_review`) — all
- *  confirmed Approved in the Fast2SMS dashboard. `bags_delivered_review` is
- *  a Marketing-category template (bakes in a Google-review ask), which
+ *  (→ `out_for_delivery`), ms_pod (→ `bags_delivered_review`), move_pass
+ *  (→ `move_pass_ready`), ms_inscan (→ `bags_reached_hub`) — all confirmed
+ *  Approved in the Fast2SMS dashboard. `bags_delivered_review` is a
+ *  Marketing-category template (bakes in a Google-review ask), which
  *  carries stricter opt-in/consent rules than the Utility templates above —
  *  flagged to the founder before relying on it for every delivery. Every
- *  other internal template either has no approved match (move_pass,
- *  delivery_otp, booking_cancelled/restored/rescheduled/on_hold/rejected,
+ *  other internal template either has no approved match (delivery_otp,
+ *  booking_cancelled/restored/rescheduled/on_hold/rejected,
  *  the quote_amended_* trio, payment_rejected, booking_info_needed,
  *  instant_ack/instant_lapsed — proposed, not created, pending approval),
  *  is internal/staff-only (ops_alert, captain_pickup_brief, driver_link,
@@ -387,6 +388,11 @@ const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Re
   /* Approved — {{1}} name, {{2}} booking ID, {{3}} route, {{4}} delivered-on
    * date. Also carries a Google-review ask baked into the approved body. */
   ms_pod: { name: "bags_delivered_review", vars: (d, firstName) => [firstName, d.ref, d.lane, d.deliveredAt || "today"] },
+  /* Approved — {{1}} name, {{2}} booking ID, {{3}} route, {{4}} pickup date
+   * & time, {{5}} Move Pass link. */
+  move_pass: { name: "move_pass_ready", vars: (d, firstName) => [firstName, d.ref, d.lane, `${d.date}${d.slot ? `, ${d.slot}` : ""}`, d.pass] },
+  /* Approved — {{1}} name, {{2}} booking ID, {{3}} current hub, {{4}} next stop. */
+  ms_inscan: { name: "bags_reached_hub", vars: (d, firstName) => [firstName, d.ref, d.hub || d.from, d.to] },
 };
 
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
