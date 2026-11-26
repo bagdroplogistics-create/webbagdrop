@@ -273,9 +273,12 @@ export const TEMPLATES: Record<string, T> = {
     wa: (d) => `Guest message · ${d.family} (${d.ref})${d.tag ? ` · bag ${d.tag}` : ""}:\n"${d.text}"\nReply in the event desk: ${d.portal}`,
     subject: (d) => `Guest message · ${d.family} · ${d.ref}`,
   },
-  /* hosted wedding family: confirmed by the team, nothing to pay */
+  /* hosted wedding family: confirmed by the team, nothing to pay. Mirrors
+   * the approved WhatsApp template wedding_booking_confirmed (FAST2SMS_
+   * TEMPLATE_MAP below) field-for-field, so the email/fallback-WhatsApp
+   * text and the real template never drift apart. */
   wedding_confirmed: {
-    wa: (d) => `Hi ${d.name}, your bags for ${d.event} are CONFIRMED by Bagdrop (booking ${d.ref}, ${d.lane}). The hosts are covering this, so there is nothing to pay. Pickup: ${d.date}${d.slot ? `, ${d.slot}` : ""}. We will message you before the captain arrives.`,
+    wa: (d) => `Hi ${d.name}, good news — your bags for ${d.event} are confirmed.\nBooking: ${d.ref} (${d.lane})\nBags: ${d.bagsCount}\nPickup address: ${d.pickAddr}\nPickup time: ${d.date}, ${d.slot}\nReturn: ${d.returnSummary}\n\nThis is billed to your host, so there is nothing to pay. We'll message you again before our captain arrives to collect your bags.`,
     subject: (d) => `Bags confirmed · ${d.ref}`,
   },
   booking_rejected: {
@@ -359,6 +362,11 @@ export const TEMPLATES: Record<string, T> = {
  *  because a template with a similar name exists. */
 const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Record<string, string>, firstName: string) => string[] }>> = {
   inquiry_ack: { name: "inquiry_acknowledgment", vars: (_d, firstName) => [firstName] },
+  /* Approved 2026-11-26 — body matches TEMPLATES.wedding_confirmed.wa above
+   * field-for-field: {{1}} name, {{2}} event, {{3}} ref, {{4}} lane,
+   * {{5}} bag count, {{6}} pickup address, {{7}} pickup date, {{8}} pickup
+   * slot, {{9}} return summary ("N bags · date, slot" or "Not booked yet"). */
+  wedding_confirmed: { name: "wedding_booking_confirmed", vars: (d, firstName) => [firstName, d.event, d.ref, d.lane, d.bagsCount, d.pickAddr, d.date, d.slot, d.returnSummary] },
 };
 
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
@@ -763,6 +771,20 @@ async function capturePass(stats: SweepStats) {
   }
 }
 
+/** The Y2K wedding desk's return-trip summary for the confirmation message —
+ *  bags ticked "ret" plus the family's own return date/window, same fields
+ *  waText() in y2k-logic.ts already reads off .wedding.state. "Not booked
+ *  yet" when no bag is marked for return (a valid, common state — many
+ *  guests carry bags back themselves), so the approved WhatsApp template's
+ *  fixed "Return: …" line always has a sensible value, never a blank. */
+function y2kReturnSummary(b: Booking): string {
+  const st = (b.wedding?.state ?? null) as { bags?: { ret?: boolean }[]; ret?: { date?: string; slot?: string } } | null;
+  const bags = st?.bags?.filter((x) => x.ret).length ?? 0;
+  if (!bags) return "Not booked yet";
+  const when = [st?.ret?.date, st?.ret?.slot].filter(Boolean).join(", ");
+  return `${bags} bag${bags > 1 ? "s" : ""}${when ? ` · ${when}` : ""}`;
+}
+
 /** Pass B — milestone + payment auto-updates: any completed milestone or
  *  captured payment that hasn't produced its message pair yet, does now. */
 async function eventPass(stats: SweepStats) {
@@ -786,7 +808,7 @@ async function eventPass(stats: SweepStats) {
     }
     /* hosted wedding family confirmed (from Shipments "Confirm booking" or an approval) → one confirmation */
     if (isHostBilled(b) && ["accepted", "assigned"].includes(b.status)) {
-      stats.acksQueued += await notify("wedding_confirmed", to, { ...d, event: b.eventName || "the wedding" }, `wedconf:${b.id}`);
+      stats.acksQueued += await notify("wedding_confirmed", to, { ...d, event: b.eventName || "the wedding", pickAddr: b.pickAddr || b.from, returnSummary: y2kReturnSummary(b), bagsCount: String(b.bags) }, `wedconf:${b.id}`);
     }
     /* paid but not yet Aadhaar-verified → one verification ask (pickup is
      * blocked server-side until identity.ok, so this closes the loop) */
