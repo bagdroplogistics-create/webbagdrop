@@ -338,15 +338,22 @@ export const TEMPLATES: Record<string, T> = {
  *  confirmed broken outside that window with a real OAuthException
  *  (code 10, error_subcode 2593181) on the SAME token, caught while fixing
  *  WhatsApp OTP. The fix for OTP was an approved Authentication template
- *  via Fast2SMS; the same fix applies here ONLY where (a) one of the 29
+ *  via Fast2SMS; the same fix applies here ONLY where (a) one of the
  *  already-approved Fast2SMS templates genuinely matches the event's
  *  wording, and (b) the call site has the exact right data for every one
  *  of that template's {{n}} slots — getting a slot wrong sends a WRONG
  *  fact to a real customer, worse than the current silent failure.
- *  `inquiry_ack` is the only one both true for today: its one approved
- *  match (`inquiry_acknowledgment`) needs just the customer's name, and
- *  every call site supplies exactly that. Every other internal template
- *  either has no approved match (wedding_confirmed, move_pass,
+ *  Wired so far (2026-11-26): inquiry_ack, wedding_confirmed, ms_assign +
+ *  ms_dcaptain (pickup AND delivery-leg captain assigned, both verified
+ *  from the live Fast2SMS dashboard to use the same `driver_details_shared_v2`
+ *  template despite its body reading "delivery is on the way"), ms_picked
+ *  (→ `bags_picked_up`), ms_depart (→ `bags_in_transit`), ms_ofd
+ *  (→ `out_for_delivery`), ms_pod (→ `bags_delivered_review`) — all
+ *  confirmed Approved in the Fast2SMS dashboard. `bags_delivered_review` is
+ *  a Marketing-category template (bakes in a Google-review ask), which
+ *  carries stricter opt-in/consent rules than the Utility templates above —
+ *  flagged to the founder before relying on it for every delivery. Every
+ *  other internal template either has no approved match (move_pass,
  *  delivery_otp, booking_cancelled/restored/rescheduled/on_hold/rejected,
  *  the quote_amended_* trio, payment_rejected, booking_info_needed,
  *  instant_ack/instant_lapsed — proposed, not created, pending approval),
@@ -355,11 +362,9 @@ export const TEMPLATES: Record<string, T> = {
  *  message the bot first), or has a real approved match but the call site
  *  doesn't yet pass every field that match's body needs verified correct
  *  (payment_received's approved template wants a Payment Date the call
- *  sites don't currently track separately from the booking/pickup date;
- *  ms_picked/ms_depart/ms_ofd/driver-assignment matches exist but need
- *  their exact field order checked against each call site before adding
- *  here) — add an entry below only once that's been verified, not just
- *  because a template with a similar name exists. */
+ *  sites don't currently track separately from the booking/pickup date) —
+ *  add an entry below only once that's been verified, not just because a
+ *  template with a similar name exists. */
 const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Record<string, string>, firstName: string) => string[] }>> = {
   inquiry_ack: { name: "inquiry_acknowledgment", vars: (_d, firstName) => [firstName] },
   /* Approved 2026-11-26 — body matches TEMPLATES.wedding_confirmed.wa above
@@ -367,6 +372,21 @@ const FAST2SMS_TEMPLATE_MAP: Partial<Record<string, { name: string; vars: (d: Re
    * {{5}} bag count, {{6}} pickup address, {{7}} pickup date, {{8}} pickup
    * slot, {{9}} return summary ("N bags · date, slot" or "Not booked yet"). */
   wedding_confirmed: { name: "wedding_booking_confirmed", vars: (d, firstName) => [firstName, d.event, d.ref, d.lane, d.bagsCount, d.pickAddr, d.date, d.slot, d.returnSummary] },
+  /* Approved — `driver_details_shared_v2`, confirmed from the live Fast2SMS
+   * dashboard to cover BOTH legs (pickup and delivery captain assigned),
+   * despite the body text reading "delivery is on the way". {{1}} name,
+   * {{2}} driver name, {{3}} driver mobile. */
+  ms_assign: { name: "driver_details_shared_v2", vars: (d, firstName) => [firstName, d.captain || "our captain", d.captainPhone || "shared shortly"] },
+  ms_dcaptain: { name: "driver_details_shared_v2", vars: (d, firstName) => [firstName, d.captain || "our captain", d.captainPhone || "shared shortly"] },
+  /* Approved — {{1}} name, {{2}} booking ID, {{3}} collection time, {{4}} number of bags. */
+  ms_picked: { name: "bags_picked_up", vars: (d, firstName) => [firstName, d.ref, d.collectedAt || "just now", d.pieces] },
+  /* Approved — {{1}} name, {{2}} booking ID. */
+  ms_depart: { name: "bags_in_transit", vars: (d, firstName) => [firstName, d.ref] },
+  /* Approved — {{1}} name, {{2}} booking ID. */
+  ms_ofd: { name: "out_for_delivery", vars: (d, firstName) => [firstName, d.ref] },
+  /* Approved — {{1}} name, {{2}} booking ID, {{3}} route, {{4}} delivered-on
+   * date. Also carries a Google-review ask baked into the approved body. */
+  ms_pod: { name: "bags_delivered_review", vars: (d, firstName) => [firstName, d.ref, d.lane, d.deliveredAt || "today"] },
 };
 
 /* ================= internal ops alerts (BAGDROP OS notifications) =================
@@ -833,10 +853,14 @@ async function eventPass(stats: SweepStats) {
     const phone = (m?: string) => { const x = (m ?? "").replace(/\D/g, "").slice(-10); return x.length === 10 ? `+91 ${x.slice(0, 5)} ${x.slice(5)}` : ""; };
     const extra: Partial<Record<MilestoneKey, Record<string, string>>> = {
       assign: { captain: legs.pickup?.assignee ?? "our captain", captainPhone: phone(legs.pickup?.mobile) },
+      picked: { collectedAt: istWhen(ms.picked?.at) },
       inscan: { hub: ms.inscan?.detail?.hub ?? "" },
       depart: { mode: ms.depart?.detail?.mode ?? "", eta: istWhen(ms.depart?.detail?.eta) },
       ofd: { eta: istWhen(ms.ofd?.detail?.eta) },
-      pod: { receiver: b.pod?.receiver && b.pod.relation && b.pod.relation !== "Self" ? `${b.pod.receiver} (${b.pod.relation.toLowerCase()})` : b.pod?.receiver ?? "" },
+      pod: {
+        receiver: b.pod?.receiver && b.pod.relation && b.pod.relation !== "Self" ? `${b.pod.receiver} (${b.pod.relation.toLowerCase()})` : b.pod?.receiver ?? "",
+        deliveredAt: istWhen(ms.pod?.at),
+      },
     };
     /* a step taken back and done again doesn't message twice: keys are per step */
     for (const m of MILESTONES) {
